@@ -45,7 +45,7 @@ function normalizePhoneDigits(raw: string): string {
 }
 
 function getPartnerKeywords(): string[] {
-  return ['همسر', 'همسرم', 'عشقم', 'عزیزم', 'خانم', 'خانوم', 'خانمم', 'خانومم', 'شوهرم', 'اقامون'];
+  return ['همسر', 'همسرم', 'عشقم', 'عزیزم', 'خانم', 'خانوم', 'خانومی', 'خانمم', 'خانومم', 'خانم من', 'خانوم من', 'شوهرم', 'اقامون'];
 }
 
 export function findBestContactMatch(
@@ -64,16 +64,17 @@ export function findBestContactMatch(
     return {name: trimmed, phone: directDigits};
   }
 
-  let effectiveQuery = normalizeAssistantText(trimmed);
+  const rawQueryNorm = normalizeAssistantText(trimmed);
+  let effectiveQuery = rawQueryNorm;
   const partnerName = getPartnerNameForDevice(settings, deviceOwner);
   const partnerNorm = normalizeAssistantText(partnerName);
 
-  // 2. Partner shortcuts («همسر», «زری», «بهمن»)
-  if (getPartnerKeywords().some((kw) => effectiveQuery === kw || effectiveQuery.includes(kw))) {
-    effectiveQuery = partnerNorm;
-  }
+  // Keep the spoken alias as a candidate. A saved contact may literally be
+  // named «خانومی» even when the configured partner name is «زری».
+  const isPartnerShortcut = getPartnerKeywords().includes(effectiveQuery);
+  if (isPartnerShortcut) effectiveQuery = partnerNorm;
 
-  const candidateNames = [effectiveQuery];
+  const candidateNames = Array.from(new Set([rawQueryNorm, effectiveQuery, partnerNorm].filter(Boolean)));
   if (effectiveQuery === 'زری' || effectiveQuery === 'زهرا') {
     candidateNames.push('zari', 'zahra', 'زری', 'زهرا');
   } else if (effectiveQuery === 'بهمن') {
@@ -746,6 +747,13 @@ export async function processAssistantUtterance(
   const wake = extractCommandAfterWakeWord(rawTranscript, assistantName);
   const cleanedUtterance = wake.matched ? wake.command : rawTranscript.trim();
 
+  // A bare search request has no searchable subject; ask for it instead of
+  // sending a vague query to the cloud router.
+  const normalizedRequest = normalizeAssistantText(cleanedUtterance);
+  if (/^(تو اینترنت سرچ کن|اینترنت سرچ کن|برام سرچ کن|تو وب بگرد|جستجو کن|جست و جو کن|یه سرچ بزن)$/.test(normalizedRequest)) {
+    return {action: 'answer', replyText: 'حتماً رفیق، چی رو برات تو اینترنت پیدا کنم؟'};
+  }
+
   // Try deterministic fast parser first (works both online and offline)
   const localMatch = parseOfflineAssistantCommand(rawTranscript, ctx);
   if (localMatch) {
@@ -783,8 +791,8 @@ export async function processAssistantUtterance(
     }
 
     const result = parsed.data;
-    // Calls are high-impact: never trust an AI-guessed phone number.
-    // Re-resolve the spoken recipient against the local contact book with a strict match.
+    // Calls and SMS are high-impact: never trust an AI-guessed phone number.
+    // Always resolve the recipient locally, even if the server supplied a number.
     if (result.action === 'make_call') {
       const match = result.targetName
         ? findBestContactMatch(result.targetName, ctx.syncedContacts, ctx.callers, ctx.settings, ctx.deviceOwner)
@@ -797,16 +805,18 @@ export async function processAssistantUtterance(
       }
       result.targetName = match.name;
       result.targetPhone = match.phone;
-    } else if (
-      (result.action === 'send_sms' || result.action === 'ask_sms_body') &&
-      result.targetName &&
-      !result.targetPhone
-    ) {
-      const match = findBestContactMatch(result.targetName, ctx.syncedContacts, ctx.callers, ctx.settings, ctx.deviceOwner);
-      if (match) {
-        result.targetName = match.name;
-        result.targetPhone = match.phone;
+    } else if (result.action === 'send_sms' || result.action === 'ask_sms_body') {
+      const match = result.targetName
+        ? findBestContactMatch(result.targetName, ctx.syncedContacts, ctx.callers, ctx.settings, ctx.deviceOwner)
+        : null;
+      if (!match?.phone) {
+        return {
+          action: 'answer',
+          replyText: `برای اینکه پیامک اشتباهی نره، مخاطب «${result.targetName || cleanedUtterance}» رو با اطمینان در دفترچه پیدا نکردم. اسمش رو دقیق‌تر بگو یا دفترچه رو دوباره همگام کن.`,
+        };
       }
+      result.targetName = match.name;
+      result.targetPhone = match.phone;
     }
 
     if ((result.action === 'send_sms' || result.action === 'make_call') && !result.targetPhone) {
