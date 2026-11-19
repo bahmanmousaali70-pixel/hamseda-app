@@ -69,6 +69,18 @@ jobs:
           test -s android/app/src/main/assets/offline_tts/gyro/tokens.txt
           test -d android/app/src/main/assets/offline_tts/espeak-ng-data
 
+      - name: Bundle offline Persian wake-word recognition model
+        run: |
+          mkdir -p android/app/src/main/assets/wake
+          MODEL_NAME="vosk-model-small-fa-0.42"
+          curl -L --fail --retry 3 "https://alphacephei.com/vosk/models/${MODEL_NAME}.zip" -o "/tmp/${MODEL_NAME}.zip"
+          unzip -t "/tmp/${MODEL_NAME}.zip"
+          unzip -Z1 "/tmp/${MODEL_NAME}.zip" | grep -q "^${MODEL_NAME}/am/"
+          unzip -Z1 "/tmp/${MODEL_NAME}.zip" | grep -q "^${MODEL_NAME}/conf/"
+          test -s "/tmp/${MODEL_NAME}.zip"
+          cp "/tmp/${MODEL_NAME}.zip" "android/app/src/main/assets/wake/${MODEL_NAME}.zip"
+          ls -lh "android/app/src/main/assets/wake/${MODEL_NAME}.zip"
+
       - name: Install dependencies and build web bundle
         run: |
           npm install --legacy-peer-deps
