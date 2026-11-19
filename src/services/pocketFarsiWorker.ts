@@ -540,9 +540,73 @@ function proj(lat: Float32Array): Float32Array {
   return x;
 }
 
+const CUSTOM_VOICE_DB = 'hamseda-pocket-voice-v1';
+const CUSTOM_VOICE_STORE = 'embeddings';
+
+function openCustomVoiceDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(CUSTOM_VOICE_DB, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(CUSTOM_VOICE_STORE)) {
+        db.createObjectStore(CUSTOM_VOICE_STORE);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error ?? new Error('ذخیره‌سازی صدای اختصاصی در دسترس نیست.'));
+  });
+}
+
+async function saveCustomVoiceEmbedding(embedding: Float32Array, frames: number): Promise<void> {
+  const db = await openCustomVoiceDb();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(CUSTOM_VOICE_STORE, 'readwrite');
+      tx.objectStore(CUSTOM_VOICE_STORE).put({embedding, frames}, 'custom');
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error ?? new Error('ذخیره صدای اختصاصی ناموفق بود.'));
+      tx.onabort = () => reject(tx.error ?? new Error('ذخیره صدای اختصاصی لغو شد.'));
+    });
+  } finally {
+    db.close();
+  }
+}
+
+async function loadCustomVoiceEmbedding(): Promise<{embedding: Float32Array; frames: number} | null> {
+  const db = await openCustomVoiceDb();
+  try {
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(CUSTOM_VOICE_STORE, 'readonly');
+      const request = tx.objectStore(CUSTOM_VOICE_STORE).get('custom');
+      request.onsuccess = () => {
+        const value = request.result as {embedding?: Float32Array; frames?: number} | undefined;
+        if (!value?.embedding || !value.frames) {
+          resolve(null);
+          return;
+        }
+        resolve({embedding: new Float32Array(value.embedding), frames: value.frames});
+      };
+      request.onerror = () => reject(request.error ?? new Error('خواندن صدای اختصاصی ناموفق بود.'));
+    });
+  } finally {
+    db.close();
+  }
+}
+
 async function voiceState(name: string): Promise<ort.Tensor[]> {
   const hit = voiceCache.get(name);
   if (hit) return hit;
+
+  if (name === 'custom') {
+    const saved = await loadCustomVoiceEmbedding();
+    if (!saved) {
+      throw new Error('صدای کلون‌شده ذخیره‌شده پیدا نشد؛ لطفاً کلون صدا را دوباره بسازید.');
+    }
+    const restored = await step(saved.embedding, saved.frames, emptyPast(), TEMP_BY_DENOISE.strong);
+    voiceCache.set(name, restored.presents);
+    return restored.presents;
+  }
+
   const buf = await fetchCached(`voices/${name}.f32.bin`);
   const emb = new Float32Array(buf);
   const r = await step(emb, emb.length / DIM, emptyPast(), TEMP_BY_DENOISE.strong);
@@ -565,6 +629,9 @@ async function encodeCustomVoice(audio24k: Float32Array) {
   const out = await venc.run({audio: new ort.Tensor('float32', padded, [1, 1, paddedLen])});
   const embTensor = out.voice_embeds;
   const emb = new Float32Array(embTensor.data as Float32Array);
+  // Persist the compact speaker embedding independently of ONNX sessions.
+  // Precision changes reset sessions, but must never discard a user's cloned voice.
+  await saveCustomVoiceEmbedding(emb, embTensor.dims[1]);
   const old = voiceCache.get('custom');
   if (old) dispose(old);
   const r = await step(emb, embTensor.dims[1], emptyPast(), TEMP_BY_DENOISE.strong);
