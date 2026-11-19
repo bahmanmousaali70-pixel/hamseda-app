@@ -17,7 +17,7 @@ import {
 import {apiUrl, safeReadJsonResponse} from './apiConfig';
 
 export interface PendingAssistantIntent {
-  type: 'awaiting_sms_body' | 'awaiting_sms_recipient' | 'awaiting_sms_confirmation';
+  type: 'awaiting_sms_body' | 'awaiting_sms_recipient' | 'awaiting_sms_confirmation' | 'awaiting_call_confirmation';
   targetName?: string;
   targetPhone?: string;
   smsBody?: string;
@@ -216,11 +216,19 @@ export function parseOfflineAssistantCommand(
   const norm = normalizeAssistantText(commandRaw);
   if (!norm) return null;
 
-  // Never send until the exact recipient and body are explicitly confirmed.
+  // Cancellation always wins while a sensitive operation is pending.
+  if (ctx.pendingIntent && /^(لغو(ش)? کن|لغو|کنسل(ش)? کن|کنسل|بی ?خیال|بیخیال|ولش کن|نفرست|زنگ نزن|تماس نگیر|پشیمون شدم|انصراف|نه|خیر)$/.test(norm)) {
+    return {action: 'answer', replyText: ctx.pendingIntent.type === 'awaiting_call_confirmation'
+      ? 'باشه، تماس لغو شد و شماره‌گیری انجام نمی‌دم.'
+      : 'باشه، پیامک لغو شد و هیچ پیامی ارسال نمی‌شه.'};
+  }
   if (ctx.pendingIntent?.type === 'awaiting_sms_confirmation') {
-    if (/^(لغو|کنسل|بی ?خیال|بیخیال|نفرست|ولش کن|پشیمون شدم|انصراف|نه|خیر)/.test(norm)) return {action: 'answer', replyText: 'باشه، پیام ارسال نشد و لغو شد.'};
-    if (/^(تایید|تأیید|بله|آره|اره|درسته|درست است|ارسال کن|بفرست|اوکی|باشه)/.test(norm)) return {action: 'send_sms', targetName: ctx.pendingIntent.targetName, targetPhone: ctx.pendingIntent.targetPhone, smsBody: ctx.pendingIntent.smsBody, replyText: 'در حال ارسال پیام تأییدشده به ' + ctx.pendingIntent.targetName + ' هستم.'};
-    return {action: 'answer', replyText: 'برای جلوگیری از ارسال اشتباهی، فقط «تأیید» برای ارسال یا «لغو» برای انصراف بگو.'};
+    if (/^(تایید|تأیید|بله|آره|اره|درسته|درست است|ارسال کن|بفرست|اوکی|باشه)$/.test(norm)) return {action: 'send_sms', targetName: ctx.pendingIntent.targetName, targetPhone: ctx.pendingIntent.targetPhone, smsBody: ctx.pendingIntent.smsBody, replyText: 'تأیید شد؛ پیامک را ارسال می‌کنم.'};
+    return {action: 'answer', replyText: 'پیام هنوز ارسال نشده. برای ارسال بگو «تأیید» و برای انصراف بگو «لغو کن».'};
+  }
+  if (ctx.pendingIntent?.type === 'awaiting_call_confirmation') {
+    if (/^(تایید|تأیید|بله|آره|اره|درسته|درست است|تماس بگیر|زنگ بزن|اوکی|باشه)$/.test(norm)) return {action: 'make_call', targetName: ctx.pendingIntent.targetName, targetPhone: ctx.pendingIntent.targetPhone, replyText: 'تأیید شد؛ شماره‌گیر را باز می‌کنم.'};
+    return {action: 'answer', replyText: 'تماس هنوز برقرار نشده. برای تماس بگو «تأیید» و برای انصراف بگو «لغو کن».'};
   }
 
   // Handle pending SMS conversation turn first
@@ -424,8 +432,9 @@ export function parseOfflineAssistantCommand(
     }
   }
 
-  // 4h. Open Installed App on Phone
+  // 4h. Open or leave an installed app using everyday speech.
   const knownApps = [
+    'دوربین',
     'تلگرام',
     'واتساپ',
     'واتس‌اپ',
@@ -451,18 +460,15 @@ export function parseOfflineAssistantCommand(
     'مایکت',
     'ساعت',
   ];
-  if (
-    /(باز کن|اجرا کن|بیار بالا)/.test(norm) &&
-    !/(تب |بخش )/.test(norm) &&
-    knownApps.some((a) => norm.includes(normalizeAssistantText(a)))
-  ) {
-    const matchedApp = knownApps.find((a) => norm.includes(normalizeAssistantText(a))) || '';
-    return {
-      action: 'open_app',
-      targetName: matchedApp,
-      query: matchedApp,
-      replyText: `در حال باز کردن «${matchedApp}» هستم.`,
-    };
+  const matchedApp = knownApps.find((a) => norm.includes(normalizeAssistantText(a))) || '';
+  if (matchedApp && /(ببند|بندش|خارج شو|بیا بیرون|برو بیرون|جمعش کن)/.test(norm)) {
+    return {action: 'close_app', targetName: matchedApp, query: matchedApp,
+      replyText: `از ${matchedApp} خارج می‌شوم و به صفحه اصلی برمی‌گردم.`};
+  }
+  if (matchedApp && /(باز کن|بازش کن|اجرا کن|بیار بالا|برو تو|برو داخل|بزن تو)/.test(norm) && !/(تب |بخش )/.test(norm)) {
+    return {action: matchedApp === 'دوربین' ? 'take_photo' : 'open_app',
+      targetName: matchedApp, query: matchedApp,
+      replyText: matchedApp === 'دوربین' ? 'دوربین را باز می‌کنم.' : `در حال باز کردن «${matchedApp}» هستم.`};
   }
 
   // 5. Ringer / Silent / Vibrate / Normal
