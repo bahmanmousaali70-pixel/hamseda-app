@@ -1183,6 +1183,10 @@ public class RoozhayeNativePlugin extends Plugin {
         boolean autoOpenMorning = Boolean.TRUE.equals(call.getBoolean("autoOpenMorning", true));
         String defaultGender = call.getString("defaultGender", "female");
         String defaultVoice = call.getString("defaultVoice", "male".equals(defaultGender) ? "Charon" : "Kore");
+        boolean preferOfflineSpeech = Boolean.TRUE.equals(call.getBoolean("preferOfflineSpeech", false));
+        String preferredOfflineEngine = call.getString("preferredOfflineEngine", "ava_gyro");
+        Double rateDouble = call.getDouble("speechRate", 1.0);
+        float speechRate = rateDouble != null ? Math.max(0.65f, Math.min(1.5f, rateDouble.floatValue())) : 1.0f;
 
         SharedPreferences prefs = getContext().getSharedPreferences("rmz_native_prefs", Context.MODE_PRIVATE);
         prefs.edit()
@@ -1192,6 +1196,9 @@ public class RoozhayeNativePlugin extends Plugin {
                 .putBoolean("auto_open_morning_enabled", autoOpenMorning)
                 .putString("default_voice_gender", "male".equals(defaultGender) ? "male" : "female")
                 .putString("default_voice_name", defaultVoice != null && !defaultVoice.trim().isEmpty() ? defaultVoice.trim() : "Kore")
+                .putBoolean("prefer_offline_speech", preferOfflineSpeech)
+                .putString("preferred_offline_engine", preferredOfflineEngine != null && !preferredOfflineEngine.trim().isEmpty() ? preferredOfflineEngine.trim() : "ava_gyro")
+                .putFloat("speech_rate", speechRate)
                 .apply();
 
         JSObject ret = new JSObject();
@@ -1613,7 +1620,14 @@ public class RoozhayeNativePlugin extends Plugin {
     @PluginMethod
     public void setActiveOfflineEngine(PluginCall call) {
         String engineId = call.getString("engineId", "");
-        boolean ok = engineId != null && OfflinePersianTts.setActiveEngineId(getContext().getApplicationContext(), engineId.trim());
+        Context appCtx = getContext().getApplicationContext();
+        boolean ok = engineId != null && OfflinePersianTts.setActiveEngineId(appCtx, engineId.trim());
+        if (ok) {
+            appCtx.getSharedPreferences("rmz_native_prefs", Context.MODE_PRIVATE)
+                    .edit()
+                    .putString("preferred_offline_engine", engineId.trim())
+                    .apply();
+        }
         JSObject result = new JSObject();
         result.put("ok", ok);
         call.resolve(result);

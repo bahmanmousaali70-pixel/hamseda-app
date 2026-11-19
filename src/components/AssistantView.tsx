@@ -26,7 +26,7 @@ import {
   VolumeX,
   Wifi,
 } from 'lucide-react';
-import {toPersianDigits} from '../data/persianLibrary';
+import {toPersianDigits, VOICE_PERSONAS} from '../data/persianLibrary';
 import {
   parseOfflineAssistantCommand,
   processAssistantUtterance,
@@ -35,6 +35,7 @@ import {
 import {
   consumePendingWakeCommandNative,
   executeDeviceActionNative,
+  getOfflineEngineStatusesNative,
   isNativeAndroid,
   listenOncePersianNative,
   startNativeWakeWordService,
@@ -42,6 +43,8 @@ import {
   stopListeningNative,
   type NativeCapabilities,
 } from '../services/nativeAndroidBridge';
+import {getPocketFarsiStatus} from '../services/pocketFarsiEngine';
+import type {OfflineEngineId} from '../services/speechEngine';
 import type {
   AppSettings,
   AppTab,
@@ -51,6 +54,7 @@ import type {
   GroundingLink,
   MorningMessage,
   SyncedPhoneContact,
+  VoiceName,
 } from '../types/app';
 import {
   getPartnerNameForDevice,
@@ -78,6 +82,10 @@ interface AssistantViewProps {
   morningMessage: MorningMessage;
   nativeCaps: NativeCapabilities;
   autoSpeakReplies: boolean;
+  preferOfflineSpeech: boolean;
+  preferredOfflineEngine: OfflineEngineId;
+  onChangePreferOfflineSpeech: (enabled: boolean) => void;
+  onChangePreferredOfflineEngine: (id: OfflineEngineId) => void;
   onUpdateSettings: (patch: Partial<AppSettings>) => void;
   onSpeakText: (text: string, title: string, category: 'custom' | 'morning' | 'energy' | 'gratitude') => void;
   onStopSpeech: () => void;
@@ -189,6 +197,10 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
   morningMessage,
   nativeCaps,
   autoSpeakReplies,
+  preferOfflineSpeech,
+  preferredOfflineEngine,
+  onChangePreferOfflineSpeech,
+  onChangePreferredOfflineEngine,
   onUpdateSettings,
   onSpeakText,
   onStopSpeech,
@@ -204,6 +216,9 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
 
   const [assistantNameDraft, setAssistantNameDraft] = useState(assistantName);
   const [nameSavedFlash, setNameSavedFlash] = useState(false);
+  const [installedOfflineIds, setInstalledOfflineIds] = useState<Set<OfflineEngineId>>(
+    () => new Set(['ava_gyro'])
+  );
   const [textInput, setTextInput] = useState('');
   const [isBusy, setIsBusy] = useState(false);
   const [isListeningOnce, setIsListeningOnce] = useState(false);
@@ -229,6 +244,28 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
   useEffect(() => {
     setAssistantNameDraft(settings.assistantName?.trim() || 'هم‌صدا');
   }, [settings.assistantName]);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([getOfflineEngineStatusesNative(), getPocketFarsiStatus()])
+      .then(([nativeRes, pocketRes]) => {
+        if (cancelled) return;
+        const next = new Set<OfflineEngineId>();
+        if (nativeRes.ok) {
+          for (const eng of nativeRes.engines) {
+            if (eng.installed) next.add(eng.id);
+          }
+        } else {
+          next.add('ava_gyro');
+        }
+        if (pocketRes.installed) next.add('pocket_farsi');
+        setInstalledOfflineIds(next);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({behavior: 'smooth', block: 'nearest'});
@@ -765,6 +802,86 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
                 : `گوش‌به‌زنگ صدا زدن «${assistantName}»`}
             </span>
           </button>
+        </div>
+
+        {/* Default Voice & Engine Selection for Wake Prompt ("جانم، بفرمایید") and Replies */}
+        <div className="mt-5 pt-5 border-t border-slate-100 dark:border-emerald-950/60 grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+              حالت صدای «جانم، بفرمایید» و پاسخ‌ها
+            </label>
+            <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-slate-100 dark:bg-[#0D1614]">
+              <button
+                type="button"
+                onClick={() => onChangePreferOfflineSpeech(false)}
+                className={`min-h-[38px] px-2.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                  !preferOfflineSpeech
+                    ? 'bg-white dark:bg-[#172724] text-slate-900 dark:text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400'
+                }`}
+              >
+                آنلاین + آفلاین
+              </button>
+              <button
+                type="button"
+                onClick={() => onChangePreferOfflineSpeech(true)}
+                className={`min-h-[38px] px-2.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                  preferOfflineSpeech
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400'
+                }`}
+              >
+                همیشه آفلاین
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+              گوینده پیش‌فرض آنلاین
+            </label>
+            <select
+              value={settings.defaultVoice}
+              onChange={(e) => onUpdateSettings({defaultVoice: e.target.value as VoiceName})}
+              disabled={preferOfflineSpeech}
+              className="min-h-[46px] px-3 rounded-xl border border-slate-200 dark:border-emerald-950 bg-slate-50 dark:bg-[#0D1614] text-xs font-semibold text-slate-800 dark:text-slate-100 disabled:opacity-50"
+            >
+              {VOICE_PERSONAS.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+              موتور پیش‌فرض آفلاین
+            </label>
+            <select
+              value={preferredOfflineEngine}
+              onChange={(e) => {
+                const next = e.target.value as OfflineEngineId;
+                if (!installedOfflineIds.has(next)) {
+                  onStatusToast('این موتور هنوز نصب نشده است؛ از تب «کتابخانه صدا» نصبش کنید.');
+                  return;
+                }
+                onChangePreferredOfflineEngine(next);
+              }}
+              className="min-h-[46px] px-3 rounded-xl border border-slate-200 dark:border-emerald-950 bg-slate-50 dark:bg-[#0D1614] text-xs font-semibold text-slate-800 dark:text-slate-100"
+            >
+              <option value="ava_gyro">AvaCore (پیش‌فرض نصب‌شده APK)</option>
+              <option value="mana_piper">
+                Mana Persian Piper {installedOfflineIds.has('mana_piper') ? '(نصب‌شده)' : '(نیازمند نصب)'}
+              </option>
+              <option value="amir_piper">
+                Amir Persian Piper {installedOfflineIds.has('amir_piper') ? '(نصب‌شده)' : '(نیازمند نصب)'}
+              </option>
+              <option value="pocket_farsi">
+                Pocket TTS Farsi {installedOfflineIds.has('pocket_farsi') ? '(نصب‌شده)' : '(نیازمند نصب)'}
+              </option>
+            </select>
+          </div>
         </div>
 
         {nativeCaps.isNative && (!nativeCaps.microphone || !nativeCaps.sms || !nativeCaps.callPhone) && (

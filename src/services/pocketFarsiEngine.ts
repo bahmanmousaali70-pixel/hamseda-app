@@ -1,7 +1,12 @@
+import type {PocketDenoiseLevel} from './pocketAudioDenoiser';
+
+export type {PocketDenoiseLevel};
 export type PocketVoicePreset = 'female_short' | 'male_news' | 'hello' | 'custom';
+export type PocketPrecisionMode = 'q4' | 'high';
 
 export interface PocketFarsiStatus {
   installed: boolean;
+  highPrecisionInstalled: boolean;
   sizeBytes: number;
   voiceCloneReady: boolean;
   customVoiceLoaded: boolean;
@@ -22,6 +27,8 @@ export interface PocketSpeakResult {
   durationSec: number;
   rtf: number;
   device: 'webgpu' | 'wasm';
+  variant?: string;
+  precision?: PocketPrecisionMode;
   error?: string;
 }
 
@@ -115,6 +122,7 @@ export async function getPocketFarsiStatus(): Promise<PocketFarsiStatus> {
   if (typeof Worker === 'undefined' || typeof caches === 'undefined') {
     return {
       installed: false,
+      highPrecisionInstalled: false,
       sizeBytes: 0,
       voiceCloneReady: false,
       customVoiceLoaded: false,
@@ -125,6 +133,7 @@ export async function getPocketFarsiStatus(): Promise<PocketFarsiStatus> {
     const res = await sendAndWait('status', 'statusReport');
     return {
       installed: Boolean(res.installed),
+      highPrecisionInstalled: Boolean(res.highPrecisionInstalled),
       sizeBytes: Number(res.sizeBytes || 0),
       voiceCloneReady: Boolean(res.voiceCloneReady),
       customVoiceLoaded: customVoiceReady,
@@ -133,6 +142,7 @@ export async function getPocketFarsiStatus(): Promise<PocketFarsiStatus> {
   } catch {
     return {
       installed: false,
+      highPrecisionInstalled: false,
       sizeBytes: 0,
       voiceCloneReady: false,
       customVoiceLoaded: customVoiceReady,
@@ -141,10 +151,14 @@ export async function getPocketFarsiStatus(): Promise<PocketFarsiStatus> {
   }
 }
 
-export async function installPocketFarsi(includeVoiceClone = false): Promise<PocketFarsiStatus> {
-  const res = await sendAndWait('install', 'installed', {includeVoiceClone});
+export async function installPocketFarsi(
+  includeVoiceClone = false,
+  precision: PocketPrecisionMode = 'q4'
+): Promise<PocketFarsiStatus> {
+  const res = await sendAndWait('install', 'installed', {includeVoiceClone, precision});
   return {
     installed: Boolean(res.installed),
+    highPrecisionInstalled: Boolean(res.highPrecisionInstalled),
     sizeBytes: Number(res.sizeBytes || 0),
     voiceCloneReady: Boolean(res.voiceCloneReady),
     customVoiceLoaded: customVoiceReady,
@@ -157,6 +171,7 @@ export async function uninstallPocketFarsi(): Promise<PocketFarsiStatus> {
   const res = await sendAndWait('uninstall', 'uninstalled');
   return {
     installed: Boolean(res.installed),
+    highPrecisionInstalled: Boolean(res.highPrecisionInstalled),
     sizeBytes: Number(res.sizeBytes || 0),
     voiceCloneReady: Boolean(res.voiceCloneReady),
     customVoiceLoaded: false,
@@ -222,7 +237,7 @@ function encodeFloat32ToWavBuffer(samples: Float32Array, sampleRate: number): Ar
   let pos = 44;
   for (let i = 0; i < samples.length; i++) {
     const clamped = Math.max(-1, Math.min(1, samples[i]));
-    view.setInt16(pos, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true);
+    view.setInt16(pos, Math.round(clamped * 32767), true);
     pos += 2;
   }
   return buf;
@@ -249,21 +264,61 @@ export function stopPocketFarsi(): void {
   }
 }
 
+export async function renderPocketFarsiWavBuffer(
+  text: string,
+  voice: PocketVoicePreset = 'female_short',
+  options?: {
+    denoise?: PocketDenoiseLevel;
+    precision?: PocketPrecisionMode;
+  }
+): Promise<ArrayBuffer | null> {
+  const cleaned = text.trim();
+  if (!cleaned) return null;
+  const id = ++requestId;
+  try {
+    const res = await sendAndWait('synth', `synth:${id}`, {
+      id,
+      text: cleaned,
+      voice,
+      denoise: options?.denoise ?? 'strong',
+      precision: options?.precision ?? 'q4',
+    });
+    const audio = res.audio as Float32Array;
+    const sampleRate = Number(res.sampleRate || 24000);
+    if (!audio || audio.length === 0) return null;
+    return encodeFloat32ToWavBuffer(audio, sampleRate);
+  } catch {
+    return null;
+  }
+}
+
 export async function speakWithPocketFarsi(
   text: string,
   voice: PocketVoicePreset = 'female_short',
-  rate = 1.0
+  rate = 1.0,
+  options?: {
+    denoise?: PocketDenoiseLevel;
+    precision?: PocketPrecisionMode;
+  }
 ): Promise<PocketSpeakResult> {
   stopPocketFarsi();
   const id = ++requestId;
   try {
-    const res = await sendAndWait('synth', `synth:${id}`, {id, text, voice});
+    const res = await sendAndWait('synth', `synth:${id}`, {
+      id,
+      text,
+      voice,
+      denoise: options?.denoise ?? 'strong',
+      precision: options?.precision ?? 'q4',
+    });
     const audio = res.audio as Float32Array;
     const sampleRate = Number(res.sampleRate || 24000);
     const ms = Number(res.ms || 0);
     const g2pMs = Number(res.g2pMs || 0);
     const durationSec = Number(res.durationSec || 0);
     const usedDevice = res.device === 'webgpu' ? 'webgpu' : 'wasm';
+    const usedVariant = typeof res.variant === 'string' ? res.variant : undefined;
+    const usedPrecision: PocketPrecisionMode = res.precision === 'high' ? 'high' : 'q4';
     const rtf = durationSec > 0.01 ? ms / 1000 / durationSec : 0;
 
     if (!audio || audio.length === 0) {
@@ -274,6 +329,8 @@ export async function speakWithPocketFarsi(
         durationSec: 0,
         rtf: 0,
         device: usedDevice,
+        variant: usedVariant,
+        precision: usedPrecision,
         error: 'خروجی صوتی تولید نشد.',
       };
     }
@@ -312,6 +369,8 @@ export async function speakWithPocketFarsi(
       durationSec,
       rtf,
       device: usedDevice,
+      variant: usedVariant,
+      precision: usedPrecision,
     };
   } catch (err) {
     return {

@@ -11,6 +11,16 @@ import {
   toPhonemes,
 } from './pocketFarsiText';
 
+import {
+  applyEdgeFade,
+  cleanVoiceCloneInput,
+  denoisePocketChunks,
+  type PocketDenoiseLevel,
+  softLimitAndNormalize,
+} from './pocketAudioDenoiser';
+
+export type PocketPrecisionMode = 'q4' | 'high';
+
 const REPO = 'https://huggingface.co/mrfakename/pocket-tts-farsi-v2-ONNX/resolve/main/';
 const CACHE_NAME = 'pocket-tts-farsi-v2-onnx-v1';
 
@@ -24,11 +34,15 @@ const H = 16;
 const HD = 64;
 const DIM = 1024;
 const LD = 32;
-const TEMP = 0.3;
+const TEMP_BY_DENOISE: Record<PocketDenoiseLevel, number> = {
+  strong: 0.06,
+  balanced: 0.13,
+  raw: 0.3,
+};
 const EOS_THR = -2.0;
 const MAX_TOK = 18;
 const CAP_RATIO = 0.97;
-const PAUSE = {none: 0.12, clause: 0.22, sentence: 0.38} as const;
+const PAUSE = {none: 0.08, clause: 0.2, sentence: 0.36} as const;
 
 const CORE_FILES_WASM = [
   'onnx/flow_lm_step_q4.onnx',
@@ -46,6 +60,11 @@ const CORE_FILES_WASM = [
 
 const CORE_FILES_FP16_GPU = [
   'onnx/flow_lm_step_q4f16.onnx',
+  ...CORE_FILES_WASM.slice(1),
+];
+
+const CORE_FILES_HIGH_CPU = [
+  'onnx/flow_lm_step_fp16.onnx',
   ...CORE_FILES_WASM.slice(1),
 ];
 
@@ -75,6 +94,7 @@ let bos: Float32Array | null = null;
 let device: 'webgpu' | 'wasm' = 'wasm';
 let hasF16 = false;
 let activeVariant = 'q4';
+let activePrecision: PocketPrecisionMode = 'q4';
 let readyPromise: Promise<void> | null = null;
 let cancelledSynthId = 0;
 
@@ -183,7 +203,13 @@ async function inspectCacheStatus() {
     cache = null;
   }
   if (!cache) {
-    return {installed: false, sizeBytes: 0, voiceCloneReady: false, device: 'wasm' as const};
+    return {
+      installed: false,
+      highPrecisionInstalled: false,
+      sizeBytes: 0,
+      voiceCloneReady: false,
+      device: 'wasm' as const,
+    };
   }
 
   const keys = await cache.keys();
@@ -201,9 +227,10 @@ async function inspectCacheStatus() {
     }
   }
 
-  const hasFlow =
+  const hasQ4 =
     keySet.has(REPO + 'onnx/flow_lm_step_q4.onnx') ||
     keySet.has(REPO + 'onnx/flow_lm_step_q4f16.onnx');
+  const highPrecisionInstalled = keySet.has(REPO + 'onnx/flow_lm_step_fp16.onnx');
   const requiredRest = [
     'onnx/mimi_decoder.onnx',
     'onnx/g2p_encoder_kv.onnx',
@@ -214,10 +241,16 @@ async function inspectCacheStatus() {
     'tokenizer_ph.json',
     'voices/female_short.f32.bin',
   ];
-  const installed = hasFlow && requiredRest.every((f) => keySet.has(REPO + f));
+  const installed = (hasQ4 || highPrecisionInstalled) && requiredRest.every((f) => keySet.has(REPO + f));
   const voiceCloneReady = keySet.has(REPO + 'onnx/voice_encoder.onnx');
   const backend = await detectComputeBackend();
-  return {installed, sizeBytes: totalBytes, voiceCloneReady, device: backend.device};
+  return {
+    installed,
+    highPrecisionInstalled,
+    sizeBytes: totalBytes,
+    voiceCloneReady,
+    device: backend.device,
+  };
 }
 
 async function resetSessions() {
@@ -256,9 +289,14 @@ async function resetSessions() {
   }
 }
 
-async function installModels(includeVoiceClone = false) {
+async function installModels(includeVoiceClone = false, precision: PocketPrecisionMode = 'q4') {
   const backend = await detectComputeBackend();
-  const baseList = backend.device === 'webgpu' && backend.f16 ? CORE_FILES_FP16_GPU : CORE_FILES_WASM;
+  const baseList =
+    precision === 'high'
+      ? CORE_FILES_HIGH_CPU
+      : backend.device === 'webgpu' && backend.f16
+        ? CORE_FILES_FP16_GPU
+        : CORE_FILES_WASM;
   const files = includeVoiceClone ? [...baseList, 'onnx/voice_encoder.onnx'] : baseList;
 
   const progressMap = new Map<string, {got: number; total: number}>();
@@ -290,15 +328,31 @@ async function installModels(includeVoiceClone = false) {
   post('installed', st);
 }
 
-async function ensureInitialized() {
-  if (flow && dec && g2pE && g2pD && bpe && lut && W && bos) return;
+async function ensureInitialized(requestedPrecision: PocketPrecisionMode = 'q4') {
+  const st = await inspectCacheStatus();
+  const effectivePrecision: PocketPrecisionMode =
+    requestedPrecision === 'high' && st.highPrecisionInstalled ? 'high' : 'q4';
+
+  if (flow && dec && g2pE && g2pD && bpe && lut && W && bos && activePrecision === effectivePrecision) {
+    return;
+  }
+  if (flow && activePrecision !== effectivePrecision) {
+    await resetSessions();
+  }
   if (readyPromise) return readyPromise;
 
   readyPromise = (async () => {
     const backend = await detectComputeBackend();
-    device = backend.device;
-    hasF16 = backend.f16;
-    activeVariant = device === 'webgpu' && hasF16 ? 'q4f16' : 'q4';
+    if (effectivePrecision === 'high') {
+      device = 'wasm';
+      hasF16 = false;
+      activeVariant = 'fp16';
+    } else {
+      device = backend.device;
+      hasF16 = backend.f16;
+      activeVariant = device === 'webgpu' && hasF16 ? 'q4f16' : 'q4';
+    }
+    activePrecision = effectivePrecision;
 
     const createSessions = async (targetDevice: 'webgpu' | 'wasm', variantName: string) => {
       const flowFile = `onnx/flow_lm_step_${variantName}.onnx`;
@@ -348,8 +402,9 @@ async function ensureInitialized() {
     try {
       await createSessions(device, activeVariant);
     } catch (err) {
-      if (device === 'webgpu') {
+      if (activeVariant === 'fp16' || device === 'webgpu') {
         await resetSessions();
+        activePrecision = 'q4';
         await createSessions('wasm', 'q4');
       } else {
         throw err;
@@ -357,8 +412,8 @@ async function ensureInitialized() {
     }
 
     const vs = await voiceState('female_short');
-    await generateChunk(vs, 'salAm', 3);
-    post('ready', {device, variant: activeVariant});
+    await generateChunk(vs, 'salAm', TEMP_BY_DENOISE.strong, 3);
+    post('ready', {device, variant: activeVariant, precision: activePrecision});
   })().catch((err) => {
     readyPromise = null;
     throw err;
@@ -426,9 +481,9 @@ function gauss(): number {
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
 
-function noiseT(): ort.Tensor {
+function noiseT(temp: number): ort.Tensor {
   const n = new Float32Array(LD);
-  const sd = Math.sqrt(TEMP);
+  const sd = Math.sqrt(Math.max(0.005, temp));
   for (let i = 0; i < LD; i++) n[i] = gauss() * sd;
   return new ort.Tensor('float32', n, [1, LD]);
 }
@@ -441,11 +496,11 @@ function emptyPast(): ort.Tensor[] {
   return p;
 }
 
-async function step(embeds: Float32Array, S: number, past: ort.Tensor[]) {
+async function step(embeds: Float32Array, S: number, past: ort.Tensor[], temp: number) {
   if (!flow) throw new Error('FlowLM not initialized');
   const feed: Record<string, ort.Tensor> = {
     inputs_embeds: new ort.Tensor('float32', embeds, [1, S, DIM]),
-    noise: noiseT(),
+    noise: noiseT(temp),
   };
   for (let i = 0; i < L; i++) {
     feed[`past_key_${i}`] = past[2 * i];
@@ -490,7 +545,7 @@ async function voiceState(name: string): Promise<ort.Tensor[]> {
   if (hit) return hit;
   const buf = await fetchCached(`voices/${name}.f32.bin`);
   const emb = new Float32Array(buf);
-  const r = await step(emb, emb.length / DIM, emptyPast());
+  const r = await step(emb, emb.length / DIM, emptyPast(), TEMP_BY_DENOISE.strong);
   voiceCache.set(name, r.presents);
   return r.presents;
 }
@@ -501,8 +556,9 @@ async function encodeCustomVoice(audio24k: Float32Array) {
     const encoderBuf = await fetchCached('onnx/voice_encoder.onnx');
     venc = await ort.InferenceSession.create(encoderBuf, {executionProviders: ['wasm']});
   }
-  const clipped = audio24k.subarray(0, 5 * SR);
-  const paddedLen = Math.ceil(clipped.length / FRAME) * FRAME;
+  const cleanedInput = cleanVoiceCloneInput(trimSilence(audio24k, 80), SR);
+  const clipped = cleanedInput.subarray(0, 5 * SR);
+  const paddedLen = Math.max(FRAME, Math.ceil(clipped.length / FRAME) * FRAME);
   const padded = new Float32Array(paddedLen);
   padded.set(clipped);
 
@@ -511,7 +567,7 @@ async function encodeCustomVoice(audio24k: Float32Array) {
   const emb = new Float32Array(embTensor.data as Float32Array);
   const old = voiceCache.get('custom');
   if (old) dispose(old);
-  const r = await step(emb, embTensor.dims[1], emptyPast());
+  const r = await step(emb, embTensor.dims[1], emptyPast(), TEMP_BY_DENOISE.strong);
   voiceCache.set('custom', r.presents);
   post('voiceReady', {name: 'custom'});
 }
@@ -553,6 +609,7 @@ function concatFloat32(arrs: Float32Array[]): Float32Array {
 async function generateChunk(
   voice: ort.Tensor[],
   ph: string,
+  temp: number,
   maxFrames?: number,
   runStats?: {steps: number}
 ): Promise<{audio: Float32Array; frames: number; cap: number}> {
@@ -565,13 +622,13 @@ async function generateChunk(
     for (let k = 0; k < DIM; k++) emb[j * DIM + k] = F16[lut![o + k]];
   });
 
-  let r = await step(emb, ids.length, voice);
+  let r = await step(emb, ids.length, voice, temp);
   let past = r.presents;
   let x = proj(bos);
   const lats: Float32Array[] = [];
 
   for (let s = 0; s < cap; s++) {
-    r = await step(x, 1, past);
+    r = await step(x, 1, past, temp);
     dispose(past);
     past = r.presents;
     if (r.eos > EOS_THR) break;
@@ -595,33 +652,51 @@ async function generateChunk(
   return {audio: rawAudio, frames: lats.length, cap};
 }
 
-async function robustChunk(
+interface RawSegment {
+  audio: Float32Array;
+  pauseAfter: number;
+}
+
+async function robustChunkRaw(
   voice: ort.Tensor[],
   ph: string,
+  temp: number,
+  endPauseSec: number,
   runStats: {steps: number},
   depth = 0
-): Promise<Float32Array> {
+): Promise<RawSegment[]> {
   const clean = stripEzafe(ph).replace(/\s+/g, ' ').trim();
   let shortest: Float32Array = new Float32Array(0);
   for (let attempt = 0; attempt < 2; attempt++) {
-    const r = await generateChunk(voice, clean, undefined, runStats);
-    if (r.frames < CAP_RATIO * r.cap) return trimSilence(r.audio);
+    const r = await generateChunk(voice, clean, temp, undefined, runStats);
+    if (r.frames < CAP_RATIO * r.cap) {
+      return [{audio: r.audio, pauseAfter: endPauseSec}];
+    }
     if (!shortest.length || r.audio.length < shortest.length) shortest = r.audio;
   }
   const words = ph.split(' ');
-  if (depth >= 2 || words.length < 4) return trimSilence(shortest);
+  if (depth >= 2 || words.length < 4) {
+    return [{audio: shortest, pauseAfter: endPauseSec}];
+  }
   const half = words.length >> 1;
-  const a = await robustChunk(voice, words.slice(0, half).join(' '), runStats, depth + 1);
-  const b = await robustChunk(voice, words.slice(half).join(' '), runStats, depth + 1);
-  return concatFloat32([a, new Float32Array(Math.floor(0.05 * SR)), b]);
+  const a = await robustChunkRaw(voice, words.slice(0, half).join(' '), temp, 0.05, runStats, depth + 1);
+  const b = await robustChunkRaw(voice, words.slice(half).join(' '), temp, endPauseSec, runStats, depth + 1);
+  return [...a, ...b];
 }
 
-async function runSynth(id: number, text: string, voice: string) {
-  await ensureInitialized();
+async function runSynth(
+  id: number,
+  text: string,
+  voice: string,
+  denoiseLevel: PocketDenoiseLevel = 'strong',
+  precision: PocketPrecisionMode = 'q4'
+) {
+  await ensureInitialized(precision);
   if (!bpe) throw new Error('Tokenizer missing');
 
   const t0 = performance.now();
   const runStats = {steps: 0};
+  const temp = TEMP_BY_DENOISE[denoiseLevel] ?? TEMP_BY_DENOISE.strong;
   const count = (s: string) => bpe!.encode(stripEzafe(s)).length;
 
   let clauses: {ph: string; end: 'sentence' | 'clause'}[] = [];
@@ -650,18 +725,32 @@ async function runSynth(id: number, text: string, voice: string) {
   const tG2p = performance.now();
   const chunks = planChunks(clauses, count, MAX_TOK);
   const vs = await voiceState(voice);
-  const pieces: Float32Array[] = [];
+  const rawSegments: RawSegment[] = [];
 
   for (let i = 0; i < chunks.length; i++) {
     if (id <= cancelledSynthId) throw new Error('تولید صدا لغو شد.');
-    let a = await robustChunk(vs, chunks[i].text, runStats);
-    if (i < chunks.length - 1) {
-      a = concatFloat32([a, new Float32Array(Math.floor(PAUSE[chunks[i].end] * SR))]);
-    }
-    pieces.push(a);
+    const pauseSec = i < chunks.length - 1 ? PAUSE[chunks[i].end] : 0;
+    const segs = await robustChunkRaw(vs, chunks[i].text, temp, pauseSec, runStats);
+    rawSegments.push(...segs);
   }
 
-  const all = concatFloat32(pieces);
+  const denoisedAudios = denoisePocketChunks(
+    rawSegments.map((s) => s.audio),
+    SR,
+    denoiseLevel
+  );
+
+  const pieces: Float32Array[] = [];
+  for (let i = 0; i < denoisedAudios.length; i++) {
+    const trimmed = applyEdgeFade(trimSilence(denoisedAudios[i], 90), SR, 10);
+    pieces.push(trimmed);
+    const pauseSec = rawSegments[i].pauseAfter;
+    if (pauseSec > 0) {
+      pieces.push(new Float32Array(Math.floor(pauseSec * SR)));
+    }
+  }
+
+  const all = denoiseLevel === 'raw' ? concatFloat32(pieces) : softLimitAndNormalize(concatFloat32(pieces), 0.88);
   const ms = Math.round(performance.now() - t0);
   const durationSec = all.length / SR;
   post(
@@ -675,6 +764,8 @@ async function runSynth(id: number, text: string, voice: string) {
       durationSec,
       steps: runStats.steps,
       device,
+      variant: activeVariant,
+      precision: activePrecision,
     },
     [all.buffer]
   );
@@ -687,6 +778,8 @@ self.onmessage = (e: MessageEvent) => {
     id?: number;
     text?: string;
     voice?: string;
+    denoise?: PocketDenoiseLevel;
+    precision?: PocketPrecisionMode;
     includeVoiceClone?: boolean;
     audio?: Float32Array;
   };
@@ -700,7 +793,7 @@ self.onmessage = (e: MessageEvent) => {
         const st = await inspectCacheStatus();
         post('statusReport', st);
       } else if (m.type === 'install') {
-        await installModels(Boolean(m.includeVoiceClone));
+        await installModels(Boolean(m.includeVoiceClone), m.precision || 'q4');
       } else if (m.type === 'uninstall') {
         await resetSessions();
         try {
@@ -712,7 +805,13 @@ self.onmessage = (e: MessageEvent) => {
       } else if (m.type === 'voice' && m.audio) {
         await encodeCustomVoice(m.audio);
       } else if (m.type === 'synth' && m.id && m.text) {
-        await runSynth(m.id, m.text, m.voice || 'female_short');
+        await runSynth(
+          m.id,
+          m.text,
+          m.voice || 'female_short',
+          m.denoise || 'strong',
+          m.precision || 'q4'
+        );
       }
     } catch (err) {
       post('error', {

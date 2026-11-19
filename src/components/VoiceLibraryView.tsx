@@ -23,6 +23,7 @@ import {
 } from '../services/audioLibraryDb';
 import {
   generateAndCacheGeminiWav,
+  type OfflineEngineId,
   playCachedClipById,
   speakOfflineBilingual,
   unlockAudioPlayback,
@@ -36,6 +37,11 @@ interface VoiceLibraryViewProps {
   isSpeaking: boolean;
   defaultVoice: VoiceName;
   speechRate: number;
+  preferOfflineSpeech: boolean;
+  preferredOfflineEngine: OfflineEngineId;
+  onChangePreferOfflineSpeech: (enabled: boolean) => void;
+  onChangePreferredOfflineEngine: (id: OfflineEngineId) => void;
+  onPocketConfigChanged: () => void;
   onRefreshClips: () => Promise<void>;
   onStopSpeech: () => void;
   onUpdateRate: (rate: number) => void;
@@ -66,6 +72,11 @@ export const VoiceLibraryView: React.FC<VoiceLibraryViewProps> = ({
   isSpeaking,
   defaultVoice,
   speechRate,
+  preferOfflineSpeech,
+  preferredOfflineEngine,
+  onChangePreferOfflineSpeech,
+  onChangePreferredOfflineEngine,
+  onPocketConfigChanged,
   onRefreshClips,
   onStopSpeech,
   onUpdateRate,
@@ -333,6 +344,11 @@ export const VoiceLibraryView: React.FC<VoiceLibraryViewProps> = ({
       {viewMode === 'lab' ? (
         <OfflineEngineLab
           speechRate={speechRate}
+          preferOfflineSpeech={preferOfflineSpeech}
+          preferredOfflineEngine={preferredOfflineEngine}
+          onChangePreferOfflineSpeech={onChangePreferOfflineSpeech}
+          onChangePreferredOfflineEngine={onChangePreferredOfflineEngine}
+          onPocketConfigChanged={onPocketConfigChanged}
           onUpdateRate={onUpdateRate}
           onStopAll={onStopSpeech}
           onStatusToast={onStatusToast}

@@ -26,7 +26,9 @@ import {
   getPocketFarsiStatus,
   installPocketFarsi,
   onPocketInstallProgress,
+  type PocketDenoiseLevel,
   type PocketFarsiStatus,
+  type PocketPrecisionMode,
   type PocketVoicePreset,
   setPocketCustomVoiceFromBlob,
   speakWithPocketFarsi,
@@ -34,15 +36,24 @@ import {
   uninstallPocketFarsi,
 } from '../services/pocketFarsiEngine';
 import {
+  getPocketDenoiseLevel,
+  getPocketPrecisionMode,
   getPocketVoicePreset,
   getPreferredOfflineEngineId,
   type OfflineEngineId,
+  setPocketDenoiseLevel,
+  setPocketPrecisionMode,
   setPocketVoicePreset,
   setPreferredOfflineEngineId,
 } from '../services/speechEngine';
 
 interface OfflineEngineLabProps {
   speechRate: number;
+  preferOfflineSpeech: boolean;
+  preferredOfflineEngine: OfflineEngineId;
+  onChangePreferOfflineSpeech: (enabled: boolean) => void;
+  onChangePreferredOfflineEngine: (id: OfflineEngineId) => void;
+  onPocketConfigChanged: () => void;
   onUpdateRate: (rate: number) => void;
   onStopAll: () => void;
   onStatusToast: (msg: string) => void;
@@ -106,6 +117,11 @@ function formatBytesMb(bytes: number): string {
 
 export const OfflineEngineLab: React.FC<OfflineEngineLabProps> = ({
   speechRate,
+  preferOfflineSpeech,
+  preferredOfflineEngine,
+  onChangePreferOfflineSpeech,
+  onChangePreferredOfflineEngine,
+  onPocketConfigChanged,
   onUpdateRate,
   onStopAll,
   onStatusToast,
@@ -113,7 +129,7 @@ export const OfflineEngineLab: React.FC<OfflineEngineLabProps> = ({
   const inAndroidApk = isNativeAndroid();
   const [testText, setTestText] = useState(SAMPLE_SCRIPTS[0].text);
   const [activeOfflineId, setActiveOfflineId] = useState<OfflineEngineId>(
-    getPreferredOfflineEngineId
+    preferredOfflineEngine || getPreferredOfflineEngineId()
   );
   const [nativeStatuses, setNativeStatuses] = useState<
     Record<'ava_gyro' | 'mana_piper' | 'amir_piper', NativeOfflineEngineStatus | undefined>
@@ -124,12 +140,17 @@ export const OfflineEngineLab: React.FC<OfflineEngineLabProps> = ({
   });
   const [pocketStatus, setPocketStatus] = useState<PocketFarsiStatus>({
     installed: false,
+    highPrecisionInstalled: false,
     sizeBytes: 0,
     voiceCloneReady: false,
     customVoiceLoaded: false,
     device: 'wasm',
   });
   const [pocketVoice, setPocketVoice] = useState<PocketVoicePreset>(getPocketVoicePreset);
+  const [pocketDenoise, setPocketDenoise] = useState<PocketDenoiseLevel>(getPocketDenoiseLevel);
+  const [pocketPrecision, setPocketPrecision] = useState<PocketPrecisionMode>(
+    getPocketPrecisionMode
+  );
   const [avaGoftari, setAvaGoftari] = useState(true);
   const [installingId, setInstallingId] = useState<OfflineEngineId | null>(null);
   const [installProgress, setInstallProgress] = useState<{pct: number; detail: string}>({
@@ -217,13 +238,22 @@ export const OfflineEngineLab: React.FC<OfflineEngineLabProps> = ({
     });
   };
 
+  useEffect(() => {
+    setActiveOfflineId(preferredOfflineEngine);
+  }, [preferredOfflineEngine]);
+
   const handleSelectActiveOffline = async (id: OfflineEngineId) => {
     setActiveOfflineId(id);
     setPreferredOfflineEngineId(id);
+    onChangePreferredOfflineEngine(id);
     if (id !== 'pocket_farsi' && inAndroidApk) {
       await setActiveOfflineEngineNative(id);
     }
-    onStatusToast('موتور پیش‌فرض آفلاین برنامه به‌روزرسانی شد.');
+    onStatusToast(
+      preferOfflineSpeech
+        ? 'موتور پیش‌فرض آفلاین تغییر کرد و در حالت آنلاین و آفلاین برای دستیار و برنامه استفاده می‌شود.'
+        : 'موتور پیش‌فرض آفلاین برنامه به‌روزرسانی شد.'
+    );
   };
 
   const handleStopEverything = () => {
@@ -262,14 +292,32 @@ export const OfflineEngineLab: React.FC<OfflineEngineLabProps> = ({
     }
   };
 
-  const handleInstallPocket = async (withVoiceClone: boolean) => {
+  const handleInstallPocket = async (
+    withVoiceClone: boolean,
+    precision: PocketPrecisionMode = 'q4'
+  ) => {
     setInstallingId('pocket_farsi');
-    setInstallProgress({pct: 0, detail: 'شروع دریافت فایل‌های ONNX...'});
+    setInstallProgress({
+      pct: 0,
+      detail:
+        precision === 'high'
+          ? 'در حال دریافت مدل دقیق ۱۶ بیتی (بدون کوانتیزاسیون ۴ بیتی)...'
+          : 'شروع دریافت فایل‌های ONNX...',
+    });
     try {
-      const st = await installPocketFarsi(withVoiceClone);
+      const st = await installPocketFarsi(withVoiceClone, precision);
       setPocketStatus(st);
+      if (precision === 'high' && st.highPrecisionInstalled) {
+        setPocketPrecision('high');
+        setPocketPrecisionMode('high');
+      }
       if (st.installed) {
-        onStatusToast('موتور Pocket TTS Farsi در حافظه آفلاین آماده شد.');
+        onPocketConfigChanged();
+        onStatusToast(
+          precision === 'high'
+            ? 'مدل دقیق ۱۶ بیتی Pocket TTS Farsi نصب و فعال شد.'
+            : 'موتور Pocket TTS Farsi در حافظه آفلاین آماده شد.'
+        );
       }
     } catch (err) {
       onStatusToast(err instanceof Error ? err.message : 'خطا در دانلود Pocket TTS Farsi');
@@ -284,6 +332,7 @@ export const OfflineEngineLab: React.FC<OfflineEngineLabProps> = ({
     if (activeOfflineId === 'pocket_farsi') {
       setActiveOfflineId('ava_gyro');
       setPreferredOfflineEngineId('ava_gyro');
+      onChangePreferredOfflineEngine('ava_gyro');
     }
     onStatusToast('کش مدل Pocket TTS Farsi به‌طور کامل حذف شد.');
   };
@@ -334,16 +383,27 @@ export const OfflineEngineLab: React.FC<OfflineEngineLabProps> = ({
     setTestingId('pocket_farsi');
     const chosenVoice =
       pocketVoice === 'custom' && !pocketStatus.customVoiceLoaded ? 'female_short' : pocketVoice;
-    const res = await speakWithPocketFarsi(testText.trim(), chosenVoice, speechRate);
+    const effectivePrecision: PocketPrecisionMode =
+      pocketPrecision === 'high' && pocketStatus.highPrecisionInstalled ? 'high' : 'q4';
+    const res = await speakWithPocketFarsi(testText.trim(), chosenVoice, speechRate, {
+      denoise: pocketDenoise,
+      precision: effectivePrecision,
+    });
     setTestingId(null);
     if (res.ok) {
+      const denoiseTag =
+        pocketDenoise === 'strong'
+          ? 'ضدنویز قوی'
+          : pocketDenoise === 'balanced'
+            ? 'ضدنویز متعادل'
+            : 'خام';
       setMetricsByEngine((prev) => ({
         ...prev,
         pocket_farsi: {
           synthesisMs: res.synthesisMs,
           durationSec: res.durationSec,
           rtf: res.rtf,
-          backendLabel: res.device === 'webgpu' ? 'WebGPU + WASM' : 'WASM CPU q4',
+          backendLabel: `${res.device === 'webgpu' ? 'WebGPU' : 'WASM'} · ${res.variant || effectivePrecision} · ${denoiseTag}`,
         },
       }));
     } else if (res.error && !res.error.includes('لغو')) {
@@ -362,6 +422,7 @@ export const OfflineEngineLab: React.FC<OfflineEngineLabProps> = ({
       setPocketStatus(nextSt);
       setPocketVoice('custom');
       setPocketVoicePreset('custom');
+      onPocketConfigChanged();
       onStatusToast('صدای نمونه برای کلون آماده شد؛ حالا «پخش تست آفلاین» را بزنید.');
     } catch (err) {
       onStatusToast(err instanceof Error ? err.message : 'خطا در پردازش فایل صوتی کلون');
@@ -398,6 +459,7 @@ export const OfflineEngineLab: React.FC<OfflineEngineLabProps> = ({
           setPocketStatus(nextSt);
           setPocketVoice('custom');
           setPocketVoicePreset('custom');
+          onPocketConfigChanged();
           onStatusToast('صدای ضبط‌شده با موفقیت کلون شد.');
         } catch (err) {
           onStatusToast(err instanceof Error ? err.message : 'خطا در ساخت پروفایل صدا');
@@ -556,6 +618,37 @@ export const OfflineEngineLab: React.FC<OfflineEngineLabProps> = ({
                     ? '۳. Amir Persian Piper'
                     : '۴. Pocket TTS Farsi v2'}
             </strong>
+          </div>
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-slate-100 dark:border-emerald-950/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="text-xs text-slate-600 dark:text-slate-300">
+            <span className="font-bold text-slate-900 dark:text-white">رفتار در زمان اتصال اینترنت:</span>{' '}
+            می‌خواهید دستیار («جانم، بفرمایید» و پاسخ‌ها) همیشه از همین موتور آفلاین پیش‌فرض استفاده کند یا با اینترنت از گوینده آنلاین انتخابی؟
+          </div>
+          <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-emerald-950/70 rounded-xl shrink-0">
+            <button
+              type="button"
+              onClick={() => onChangePreferOfflineSpeech(false)}
+              className={`min-h-[36px] px-3 text-xs font-semibold rounded-lg cursor-pointer transition-colors ${
+                !preferOfflineSpeech
+                  ? 'bg-white dark:bg-[#172724] text-slate-900 dark:text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400'
+              }`}
+            >
+              آنلاین (گوینده انتخابی) + آفلاین
+            </button>
+            <button
+              type="button"
+              onClick={() => onChangePreferOfflineSpeech(true)}
+              className={`min-h-[36px] px-3 text-xs font-semibold rounded-lg cursor-pointer transition-colors ${
+                preferOfflineSpeech
+                  ? 'bg-emerald-700 text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400'
+              }`}
+            >
+              همیشه موتور آفلاین پیش‌فرض
+            </button>
           </div>
         </div>
       </section>
@@ -867,26 +960,85 @@ export const OfflineEngineLab: React.FC<OfflineEngineLabProps> = ({
 
             {pocketStatus.installed && (
               <div className="mt-4 space-y-3 pt-3 border-t border-slate-100 dark:border-emerald-950/60">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-                    شخصیت صوتی:
-                  </span>
-                  <select
-                    value={pocketVoice}
-                    onChange={(e) => {
-                      const next = e.target.value as PocketVoicePreset;
-                      setPocketVoice(next);
-                      setPocketVoicePreset(next);
-                    }}
-                    className="min-h-[38px] px-3 rounded-lg border border-slate-200 dark:border-emerald-900 bg-white dark:bg-[#0B1312] text-xs text-slate-800 dark:text-slate-100"
-                  >
-                    <option value="female_short">صدای خانم (طبیعی و گرم)</option>
-                    <option value="male_news">صدای آقا (گوینده خبری)</option>
-                    <option value="hello">صدای سلام (نرم و صمیمی)</option>
-                    {pocketStatus.customVoiceLoaded && (
-                      <option value="custom">صدای کلون‌شده من</option>
-                    )}
-                  </select>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                      شخصیت صوتی:
+                    </span>
+                    <select
+                      value={pocketVoice}
+                      onChange={(e) => {
+                        const next = e.target.value as PocketVoicePreset;
+                        setPocketVoice(next);
+                        setPocketVoicePreset(next);
+                        onPocketConfigChanged();
+                      }}
+                      className="min-h-[38px] px-3 rounded-lg border border-slate-200 dark:border-emerald-900 bg-white dark:bg-[#0B1312] text-xs text-slate-800 dark:text-slate-100"
+                    >
+                      <option value="female_short">صدای خانم (طبیعی و گرم)</option>
+                      <option value="male_news">صدای آقا (گوینده خبری)</option>
+                      <option value="hello">صدای سلام (نرم و صمیمی)</option>
+                      {pocketStatus.customVoiceLoaded && (
+                        <option value="custom">صدای کلون‌شده من</option>
+                      )}
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                      فیلتر حذف نویز و خش‌خش:
+                    </span>
+                    <select
+                      value={pocketDenoise}
+                      onChange={(e) => {
+                        const next = e.target.value as PocketDenoiseLevel;
+                        setPocketDenoise(next);
+                        setPocketDenoiseLevel(next);
+                        onPocketConfigChanged();
+                      }}
+                      className="min-h-[38px] px-3 rounded-lg border border-slate-200 dark:border-emerald-900 bg-white dark:bg-[#0B1312] text-xs text-slate-800 dark:text-slate-100"
+                    >
+                      <option value="strong">قوی — پیشنهادی (حذف هیس + وینر)</option>
+                      <option value="balanced">متعادل (حداقل تغییر لحن)</option>
+                      <option value="raw">خام مدل (بدون فیلتر)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 dark:bg-[#0B1312] px-3 py-2 border border-slate-200/70 dark:border-emerald-950/70">
+                  <div className="text-xs text-slate-600 dark:text-slate-300">
+                    کیفیت وزن مدل:{' '}
+                    <strong className="text-slate-900 dark:text-white">
+                      {pocketPrecision === 'high' && pocketStatus.highPrecisionInstalled
+                        ? 'دقیق ۱۶ بیتی (fp16 بدون فشرده‌سازی ۴ بیتی)'
+                        : 'استاندارد فشرده (q4)'}
+                    </strong>
+                  </div>
+                  {!pocketStatus.highPrecisionInstalled ? (
+                    <button
+                      type="button"
+                      onClick={() => handleInstallPocket(pocketStatus.voiceCloneReady, 'high')}
+                      disabled={installingId !== null}
+                      className="min-h-[32px] px-2.5 rounded-lg bg-emerald-700/10 hover:bg-emerald-700/20 text-emerald-700 dark:text-emerald-400 text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>ارتقا به نسخه ۱۶ بیتی کم‌نویز (~۸۵ مگابایت خالص بیشتر)</span>
+                    </button>
+                  ) : (
+                    <select
+                      value={pocketPrecision}
+                      onChange={(e) => {
+                        const next = e.target.value as PocketPrecisionMode;
+                        setPocketPrecision(next);
+                        setPocketPrecisionMode(next);
+                        onPocketConfigChanged();
+                      }}
+                      className="min-h-[32px] px-2.5 rounded-lg border border-slate-200 dark:border-emerald-900 bg-white dark:bg-[#121E1C] text-xs text-slate-800 dark:text-slate-100"
+                    >
+                      <option value="high">مدل دقیق ۱۶ بیتی (fp16)</option>
+                      <option value="q4">مدل سبک ۴ بیتی (q4)</option>
+                    </select>
+                  )}
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">

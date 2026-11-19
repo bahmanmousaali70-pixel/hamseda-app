@@ -35,8 +35,10 @@ import java.net.URL;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Locale;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -51,6 +53,7 @@ public class WakeWordForegroundService extends Service {
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService modelExecutor = Executors.newSingleThreadExecutor();
+    private final ExecutorService wakeSpeechExecutor = Executors.newSingleThreadExecutor();
     private volatile boolean stopping = false;
     private volatile boolean awaitingCommand = false;
     private volatile boolean modelLoading = false;
@@ -343,14 +346,80 @@ public class WakeWordForegroundService extends Service {
     private void speakWakePrompt() {
         SpeechService active = speechService;
         if (active != null) active.setPause(true);
-        // Use the same native Persian female-voice selection/pitch path as the manual assistant.
-        BilingualSpeechHelper.speak(getApplicationContext(), "جانم، بفرمایید", false, 1.0f, false,
-                success -> handler.post(() -> {
+
+        wakeSpeechExecutor.execute(() -> {
+            final Context appCtx = getApplicationContext();
+            final String prompt = "جانم، بفرمایید";
+            SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+            boolean preferOffline = prefs.getBoolean("prefer_offline_speech", false);
+            String offlineEngine = prefs.getString("preferred_offline_engine", "ava_gyro");
+            String defaultVoice = prefs.getString("default_voice_name", "Kore");
+            boolean isMale = CallAnnouncerService.isMaleVoice(
+                    defaultVoice,
+                    "male".equals(prefs.getString("default_voice_gender", "female"))
+            );
+            float rate = prefs.getFloat("speech_rate", 1.0f);
+
+            OfflinePersianTts.stop();
+            BilingualSpeechHelper.stopActiveTts();
+
+            boolean spoken = false;
+            try {
+                if (!preferOffline && !stopping) {
+                    File audioFile = CallAnnouncerService.findCachedAudioStatic(appCtx, prompt, defaultVoice);
+                    if (audioFile == null && CallAnnouncerService.isNetworkConnected(appCtx)) {
+                        audioFile = CallAnnouncerService.fetchOrGetCachedAudioStatic(appCtx, prompt, defaultVoice);
+                    }
+                    if (audioFile != null && !stopping) {
+                        spoken = CallAnnouncerService.playAudioFileBlocking(appCtx, audioFile, rate);
+                    }
+                }
+
+                if (!spoken && !stopping) {
+                    if ("pocket_farsi".equals(offlineEngine)) {
+                        File pocketFile = CallAnnouncerService.findCachedAudioStatic(appCtx, prompt, "pocket_farsi");
+                        if (pocketFile != null) {
+                            spoken = CallAnnouncerService.playAudioFileBlocking(appCtx, pocketFile, rate);
+                        }
+                    }
+                    if (!spoken && !stopping) {
+                        String sherpaEngineId = "pocket_farsi".equals(offlineEngine) ? null : offlineEngine;
+                        OfflinePersianTts.SpeakResult res = OfflinePersianTts.speakWithEngine(
+                                appCtx,
+                                sherpaEngineId,
+                                prompt,
+                                rate,
+                                null
+                        );
+                        spoken = res.getOk();
+                    }
+                }
+
+                if (!spoken && !stopping) {
+                    CountDownLatch latch = new CountDownLatch(1);
+                    handler.post(() -> {
+                        if (stopping) {
+                            latch.countDown();
+                            return;
+                        }
+                        BilingualSpeechHelper.speak(appCtx, prompt, isMale, rate, false, success -> latch.countDown());
+                    });
+                    latch.await(4, TimeUnit.SECONDS);
+                }
+
+                if (!stopping) {
+                    Thread.sleep(120L);
+                }
+            } catch (Exception ignored) {
+            } finally {
+                handler.post(() -> {
                     if (stopping) return;
                     if (recognizer != null) recognizer.reset();
                     SpeechService current = speechService;
                     if (current != null) current.setPause(false);
-                }));
+                });
+            }
+        });
     }
 
     private boolean containsWakeWord(String spoken) {
@@ -421,6 +490,7 @@ public class WakeWordForegroundService extends Service {
     @Override public void onDestroy() {
         stopping = true;
         modelExecutor.shutdownNow();
+        wakeSpeechExecutor.shutdownNow();
         try {
             if (speechService != null) {
                 speechService.cancel();

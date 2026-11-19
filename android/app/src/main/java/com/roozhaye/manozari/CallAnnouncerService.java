@@ -13,6 +13,11 @@ import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
+import android.media.PlaybackParams;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.net.NetworkInfo;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -34,6 +39,9 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class CallAnnouncerService extends Service {
@@ -56,29 +64,77 @@ public class CallAnnouncerService extends Service {
     private AudioManager audioManager = null;
     private AudioFocusRequest focusRequest = null;
 
-    public static void announce(Context context, String title, String text, boolean isMale, int repeatCount, boolean isCall) {
-        SharedPreferences prefs = context.getSharedPreferences("rmz_native_prefs", Context.MODE_PRIVATE);
-        String defaultVoice = prefs.getString("default_voice_name", isMale ? "Charon" : "Kore");
-        String resolvedVoice = defaultVoice;
-        if (isMale && !"Charon".equals(defaultVoice) && !"Fenrir".equals(defaultVoice)) {
-            resolvedVoice = "Charon";
-        } else if (!isMale && ("Charon".equals(defaultVoice) || "Fenrir".equals(defaultVoice))) {
-            resolvedVoice = "Kore";
+    static String resolveVoiceName(Context context, @Nullable String requestedVoice, boolean fallbackIsMale) {
+        if (requestedVoice != null && !requestedVoice.trim().isEmpty()) {
+            return requestedVoice.trim();
         }
-        announce(context, title, text, resolvedVoice, isMale, repeatCount, isCall);
+        SharedPreferences prefs = context.getSharedPreferences("rmz_native_prefs", Context.MODE_PRIVATE);
+        String saved = prefs.getString("default_voice_name", fallbackIsMale ? "Charon" : "Kore");
+        return (saved != null && !saved.trim().isEmpty())
+                ? saved.trim()
+                : (fallbackIsMale ? "Charon" : "Kore");
+    }
+
+    static boolean isMaleVoice(String voiceName, boolean fallbackIsMale) {
+        if ("Charon".equals(voiceName) || "Fenrir".equals(voiceName) || "Puck".equals(voiceName)) return true;
+        if ("Kore".equals(voiceName) || "Zephyr".equals(voiceName)) return false;
+        return fallbackIsMale;
+    }
+
+    static boolean isNetworkConnected(Context context) {
+        try {
+            ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm == null) return false;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                Network net = cm.getActiveNetwork();
+                if (net == null) return false;
+                NetworkCapabilities caps = cm.getNetworkCapabilities(net);
+                return caps != null && (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+                        || caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
+                        || caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+                        || caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN));
+            }
+            NetworkInfo info = cm.getActiveNetworkInfo();
+            return info != null && info.isConnected();
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    @Nullable
+    static File findCachedAudioStatic(Context context, String text, String voiceName) {
+        if (text == null || text.trim().isEmpty() || voiceName == null || voiceName.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            File cacheDir = new File(context.getCacheDir(), "rmz_tts_wav");
+            String key = "v3_" + sha256Hex(voiceName.trim() + "::" + text.trim());
+            File wavFile = new File(cacheDir, key + ".wav");
+            if (wavFile.exists() && wavFile.length() > 44) {
+                return wavFile;
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    public static void announce(Context context, String title, String text, boolean isMale, int repeatCount, boolean isCall) {
+        Context appCtx = context.getApplicationContext();
+        String resolvedVoice = resolveVoiceName(appCtx, null, isMale);
+        boolean resolvedMale = isMaleVoice(resolvedVoice, isMale);
+        announce(appCtx, title, text, resolvedVoice, resolvedMale, repeatCount, isCall);
     }
 
     public static void announce(Context context, String title, String text, String voiceName, boolean isMale, int repeatCount, boolean isCall) {
-        // All native announcements use Negin, including incoming calls and SMS.
-        voiceName = "Kore";
-        isMale = false;
         final Context appCtx = context.getApplicationContext();
+        final String resolvedVoice = resolveVoiceName(appCtx, voiceName, isMale);
+        final boolean resolvedMale = isMaleVoice(resolvedVoice, isMale);
         final int safeRepeat = Math.max(1, Math.min(2, repeatCount));
         Intent intent = new Intent(appCtx, CallAnnouncerService.class);
         intent.putExtra(EXTRA_TITLE, title);
         intent.putExtra(EXTRA_TEXT, text);
-        intent.putExtra(EXTRA_IS_MALE, isMale);
-        intent.putExtra(EXTRA_VOICE_NAME, voiceName);
+        intent.putExtra(EXTRA_IS_MALE, resolvedMale);
+        intent.putExtra(EXTRA_VOICE_NAME, resolvedVoice);
         intent.putExtra(EXTRA_REPEAT, safeRepeat);
         intent.putExtra(EXTRA_IS_CALL, isCall);
 
@@ -91,7 +147,7 @@ public class CallAnnouncerService extends Service {
         } catch (Exception e) {
             // Android 12–15 (HyperOS/MIUI) may throw ForegroundServiceStartNotAllowedException from background;
             // fall back immediately to direct worker-thread MediaPlayer + WakeLock inside app process.
-            playDirectFromBackground(appCtx, title, text, voiceName, isMale, safeRepeat, isCall);
+            playDirectFromBackground(appCtx, title, text, resolvedVoice, resolvedMale, safeRepeat, isCall);
         }
     }
 
@@ -179,8 +235,26 @@ public class CallAnnouncerService extends Service {
                 }
                 Thread.sleep(isCall ? 220L : 100L);
                 if (myGen != GLOBAL_PLAY_GEN.get()) return;
-                File audioFile = fetchOrGetCachedAudioStatic(appCtx, text, voiceName);
+
+                SharedPreferences prefs = appCtx.getSharedPreferences("rmz_native_prefs", Context.MODE_PRIVATE);
+                boolean preferOffline = prefs.getBoolean("prefer_offline_speech", false);
+                String offlineEngine = prefs.getString("preferred_offline_engine", "ava_gyro");
+                float speechRate = prefs.getFloat("speech_rate", 1.0f);
+
+                File audioFile = null;
+                if (!preferOffline) {
+                    audioFile = findCachedAudioStatic(appCtx, text, voiceName);
+                    if (audioFile == null && isNetworkConnected(appCtx)) {
+                        audioFile = fetchOrGetCachedAudioStatic(appCtx, text, voiceName);
+                    }
+                } else if ("pocket_farsi".equals(offlineEngine)) {
+                    audioFile = findCachedAudioStatic(appCtx, text, "pocket_farsi");
+                }
+
                 if (myGen != GLOBAL_PLAY_GEN.get()) return;
+                if (audioFile == null && "pocket_farsi".equals(offlineEngine) && !preferOffline) {
+                    audioFile = findCachedAudioStatic(appCtx, text, "pocket_farsi");
+                }
                 if (audioFile != null && audioFile.exists() && audioFile.length() > 44) {
                     final MediaPlayer mp = new MediaPlayer();
                     AudioAttributes attrs = new AudioAttributes.Builder()
@@ -190,6 +264,14 @@ public class CallAnnouncerService extends Service {
                     mp.setAudioAttributes(attrs);
                     mp.setDataSource(audioFile.getAbsolutePath());
                     mp.prepare();
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Math.abs(speechRate - 1.0f) > 0.02f) {
+                        try {
+                            PlaybackParams pp = new PlaybackParams();
+                            pp.setSpeed(Math.max(0.7f, Math.min(1.4f, speechRate)));
+                            mp.setPlaybackParams(pp);
+                        } catch (Exception ignored) {
+                        }
+                    }
                     if (myGen != GLOBAL_PLAY_GEN.get()) {
                         try {
                             mp.release();
@@ -241,8 +323,9 @@ public class CallAnnouncerService extends Service {
                 }
                 if (myGen == GLOBAL_PLAY_GEN.get()) {
                     String spoken = repeatCount == 2 ? (text + " . " + text) : text;
+                    String targetOfflineId = "pocket_farsi".equals(offlineEngine) ? null : offlineEngine;
                     OfflinePersianTts.SpeakResult neuralRes =
-                            OfflinePersianTts.speakWithEngine(appCtx, null, spoken, 1.0f, null);
+                            OfflinePersianTts.speakWithEngine(appCtx, targetOfflineId, spoken, speechRate, null);
                     if (neuralRes.getOk()) {
                         return;
                     }
@@ -296,8 +379,8 @@ public class CallAnnouncerService extends Service {
         String title = intent != null ? intent.getStringExtra(EXTRA_TITLE) : "اعلام صوتی";
         String rawText = intent != null ? intent.getStringExtra(EXTRA_TEXT) : "";
         String text = rawText != null ? rawText.trim() : "";
-        boolean isMale = false;
-        String extraVoice = "Kore";
+        boolean extraIsMale = intent != null && intent.getBooleanExtra(EXTRA_IS_MALE, false);
+        String extraVoice = intent != null ? intent.getStringExtra(EXTRA_VOICE_NAME) : null;
         int repeat = intent != null ? Math.max(1, Math.min(2, intent.getIntExtra(EXTRA_REPEAT, 1))) : 1;
         boolean isCall = intent != null && intent.getBooleanExtra(EXTRA_IS_CALL, false);
 
@@ -325,9 +408,8 @@ public class CallAnnouncerService extends Service {
 
         acquireWakeLock();
 
-        final String voiceName = (extraVoice != null && !extraVoice.trim().isEmpty())
-                ? extraVoice.trim()
-                : (isMale ? "Charon" : "Kore");
+        final String voiceName = resolveVoiceName(this, extraVoice, extraIsMale);
+        final boolean isMale = isMaleVoice(voiceName, extraIsMale);
 
         handler.postDelayed(() -> {
             if (cancelled || sessionId != activeSessionId || myGen != GLOBAL_PLAY_GEN.get()) return;
@@ -346,28 +428,47 @@ public class CallAnnouncerService extends Service {
     private void playOnlineOrFallback(int sessionId, long myGen, String title, String singleText, String voiceName, boolean isMale, int repeat, boolean isCall) {
         if (cancelled || sessionId != activeSessionId || myGen != GLOBAL_PLAY_GEN.get()) return;
 
-        File wavFile = fetchOrGetCachedWav(singleText, voiceName);
+        SharedPreferences prefs = getSharedPreferences("rmz_native_prefs", MODE_PRIVATE);
+        boolean preferOffline = prefs.getBoolean("prefer_offline_speech", false);
+        String offlineEngine = prefs.getString("preferred_offline_engine", "ava_gyro");
+        float speechRate = prefs.getFloat("speech_rate", 1.0f);
+
+        File wavFile = null;
+        if (!preferOffline) {
+            wavFile = findCachedAudioStatic(this, singleText, voiceName);
+            if (wavFile == null && isNetworkConnected(this)) {
+                wavFile = fetchOrGetCachedWav(singleText, voiceName);
+            }
+        } else if ("pocket_farsi".equals(offlineEngine)) {
+            wavFile = findCachedAudioStatic(this, singleText, "pocket_farsi");
+        }
         if (cancelled || sessionId != activeSessionId || myGen != GLOBAL_PLAY_GEN.get()) return;
 
+        if (wavFile == null && "pocket_farsi".equals(offlineEngine) && !preferOffline) {
+            wavFile = findCachedAudioStatic(this, singleText, "pocket_farsi");
+        }
+
         if (wavFile != null && wavFile.exists() && wavFile.length() > 44) {
+            final File playTarget = wavFile;
             handler.post(() -> {
                 if (cancelled || sessionId != activeSessionId || myGen != GLOBAL_PLAY_GEN.get()) return;
-                if (!playWavFile(sessionId, wavFile, repeat)) {
+                if (!playWavFile(sessionId, playTarget, repeat)) {
                     if (myGen == GLOBAL_PLAY_GEN.get()) {
-                        new Thread(() -> tryNeuralThenBilingualFallback(sessionId, myGen, title, singleText, isMale, repeat, isCall)).start();
+                        new Thread(() -> tryNeuralThenBilingualFallback(sessionId, myGen, title, singleText, isMale, repeat, isCall, offlineEngine, speechRate)).start();
                     }
                 }
             });
             return;
         }
 
-        tryNeuralThenBilingualFallback(sessionId, myGen, title, singleText, isMale, repeat, isCall);
+        tryNeuralThenBilingualFallback(sessionId, myGen, title, singleText, isMale, repeat, isCall, offlineEngine, speechRate);
     }
 
-    private void tryNeuralThenBilingualFallback(int sessionId, long myGen, String title, String singleText, boolean isMale, int repeat, boolean isCall) {
+    private void tryNeuralThenBilingualFallback(int sessionId, long myGen, String title, String singleText, boolean isMale, int repeat, boolean isCall, String offlineEngine, float speechRate) {
         if (cancelled || sessionId != activeSessionId || myGen != GLOBAL_PLAY_GEN.get()) return;
         String spoken = repeat == 2 ? (singleText + " . " + singleText) : singleText;
-        OfflinePersianTts.SpeakResult res = OfflinePersianTts.speakWithEngine(this, null, spoken, 1.0f, null);
+        String targetEngine = "pocket_farsi".equals(offlineEngine) ? null : offlineEngine;
+        OfflinePersianTts.SpeakResult res = OfflinePersianTts.speakWithEngine(this, targetEngine, spoken, speechRate, null);
         if (res.getOk()) {
             handler.post(() -> {
                 if (sessionId == activeSessionId) {
@@ -451,11 +552,70 @@ public class CallAnnouncerService extends Service {
         }
     }
 
+    static boolean playAudioFileBlocking(Context context, File audioFile, float rate) {
+        if (audioFile == null || !audioFile.exists() || audioFile.length() <= 44) {
+            return false;
+        }
+        final long myGen = GLOBAL_PLAY_GEN.incrementAndGet();
+        stopDirectPlayerOnly();
+        MediaPlayer mp = null;
+        try {
+            mp = new MediaPlayer();
+            AudioAttributes attrs = new AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build();
+            mp.setAudioAttributes(attrs);
+            mp.setDataSource(audioFile.getAbsolutePath());
+            mp.prepare();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Math.abs(rate - 1.0f) > 0.02f) {
+                try {
+                    PlaybackParams pp = new PlaybackParams();
+                    pp.setSpeed(Math.max(0.7f, Math.min(1.4f, rate)));
+                    mp.setPlaybackParams(pp);
+                } catch (Exception ignored) {
+                }
+            }
+            if (myGen != GLOBAL_PLAY_GEN.get()) {
+                mp.release();
+                return false;
+            }
+            activeDirectPlayer = mp;
+            final CountDownLatch latch = new CountDownLatch(1);
+            final AtomicBoolean ok = new AtomicBoolean(false);
+            mp.setOnCompletionListener(player -> {
+                ok.set(true);
+                latch.countDown();
+            });
+            mp.setOnErrorListener((player, what, extra) -> {
+                latch.countDown();
+                return true;
+            });
+            mp.start();
+            latch.await(12, TimeUnit.SECONDS);
+            return ok.get();
+        } catch (Exception ignored) {
+            return false;
+        } finally {
+            if (mp != null) {
+                if (activeDirectPlayer == mp) activeDirectPlayer = null;
+                try {
+                    if (mp.isPlaying()) mp.stop();
+                } catch (Exception ignored) {
+                }
+                try {
+                    mp.release();
+                } catch (Exception ignored) {
+                }
+            }
+        }
+    }
+
     private File fetchOrGetCachedWav(String text, String voiceName) {
         return fetchOrGetCachedAudioStatic(this, text, voiceName);
     }
 
-    private static File fetchOrGetCachedAudioStatic(Context context, String text, String voiceName) {
+    static File fetchOrGetCachedAudioStatic(Context context, String text, String voiceName) {
         try {
             File cacheDir = new File(context.getCacheDir(), "rmz_tts_wav");
             if (!cacheDir.exists()) {

@@ -19,14 +19,36 @@ import {
 } from './nativeAndroidBridge';
 import {
   getPocketFarsiStatus,
+  type PocketDenoiseLevel,
+  type PocketPrecisionMode,
   type PocketVoicePreset,
+  renderPocketFarsiWavBuffer,
   speakWithPocketFarsi,
   stopPocketFarsi,
 } from './pocketFarsiEngine';
 
 export type OfflineEngineId = 'ava_gyro' | 'mana_piper' | 'amir_piper' | 'pocket_farsi';
 const PREFERRED_OFFLINE_ENGINE_KEY = 'hamseda_preferred_offline_engine';
+const PREFER_OFFLINE_SPEECH_KEY = 'hamseda_prefer_offline_speech';
 const POCKET_VOICE_KEY = 'hamseda_pocket_voice_preset';
+const POCKET_DENOISE_KEY = 'hamseda_pocket_denoise_level';
+const POCKET_PRECISION_KEY = 'hamseda_pocket_precision_mode';
+
+export function getPreferOfflineSpeech(): boolean {
+  try {
+    return localStorage.getItem(PREFER_OFFLINE_SPEECH_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function setPreferOfflineSpeech(enabled: boolean): void {
+  try {
+    localStorage.setItem(PREFER_OFFLINE_SPEECH_KEY, enabled ? '1' : '0');
+  } catch {
+    // ignore storage errors
+  }
+}
 
 export function getPreferredOfflineEngineId(): OfflineEngineId {
   try {
@@ -73,6 +95,42 @@ export function getPocketVoicePreset(): PocketVoicePreset {
 export function setPocketVoicePreset(preset: PocketVoicePreset): void {
   try {
     localStorage.setItem(POCKET_VOICE_KEY, preset);
+  } catch {
+    // ignore
+  }
+}
+
+export function getPocketDenoiseLevel(): PocketDenoiseLevel {
+  try {
+    const raw = localStorage.getItem(POCKET_DENOISE_KEY);
+    if (raw === 'strong' || raw === 'balanced' || raw === 'raw') return raw;
+  } catch {
+    // ignore
+  }
+  return 'strong';
+}
+
+export function setPocketDenoiseLevel(level: PocketDenoiseLevel): void {
+  try {
+    localStorage.setItem(POCKET_DENOISE_KEY, level);
+  } catch {
+    // ignore
+  }
+}
+
+export function getPocketPrecisionMode(): PocketPrecisionMode {
+  try {
+    const raw = localStorage.getItem(POCKET_PRECISION_KEY);
+    if (raw === 'q4' || raw === 'high') return raw;
+  } catch {
+    // ignore
+  }
+  return 'q4';
+}
+
+export function setPocketPrecisionMode(mode: PocketPrecisionMode): void {
+  try {
+    localStorage.setItem(POCKET_PRECISION_KEY, mode);
   } catch {
     // ignore
   }
@@ -529,64 +587,68 @@ export async function speakFluentPersian(
   const rate = options.rate ?? 1;
   const clipId = options.clipId ?? hashTextKey(options.text, voiceName);
 
+  const preferOffline = getPreferOfflineSpeech();
+
   try {
-    const cachedRecord = !options.forceOnlineRefresh ? await getAudioClipRecord(clipId) : null;
-    if (token !== playbackToken) return 'cache';
+    if (!preferOffline) {
+      const cachedRecord = !options.forceOnlineRefresh ? await getAudioClipRecord(clipId) : null;
+      if (token !== playbackToken) return 'cache';
 
-    const cachedIsTrueStudioWav =
-      Boolean(cachedRecord) &&
-      isRiffWavBuffer(cachedRecord?.wavData) &&
-      cachedRecord?.entry.source === 'gemini';
-    const cachedIsStyledV4 = cachedIsTrueStudioWav && cachedRecord?.entry.studioVersion === 4;
+      const cachedIsTrueStudioWav =
+        Boolean(cachedRecord) &&
+        isRiffWavBuffer(cachedRecord?.wavData) &&
+        cachedRecord?.entry.source === 'gemini';
+      const cachedIsStyledV4 = cachedIsTrueStudioWav && cachedRecord?.entry.studioVersion === 4;
 
-    // 1. Play immediately from offline cache ONLY if it's latest styled studio WAV (or when offline)
-    if (cachedRecord && (cachedIsStyledV4 || !navigator.onLine)) {
-      options.onStart?.('cache');
-      await playWavBuffer(cachedRecord.wavData, rate, token);
-      if (token === playbackToken) options.onEnd?.();
-      return 'cache';
-    }
-
-    // 2. If online (or existing cached clip is legacy/fallback), fetch styled Studio Gemini WAV
-    {
-      // Do not trust navigator.onLine inside Android WebView; attempt the cloud TTS
-      // and fall back to the local engine only after a bounded network timeout.
-      options.onLoading?.();
-      try {
-        const result = await generateAndCacheGeminiWav({
-          text: options.text,
-          title: options.title,
-          category: options.category,
-          voiceName,
-          style: options.style,
-          clipId,
-          forceRefresh: Boolean(options.forceOnlineRefresh),
-        });
-        if (token !== playbackToken) return 'gemini';
-        if ('buffer' in result) {
-          // If server hit Free Tier quota (neural-fallback) but we already had an older Gemini WAV locally, keep playing the studio WAV
-          if (!result.isStudioWav && cachedRecord && cachedIsTrueStudioWav) {
-            options.onStart?.('cache');
-            await playWavBuffer(cachedRecord.wavData, rate, token);
-            if (token === playbackToken) options.onEnd?.();
-            return 'cache';
-          }
-          const srcKind = result.isStudioWav ? 'gemini' : 'neural-fallback';
-          options.onStart?.(srcKind);
-          await playWavBuffer(result.buffer, rate, token);
-          if (token === playbackToken) options.onEnd?.();
-          return srcKind;
-        }
-      } catch (err) {
-        console.warn('Online TTS fallback to cached/bilingual speech:', err);
-      }
-
-      // If network attempt failed but we had a fallback clip cached, play it rather than staying silent
-      if (cachedRecord) {
-        options.onStart?.(cachedIsTrueStudioWav ? 'cache' : 'neural-fallback');
+      // 1. Play immediately from offline cache ONLY if it's latest styled studio WAV (or when offline)
+      if (cachedRecord && (cachedIsStyledV4 || !navigator.onLine)) {
+        options.onStart?.('cache');
         await playWavBuffer(cachedRecord.wavData, rate, token);
         if (token === playbackToken) options.onEnd?.();
-        return cachedIsTrueStudioWav ? 'cache' : 'neural-fallback';
+        return 'cache';
+      }
+
+      // 2. If online (or existing cached clip is legacy/fallback), fetch styled Studio Gemini WAV
+      {
+        // Do not trust navigator.onLine inside Android WebView; attempt the cloud TTS
+        // and fall back to the local engine only after a bounded network timeout.
+        options.onLoading?.();
+        try {
+          const result = await generateAndCacheGeminiWav({
+            text: options.text,
+            title: options.title,
+            category: options.category,
+            voiceName,
+            style: options.style,
+            clipId,
+            forceRefresh: Boolean(options.forceOnlineRefresh),
+          });
+          if (token !== playbackToken) return 'gemini';
+          if ('buffer' in result) {
+            // If server hit Free Tier quota (neural-fallback) but we already had an older Gemini WAV locally, keep playing the studio WAV
+            if (!result.isStudioWav && cachedRecord && cachedIsTrueStudioWav) {
+              options.onStart?.('cache');
+              await playWavBuffer(cachedRecord.wavData, rate, token);
+              if (token === playbackToken) options.onEnd?.();
+              return 'cache';
+            }
+            const srcKind = result.isStudioWav ? 'gemini' : 'neural-fallback';
+            options.onStart?.(srcKind);
+            await playWavBuffer(result.buffer, rate, token);
+            if (token === playbackToken) options.onEnd?.();
+            return srcKind;
+          }
+        } catch (err) {
+          console.warn('Online TTS fallback to cached/bilingual speech:', err);
+        }
+
+        // If network attempt failed but we had a fallback clip cached, play it rather than staying silent
+        if (cachedRecord) {
+          options.onStart?.(cachedIsTrueStudioWav ? 'cache' : 'neural-fallback');
+          await playWavBuffer(cachedRecord.wavData, rate, token);
+          if (token === playbackToken) options.onEnd?.();
+          return cachedIsTrueStudioWav ? 'cache' : 'neural-fallback';
+        }
       }
     }
 
@@ -604,7 +666,13 @@ export async function speakFluentPersian(
         const pocketVoice = getPocketVoicePreset();
         const safeVoice =
           pocketVoice === 'custom' && !pocketStatus.customVoiceLoaded ? 'female_short' : pocketVoice;
-        const pocketRes = await speakWithPocketFarsi(options.text, safeVoice, rate);
+        const pocketRes = await speakWithPocketFarsi(options.text, safeVoice, rate, {
+          denoise: getPocketDenoiseLevel(),
+          precision:
+            getPocketPrecisionMode() === 'high' && pocketStatus.highPrecisionInstalled
+              ? 'high'
+              : 'q4',
+        });
         ok = pocketRes.ok;
       }
       if (token !== playbackToken) return 'offline-speech';
@@ -628,7 +696,13 @@ export async function speakFluentPersian(
       const pocketStatus = await getPocketFarsiStatus();
       if (token !== playbackToken) return 'offline-speech';
       if (pocketStatus.installed) {
-        const pocketRes = await speakWithPocketFarsi(options.text, getPocketVoicePreset(), rate);
+        const pocketRes = await speakWithPocketFarsi(options.text, getPocketVoicePreset(), rate, {
+          denoise: getPocketDenoiseLevel(),
+          precision:
+            getPocketPrecisionMode() === 'high' && pocketStatus.highPrecisionInstalled
+              ? 'high'
+              : 'q4',
+        });
         ok = pocketRes.ok;
       }
       if (token !== playbackToken) return 'offline-speech';
@@ -657,4 +731,60 @@ export async function playCachedClipById(id: string, rate = 1): Promise<boolean>
   if (!buf) return false;
   await playWavBuffer(buf, rate, token);
   return true;
+}
+
+const WAKE_PROMPT_TEXT = 'جانم، بفرمایید';
+let lastWakePrecacheSignature = '';
+
+export async function precacheWakePromptNative(options: {
+  defaultVoice: VoiceName;
+  isOnline: boolean;
+  preferOfflineSpeech: boolean;
+  preferredOffline: OfflineEngineId;
+  forcePocketRefresh?: boolean;
+}): Promise<void> {
+  if (!isNativeAndroid()) return;
+  const pocketVoice = getPocketVoicePreset();
+  const pocketDenoise = getPocketDenoiseLevel();
+  const pocketPrecision = getPocketPrecisionMode();
+  const sig = `${options.defaultVoice}|${options.isOnline ? 1 : 0}|${options.preferOfflineSpeech ? 1 : 0}|${options.preferredOffline}|${pocketVoice}|${pocketDenoise}|${pocketPrecision}`;
+  if (!options.forcePocketRefresh && sig === lastWakePrecacheSignature) return;
+  lastWakePrecacheSignature = sig;
+
+  try {
+    if (!options.preferOfflineSpeech) {
+      const clipId = hashTextKey(WAKE_PROMPT_TEXT, options.defaultVoice);
+      const existing = await getAudioClipBuffer(clipId);
+      if (existing && isRiffWavBuffer(existing)) {
+        await precacheNativeWav(WAKE_PROMPT_TEXT, options.defaultVoice, existing);
+      } else if (options.isOnline) {
+        await generateAndCacheGeminiWav({
+          text: WAKE_PROMPT_TEXT,
+          title: 'پاسخ بیدارباش هم‌صدا',
+          category: 'custom',
+          voiceName: options.defaultVoice,
+          clipId,
+        });
+      }
+    }
+
+    if (options.preferredOffline === 'pocket_farsi') {
+      const pocketStatus = await getPocketFarsiStatus();
+      if (pocketStatus.installed) {
+        const safeVoice =
+          pocketVoice === 'custom' && !pocketStatus.customVoiceLoaded ? 'female_short' : pocketVoice;
+        const safePrec: PocketPrecisionMode =
+          pocketPrecision === 'high' && pocketStatus.highPrecisionInstalled ? 'high' : 'q4';
+        const wav = await renderPocketFarsiWavBuffer(WAKE_PROMPT_TEXT, safeVoice, {
+          denoise: pocketDenoise,
+          precision: safePrec,
+        });
+        if (wav) {
+          await precacheNativeWav(WAKE_PROMPT_TEXT, 'pocket_farsi', wav);
+        }
+      }
+    }
+  } catch {
+    // Non-fatal precache attempt; runtime fallback handles offline speech automatically
+  }
 }

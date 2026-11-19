@@ -67,6 +67,9 @@ interface RoozhayeNativePlugin {
     autoOpenMorning: boolean;
     defaultGender: 'male' | 'female';
     defaultVoice: string;
+    preferOfflineSpeech?: boolean;
+    preferredOfflineEngine?: string;
+    speechRate?: number;
   }): Promise<{ok: boolean}>;
   syncCallers(options: {callersJson: string}): Promise<{count: number}>;
   syncSchedules(options: {schedulesJson: string}): Promise<{count: number}>;
@@ -380,6 +383,9 @@ export async function syncAnnounceTogglesToNative(options: {
   announceSchedules?: boolean;
   autoOpenMorning: boolean;
   defaultVoice: string;
+  preferOfflineSpeech?: boolean;
+  preferredOfflineEngine?: string;
+  speechRate?: number;
 }): Promise<void> {
   if (!isNativeAndroid()) return;
   try {
@@ -390,6 +396,9 @@ export async function syncAnnounceTogglesToNative(options: {
       autoOpenMorning: options.autoOpenMorning,
       defaultGender: getVoiceGender(options.defaultVoice),
       defaultVoice: options.defaultVoice,
+      preferOfflineSpeech: options.preferOfflineSpeech ?? false,
+      preferredOfflineEngine: options.preferredOfflineEngine ?? 'ava_gyro',
+      speechRate: options.speechRate ?? 1.0,
     });
   } catch {
     // ignore

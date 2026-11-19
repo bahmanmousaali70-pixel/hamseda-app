@@ -344,6 +344,7 @@ object OfflinePersianTts {
 
             val startNs = System.nanoTime()
             var totalSamples = 0L
+            var writtenFrames = 0L
 
             for ((idx, sentence) in sentences.withIndex()) {
                 if (cancelled.get() || myGen != playbackGen.get()) break
@@ -354,6 +355,7 @@ object OfflinePersianTts {
                     } else {
                         writeFloatChunk(streamTrack, chunkSamples)
                         totalSamples += chunkSamples.size
+                        writtenFrames += chunkSamples.size
                         1
                     }
                 }
@@ -361,7 +363,8 @@ object OfflinePersianTts {
                 // Short natural breath pause between sentences
                 if (idx < sentences.size - 1 && !cancelled.get() && myGen == playbackGen.get()) {
                     val pauseSamples = ShortArray((sampleRate * 0.16f).toInt())
-                    streamTrack.write(pauseSamples, 0, pauseSamples.size)
+                    val writtenPause = streamTrack.write(pauseSamples, 0, pauseSamples.size)
+                    if (writtenPause > 0) writtenFrames += writtenPause
                 }
             }
 
@@ -369,11 +372,31 @@ object OfflinePersianTts {
             val durationSec = if (sampleRate > 0) totalSamples.toDouble() / sampleRate.toDouble() else 0.0
             val rtf = if (durationSec > 0.01) (synthesisMs / 1000.0) / durationSec else 0.0
 
-            // Allow remaining buffered audio in AudioTrack to drain naturally unless stopped
-            if (!cancelled.get() && myGen == playbackGen.get() && totalSamples > 0) {
-                val waitDeadline = System.currentTimeMillis() + 650L
-                while (!cancelled.get() && myGen == playbackGen.get() && System.currentTimeMillis() < waitDeadline) {
-                    Thread.sleep(40L)
+            // Allow remaining buffered audio in AudioTrack to drain naturally until head catches up
+            if (!cancelled.get() && myGen == playbackGen.get() && writtenFrames > 0L) {
+                val drainStart = System.currentTimeMillis()
+                val maxDrainMs = 2400L
+                var lastHead = -1L
+                var stagnantSince = drainStart
+                while (!cancelled.get() && myGen == playbackGen.get()) {
+                    val now = System.currentTimeMillis()
+                    if (now - drainStart >= maxDrainMs) break
+                    val head = try {
+                        streamTrack.playbackHeadPosition.toLong() and 0xFFFFFFFFL
+                    } catch (_: Exception) {
+                        break
+                    }
+                    if (head >= writtenFrames) {
+                        Thread.sleep(60L)
+                        break
+                    }
+                    if (head != lastHead) {
+                        lastHead = head
+                        stagnantSince = now
+                    } else if (now - stagnantSince >= 450L) {
+                        break
+                    }
+                    Thread.sleep(35L)
                 }
             }
 

@@ -56,6 +56,7 @@ import {
   signOutFirebase,
 } from './services/firebaseClient';
 import {
+  setActiveOfflineEngineNative,
   getNativeCapabilities,
   openAppInfoSettings,
   openNotificationListenerSettings,
@@ -73,7 +74,13 @@ import {
 } from './services/nativeAndroidBridge';
 import {
   generateAndCacheGeminiWav,
+  getPreferOfflineSpeech,
+  getPreferredOfflineEngineId,
+  type OfflineEngineId,
   playSoftChime,
+  precacheWakePromptNative,
+  setPreferOfflineSpeech,
+  setPreferredOfflineEngineId,
   speakFluentPersian,
   stopAllSpeech,
   unlockAudioPlayback,
@@ -93,6 +100,7 @@ import type {
   OwnerRole,
   ScheduledAnnouncement,
   SyncedPhoneContact,
+  VoiceName,
 } from './types/app';
 import {
   adaptTextForDevice,
@@ -136,6 +144,14 @@ const DEFAULT_SETTINGS: AppSettings = {
   nightMovieTime: '22:00',
 };
 
+const VALID_VOICES: VoiceName[] = ['Kore', 'Zephyr', 'Puck', 'Charon', 'Fenrir'];
+
+function sanitizeVoiceName(raw: unknown, fallback: VoiceName): VoiceName {
+  return typeof raw === 'string' && VALID_VOICES.includes(raw as VoiceName)
+    ? (raw as VoiceName)
+    : fallback;
+}
+
 function readJsonStorage<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(key);
@@ -173,7 +189,7 @@ export default function App() {
     return {
       ...DEFAULT_SETTINGS,
       ...saved,
-      defaultVoice: 'Kore',
+      defaultVoice: sanitizeVoiceName(saved.defaultVoice, DEFAULT_SETTINGS.defaultVoice),
       myName: normalizedMyName,
       partnerName: normalizedPartnerName,
       assistantName: normalizedAssistantName,
@@ -246,6 +262,13 @@ export default function App() {
   const [localVoiceControls, setLocalVoiceControls] = useState<LocalVoiceControls>(() =>
     readLocalVoiceControls()
   );
+  const [preferOfflineSpeech, setPreferOfflineSpeechState] = useState<boolean>(() =>
+    getPreferOfflineSpeech()
+  );
+  const [preferredOfflineEngine, setPreferredOfflineEngineState] = useState<OfflineEngineId>(() =>
+    getPreferredOfflineEngineId()
+  );
+  const [pocketPrecacheNonce, setPocketPrecacheNonce] = useState(0);
 
   const selfName = useMemo(() => getSelfName(settings, deviceOwner), [settings, deviceOwner]);
   const orderedPairNames = useMemo(
@@ -314,6 +337,19 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
+  const handleChangePreferOfflineSpeech = useCallback((enabled: boolean) => {
+    setPreferOfflineSpeech(enabled);
+    setPreferOfflineSpeechState(enabled);
+  }, []);
+
+  const handleChangePreferredOfflineEngine = useCallback((engineId: OfflineEngineId) => {
+    setPreferredOfflineEngineId(engineId);
+    setPreferredOfflineEngineState(engineId);
+    if (engineId !== 'pocket_farsi') {
+      void setActiveOfflineEngineNative(engineId);
+    }
+  }, []);
+
   useEffect(() => {
     const root = document.documentElement;
     if (settings.theme === 'dark') {
@@ -335,8 +371,29 @@ export default function App() {
         localVoiceControls.masterSpeakerEnabled && localVoiceControls.autoScheduleAnnounce,
       autoOpenMorning: settings.autoOpenMorning,
       defaultVoice: settings.defaultVoice,
+      preferOfflineSpeech,
+      preferredOfflineEngine,
+      speechRate: settings.speechRate,
     });
-  }, [settings, localVoiceControls]);
+  }, [settings, localVoiceControls, preferOfflineSpeech, preferredOfflineEngine]);
+
+  useEffect(() => {
+    if (!nativeCaps.isNative) return;
+    void precacheWakePromptNative({
+      defaultVoice: settings.defaultVoice,
+      isOnline,
+      preferOfflineSpeech,
+      preferredOffline: preferredOfflineEngine,
+      forcePocketRefresh: pocketPrecacheNonce > 0,
+    });
+  }, [
+    nativeCaps.isNative,
+    settings.defaultVoice,
+    isOnline,
+    preferOfflineSpeech,
+    preferredOfflineEngine,
+    pocketPrecacheNonce,
+  ]);
 
   useEffect(() => {
     setDeviceIdentityNative({
@@ -460,6 +517,7 @@ export default function App() {
               ...DEFAULT_SETTINGS,
               ...prev,
               ...cloudSettings,
+              defaultVoice: sanitizeVoiceName(cloudSettings.defaultVoice, prev.defaultVoice),
               myName: cloudSettings.myName === 'مهدی' || cloudSettings.myName === 'بهمن' ? 'من' : cloudSettings.myName || 'من',
               partnerName: cloudSettings.partnerName === 'زری' ? 'همراه' : cloudSettings.partnerName || prev.partnerName || 'همراه',
               assistantName: cloudSettings.assistantName?.trim() && !['بهمن', 'زری', 'آوا'].includes(cloudSettings.assistantName.trim()) ? cloudSettings.assistantName.trim() : 'هم‌صدا',
@@ -1250,6 +1308,10 @@ export default function App() {
             autoSpeakReplies={
               localVoiceControls.masterSpeakerEnabled && localVoiceControls.autoAssistantSpeak
             }
+            preferOfflineSpeech={preferOfflineSpeech}
+            preferredOfflineEngine={preferredOfflineEngine}
+            onChangePreferOfflineSpeech={handleChangePreferOfflineSpeech}
+            onChangePreferredOfflineEngine={handleChangePreferredOfflineEngine}
             onUpdateSettings={handleUpdateSettings}
             onSpeakText={handleSpeakText}
             onStopSpeech={handleStopSpeech}
@@ -1317,6 +1379,11 @@ export default function App() {
             isSpeaking={isSpeaking}
             defaultVoice={settings.defaultVoice}
             speechRate={settings.speechRate}
+            preferOfflineSpeech={preferOfflineSpeech}
+            preferredOfflineEngine={preferredOfflineEngine}
+            onChangePreferOfflineSpeech={handleChangePreferOfflineSpeech}
+            onChangePreferredOfflineEngine={handleChangePreferredOfflineEngine}
+            onPocketConfigChanged={() => setPocketPrecacheNonce((n) => n + 1)}
             onRefreshClips={refreshClips}
             onStopSpeech={handleStopSpeech}
             onUpdateRate={(rate) => handleUpdateSettings({speechRate: rate})}
