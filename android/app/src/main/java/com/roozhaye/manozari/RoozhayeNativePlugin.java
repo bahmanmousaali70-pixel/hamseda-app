@@ -470,6 +470,7 @@ public class RoozhayeNativePlugin extends Plugin {
                 case "volume_up":
                 case "volume_down":
                 case "volume_max":
+                case "volume_min":
                 case "volume_mute": {
                     AudioManager am = (AudioManager) ctx.getSystemService(Context.AUDIO_SERVICE);
                     if (am == null) {
