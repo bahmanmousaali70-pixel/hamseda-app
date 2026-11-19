@@ -1508,7 +1508,7 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
         </div>
       </section>
 
-      <PodcastLibraryView isOnline={isOnline} onStatusToast={onStatusToast} />
+      <PodcastLibraryView isOnline={isOnline} onStatusToast={onStatusToast} searchTrigger={assistantMediaTrigger?.tab === 'podcasts' ? {query: assistantMediaTrigger.query, nonce: assistantMediaTrigger.nonce} : null} />
     </div>
   );
 };
