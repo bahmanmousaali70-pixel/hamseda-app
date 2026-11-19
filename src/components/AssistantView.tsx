@@ -416,6 +416,8 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
                 onStatusToast('لطفاً در صفحه بازشده، دسترسی «مزاحم نشوید / سایلنت» را برای برنامه فعال کنید.');
               } else if (nativeRes.needsWriteSettings) {
                 onStatusToast('لطفاً در صفحه بازشده، اجازه «تغییر تنظیمات سیستم (نور صفحه)» را فعال کنید.');
+              } else if (nativeRes.needsAccessibility) {
+                onStatusToast('در تنظیمات بازشده، سرویس دسترس‌پذیری هم‌صدا را فعال کن و سپس دوباره فرمان بده.');
               } else if (nativeRes.permissionRequired) {
                 onStatusToast(nativeRes.message || 'لطفاً مجوز اندروید خواسته‌شده را تایید کنید.');
               }
