@@ -628,6 +628,15 @@ export function parseOfflineAssistantCommand(
     };
   }
 
+  if (norm.includes('پادکست') && /(پخش|گوش|پیدا|جستجو|بذار|بگذار)/.test(norm)) {
+    const query = commandRaw.replace(/^(لطفا|لطفاً)\\s+/, '').replace(/(رو|را)?\\s*(پخش کن|بذار|بگذار|پیدا کن|جستجو کن|گوش بده)$/,'').trim();
+    return {
+      action: 'play_podcast',
+      query: query || 'پادکست فارسی',
+      replyText: 'پادکست‌ها را جستجو می‌کنم و قسمت‌های قابل پخش را می‌آورم.',
+    };
+  }
+
   // 9. Radio / Music / Stop Audio
   if (/(پخش رو قطع|موزیک رو قطع|اهنگ رو قطع|رادیو رو قطع|ساکت شو|پخش متوقف|توقف پخش)/.test(norm)) {
     return {
