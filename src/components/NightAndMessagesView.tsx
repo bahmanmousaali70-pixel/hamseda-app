@@ -720,14 +720,11 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
     lastAssistantTriggerRef.current = assistantMediaTrigger.nonce;
     setMediaTab(assistantMediaTrigger.tab);
     if (assistantMediaTrigger.tab === 'radio') {
+      const requested = assistantMediaTrigger.query?.trim() || '';
       const cat: RadioCategory =
-        assistantMediaTrigger.query === 'world'
-          ? 'world'
-          : assistantMediaTrigger.query === 'chill'
-            ? 'chill'
-            : 'iran';
+        requested === 'world' ? 'world' : requested === 'chill' ? 'chill' : requested === 'iran' ? 'iran' : 'custom';
       if (isOnline) {
-        handleFetchRadio(cat);
+        handleFetchRadio(cat, cat === 'custom' ? requested : '');
       } else if (radioStations.length > 0) {
         startRadioAtIndex(0, radioStations);
       }
