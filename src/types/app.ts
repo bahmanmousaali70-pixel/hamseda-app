@@ -173,6 +173,8 @@ export type AssistantActionType =
   | 'open_app'
   | 'close_app'
   | 'accessibility_click'
+  | 'accessibility_type'
+  | 'accessibility_scroll'
   | 'open_navigation'
   | 'flashlight_on'
   | 'flashlight_off'
