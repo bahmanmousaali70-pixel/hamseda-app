@@ -90,7 +90,7 @@ interface AssistantViewProps {
   onSpeakText: (text: string, title: string, category: 'custom' | 'morning' | 'energy' | 'gratitude') => void;
   onStopSpeech: () => void;
   onOpenTab: (tab: AppTab) => void;
-  onTriggerMedia: (tab: 'tracks' | 'radio' | 'podcasts', query?: string) => void;
+  onTriggerMedia: (tab: 'tracks' | 'radio' | 'podcasts' | 'stop', query?: string) => void;
   onAddGoalTitle: (title: string) => void;
   onStatusToast: (msg: string) => void;
 }
@@ -445,6 +445,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
           onTriggerMedia('podcasts', result.query);
         } else if (result.action === 'stop_audio') {
           onStopSpeech();
+          onTriggerMedia('stop');
         } else if (result.action === 'add_goal' && result.goalTitle?.trim()) {
           onAddGoalTitle(result.goalTitle.trim());
         }
