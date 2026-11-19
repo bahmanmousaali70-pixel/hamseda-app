@@ -45,7 +45,9 @@ function normalizePhoneDigits(raw: string): string {
 }
 
 function getPartnerKeywords(): string[] {
-  return ['همسر', 'همسرم', 'عشقم', 'عزیزم', 'خانم', 'خانوم', 'خانومی', 'خانمم', 'خانومم', 'خانم من', 'خانوم من', 'شوهرم', 'اقامون'];
+  // Relationship words map to the configured partner; ordinary names such as
+  // «خانومی» must still be matched against the actual phone-book entries.
+  return ['همسر', 'همسرم', 'عشقم', 'عزیزم', 'شوهرم', 'اقامون'];
 }
 
 export function findBestContactMatch(
@@ -74,7 +76,7 @@ export function findBestContactMatch(
   const isPartnerShortcut = getPartnerKeywords().includes(effectiveQuery);
   if (isPartnerShortcut) effectiveQuery = partnerNorm;
 
-  const candidateNames = Array.from(new Set([rawQueryNorm, effectiveQuery, partnerNorm].filter(Boolean)));
+  const candidateNames = Array.from(new Set([rawQueryNorm, effectiveQuery].filter(Boolean)));
   if (effectiveQuery === 'زری' || effectiveQuery === 'زهرا') {
     candidateNames.push('zari', 'zahra', 'زری', 'زهرا');
   } else if (effectiveQuery === 'بهمن') {
