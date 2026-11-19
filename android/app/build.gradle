@@ -3,6 +3,68 @@ apply plugin: 'org.jetbrains.kotlin.android'
 
 def appVersionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInteger()
 
+def downloadFileWithRedirects = { String urlStr, File destFile ->
+    destFile.parentFile.mkdirs()
+    File tmpFile = new File(destFile.absolutePath + ".part")
+    if (tmpFile.exists()) tmpFile.delete()
+    String current = urlStr
+    HttpURLConnection conn = null
+    for (int hop = 0; hop < 8; hop++) {
+        conn = (HttpURLConnection) new URL(current).openConnection()
+        conn.setInstanceFollowRedirects(false)
+        conn.setConnectTimeout(20000)
+        conn.setReadTimeout(120000)
+        conn.setRequestProperty("User-Agent", "Hamseda-Android-Build/1.0")
+        int code = conn.getResponseCode()
+        if (code in [301, 302, 303, 307, 308]) {
+            String loc = conn.getHeaderField("Location")
+            conn.disconnect()
+            if (!loc) throw new GradleException("Redirect without Location header for ${current}")
+            current = new URL(new URL(current), loc).toString()
+        } else if (code < 200 || code >= 300) {
+            conn.disconnect()
+            throw new GradleException("HTTP ${code} while downloading ${current}")
+        } else {
+            break
+        }
+    }
+    try {
+        conn.getInputStream().withStream { input ->
+            tmpFile.withOutputStream { output ->
+                byte[] buf = new byte[65536]
+                int n
+                while ((n = input.read(buf)) >= 0) {
+                    output.write(buf, 0, n)
+                }
+            }
+        }
+    } finally {
+        conn?.disconnect()
+    }
+    if (destFile.exists()) destFile.delete()
+    if (!tmpFile.renameTo(destFile)) {
+        throw new GradleException("Failed to finalize ${destFile.absolutePath}")
+    }
+}
+
+File sherpaAarFile = file("libs/sherpa-onnx.aar")
+if ((!sherpaAarFile.exists() || sherpaAarFile.length() < 1000000L) && !gradle.startParameter.isOffline()) {
+    downloadFileWithRedirects(
+        "https://huggingface.co/csukuangfj/sherpa-onnx-libs/resolve/main/android/aar/sherpa-onnx-1.10.41.aar",
+        sherpaAarFile
+    )
+}
+
+File b64KeyFile = rootProject.file("debug-signing-key.b64")
+File resolvedDebugKeystore = file("${layout.buildDirectory.get().asFile}/signing/hamseda-debug.keystore")
+if (b64KeyFile.exists() && (!resolvedDebugKeystore.exists() || resolvedDebugKeystore.length() == 0L)) {
+    resolvedDebugKeystore.parentFile.mkdirs()
+    resolvedDebugKeystore.bytes = java.util.Base64.getMimeDecoder().decode(b64KeyFile.getText("UTF-8"))
+}
+if (!resolvedDebugKeystore.exists()) {
+    resolvedDebugKeystore = file(System.getenv("HOME") + "/.android/debug.keystore")
+}
+
 android {
     namespace = "com.roozhaye.manozari"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -41,7 +103,7 @@ android {
     }
     signingConfigs {
         debug {
-            storeFile file(System.getenv("HOME") + "/.android/debug.keystore")
+            storeFile resolvedDebugKeystore
             storePassword "android"
             keyAlias "androiddebugkey"
             keyPassword "android"
@@ -60,6 +122,66 @@ android {
         }
     }
 }
+
+tasks.register("provisionOfflineTtsAssets") {
+    doLast {
+        File offlineRoot = file("src/main/assets/offline_tts")
+        File gyroDir = new File(offlineRoot, "gyro")
+        File modelDest = new File(gyroDir, "model.onnx")
+        File tokensDest = new File(gyroDir, "tokens.txt")
+        File espeakDest = new File(offlineRoot, "espeak-ng-data")
+        File tmpWork = file("${layout.buildDirectory.get().asFile}/tmp_offline_tts")
+
+        if (!modelDest.isFile() || modelDest.length() < 1000000L || !tokensDest.isFile() || tokensDest.length() == 0L) {
+            tmpWork.mkdirs()
+            File gyroArchive = new File(tmpWork, "gyro.tar.bz2")
+            downloadFileWithRedirects(
+                "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-fa_IR-gyro-medium.tar.bz2",
+                gyroArchive
+            )
+            File gyroExtract = new File(tmpWork, "gyro_extract")
+            gyroExtract.mkdirs()
+            Process pGyro = new ProcessBuilder("tar", "-xjf", gyroArchive.absolutePath, "-C", gyroExtract.absolutePath)
+                .redirectErrorStream(true)
+                .start()
+            String outGyro = pGyro.inputStream.getText("UTF-8")
+            if (pGyro.waitFor() != 0) {
+                throw new GradleException("Failed to extract gyro archive: ${outGyro}")
+            }
+            File foundModel = null
+            File foundTokens = null
+            gyroExtract.eachFileRecurse { f ->
+                if (f.isFile() && f.name == "fa_IR-gyro-medium.onnx") foundModel = f
+                if (f.isFile() && f.name == "tokens.txt") foundTokens = f
+            }
+            if (foundModel == null || foundTokens == null) {
+                throw new GradleException("gyro model.onnx or tokens.txt missing after archive extraction")
+            }
+            gyroDir.mkdirs()
+            java.nio.file.Files.copy(foundModel.toPath(), modelDest.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            java.nio.file.Files.copy(foundTokens.toPath(), tokensDest.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        }
+
+        if (!espeakDest.isDirectory() || (espeakDest.list()?.length ?: 0) == 0) {
+            tmpWork.mkdirs()
+            File espeakArchive = new File(tmpWork, "espeak-ng-data.tar.bz2")
+            downloadFileWithRedirects(
+                "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/espeak-ng-data.tar.bz2",
+                espeakArchive
+            )
+            offlineRoot.mkdirs()
+            Process pEspeak = new ProcessBuilder("tar", "-xjf", espeakArchive.absolutePath, "-C", offlineRoot.absolutePath)
+                .redirectErrorStream(true)
+                .start()
+            String outEspeak = pEspeak.inputStream.getText("UTF-8")
+            if (pEspeak.waitFor() != 0) {
+                throw new GradleException("Failed to extract espeak-ng-data archive: ${outEspeak}")
+            }
+        }
+    }
+}
+
+preBuild.dependsOn(provisionOfflineTtsAssets)
 
 repositories {
     flatDir{
