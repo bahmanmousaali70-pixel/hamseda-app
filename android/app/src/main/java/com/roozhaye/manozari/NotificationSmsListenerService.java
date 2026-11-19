@@ -88,6 +88,10 @@ public class NotificationSmsListenerService extends NotificationListenerService 
         if (IncomingSmsReceiver.shouldSkipDuplicateSms(title, body)) {
             return;
         }
+        if (!SmsAnnouncementPolicy.shouldAnnounce(getApplicationContext(), title, title, body)) {
+            return;
+        }
+        body = SmsAnnouncementPolicy.spokenBody(getApplicationContext(), body);
 
         boolean isMale = "male".equals(prefs.getString("default_voice_gender", "female"));
         String voiceName = prefs.getString("default_voice_name", isMale ? "Charon" : "Kore");
