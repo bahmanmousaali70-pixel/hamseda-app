@@ -75,8 +75,9 @@ jobs:
           MODEL_NAME="vosk-model-small-fa-0.42"
           curl -L --fail --retry 3 "https://alphacephei.com/vosk/models/${MODEL_NAME}.zip" -o "/tmp/${MODEL_NAME}.zip"
           unzip -t "/tmp/${MODEL_NAME}.zip"
-          unzip -Z1 "/tmp/${MODEL_NAME}.zip" | grep -q "^${MODEL_NAME}/am/"
-          unzip -Z1 "/tmp/${MODEL_NAME}.zip" | grep -q "^${MODEL_NAME}/conf/"
+          unzip -Z1 "/tmp/${MODEL_NAME}.zip" > /tmp/vosk-model-files.txt
+          grep -q "^${MODEL_NAME}/am/" /tmp/vosk-model-files.txt
+          grep -q "^${MODEL_NAME}/conf/" /tmp/vosk-model-files.txt
           test -s "/tmp/${MODEL_NAME}.zip"
           cp "/tmp/${MODEL_NAME}.zip" "android/app/src/main/assets/wake/${MODEL_NAME}.zip"
           ls -lh "android/app/src/main/assets/wake/${MODEL_NAME}.zip"
