@@ -8,16 +8,19 @@ import java.util.Locale;
 public final class SmsAnnouncementPolicy {
     private SmsAnnouncementPolicy() {}
 
-    public static boolean shouldAnnounce(Context context, String sender, String body) {
+    public static boolean shouldAnnounce(Context context, String sender, String alternateSender, String body) {
         SharedPreferences p = context.getSharedPreferences("rmz_native_prefs", Context.MODE_PRIVATE);
         if (!p.getBoolean("announce_sms_enabled", true)) return false;
         long quietUntil = p.getLong("sms_quiet_until", 0L);
         if (quietUntil > System.currentTimeMillis()) return false;
 
         String s = normalize(sender);
+        String a = normalize(alternateSender);
         String b = normalize(body);
-        if (containsEntry(p.getString("sms_important_senders", ""), s)) return true;
-        if (containsEntry(p.getString("sms_blocked_senders", ""), s)) return false;
+        String important = p.getString("sms_important_senders", "");
+        if (containsEntry(important, s) || containsEntry(important, a)) return true;
+        String blocked = p.getString("sms_blocked_senders", "");
+        if (containsEntry(blocked, s) || containsEntry(blocked, a)) return false;
         if (containsAny(b, p.getString("sms_blocked_keywords", ""))) return false;
         return true;
     }
