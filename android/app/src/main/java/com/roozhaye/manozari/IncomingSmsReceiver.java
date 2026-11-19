@@ -70,8 +70,7 @@ public class IncomingSmsReceiver extends BroadcastReceiver {
         if (shouldSkipDuplicateSms(senderName, body)) {
             return;
         }
-        if (!SmsAnnouncementPolicy.shouldAnnounce(context, originatingAddress, body)
-                && !SmsAnnouncementPolicy.shouldAnnounce(context, senderName, body)) {
+        if (!SmsAnnouncementPolicy.shouldAnnounce(context, originatingAddress, senderName, body)) {
             return;
         }
         body = SmsAnnouncementPolicy.spokenBody(context, body);
