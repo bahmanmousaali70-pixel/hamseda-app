@@ -1,4 +1,4 @@
-import React, {useRef, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {Headphones, Loader2, Play, Podcast, Search, ExternalLink} from 'lucide-react';
 import {apiUrl, safeReadJsonResponse} from '../services/apiConfig';
 
@@ -9,7 +9,7 @@ interface PodcastItem {
 }
 interface PodcastSearchResponse { podcasts?: PodcastItem[]; error?: string; }
 
-export const PodcastLibraryView: React.FC<{isOnline: boolean; onStatusToast: (message: string) => void}> = ({isOnline, onStatusToast}) => {
+export const PodcastLibraryView: React.FC<{isOnline: boolean; onStatusToast: (message: string) => void; searchTrigger?: {query?: string; nonce: number} | null}> = ({isOnline, onStatusToast, searchTrigger}) => {
   const [query, setQuery] = useState('پادکست فارسی');
   const [busy, setBusy] = useState(false);
   const [podcasts, setPodcasts] = useState<PodcastItem[]>([]);
@@ -34,6 +34,15 @@ export const PodcastLibraryView: React.FC<{isOnline: boolean; onStatusToast: (me
       onStatusToast(error instanceof Error ? error.message : 'جستجوی پادکست انجام نشد.');
     } finally { setBusy(false); }
   };
+
+  const lastTriggerRef = useRef(0);
+  useEffect(() => {
+    if (!searchTrigger || searchTrigger.nonce === lastTriggerRef.current) return;
+    lastTriggerRef.current = searchTrigger.nonce;
+    const requested = searchTrigger.query?.trim() || 'پادکست فارسی';
+    setQuery(requested);
+    void search(requested);
+  }, [searchTrigger]);
 
   const playEpisode = (podcast: PodcastItem, episode: PodcastEpisode) => {
     const audio = audioRef.current;
