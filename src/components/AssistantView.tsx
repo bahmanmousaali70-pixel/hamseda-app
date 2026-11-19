@@ -377,7 +377,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
 
         let finalReply = result.replyText;
 
-        if (result.action === 'send_sms' && pendingIntent?.type !== 'awaiting_sms_confirmation') finalReply = `پیام به ${result.targetName} با متن «${result.smsBody}» آماده است. اگر درست است بگو تأیید؛ برای انصراف بگو لغو کن.`;
+        if (result.action === 'send_sms' && pendingIntent?.type !== 'awaiting_sms_confirmation') finalReply = `پیامک برای ${result.targetName} به شماره ${result.targetPhone} با متن «${result.smsBody}» آماده است. اگر نام، شماره و متن درست است بگو تأیید؛ برای انصراف بگو لغو کن.`;
         if (result.action === 'make_call' && pendingIntent?.type !== 'awaiting_call_confirmation') finalReply = `با ${result.targetName} به شماره ${result.targetPhone} تماس بگیرم؟ اگر درست است بگو تأیید؛ برای انصراف بگو لغو کن.`;
 
         // Execute Android Hardware/OS Action if applicable
