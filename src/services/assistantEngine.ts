@@ -489,8 +489,8 @@ export function parseOfflineAssistantCommand(
 
   // 6. Media Volume: check explicit minimum/down BEFORE maximum so
   // "صدا رو تا آخر کم کن" can never be mistaken for "تا آخر زیاد کن".
-  if (/(صدا|ولوم|حجم صدا).*(تا اخر|ته|صفر|حداقل|کمترین).*(کم|پایین|صفر)?/.test(norm) ||
-      /(صدا|ولوم).*(کمترین|حداقل|صفر|تا اخر کم|تا ته کم)/.test(norm)) {
+  if (/(صدا|ولوم|حجم صدا).*(تا اخر|تا ته|ته).*(کم|پایین|صفر)/.test(norm) ||
+      /(صدا|ولوم|حجم صدا).*(کمترین|حداقل|صفر)/.test(norm)) {
     return {
       action: 'volume_min',
       replyText: 'صدای رسانه و زنگ گوشی تا حداقل پایین آورده شد.',
