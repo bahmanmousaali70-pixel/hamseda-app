@@ -756,10 +756,9 @@ export async function processAssistantUtterance(
     return localMatch;
   }
 
-  if (!ctx.isOnline) {
-    const offlineReply = buildOfflineConversationReply(cleanedUtterance || rawTranscript.trim(), ctx);
-    return {action: 'answer', replyText: offlineReply};
-  }
+  // Do not trust the browser's online flag as the sole gate for cloud requests.
+  // Android WebView can report offline while the configured API is reachable.
+  // Try the real API; the catch below preserves a graceful offline fallback.
 
   const {timeStr, dateStr} = getCurrentPersianTimeAndDate();
   try {
