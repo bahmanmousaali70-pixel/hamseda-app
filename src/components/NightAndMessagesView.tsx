@@ -48,7 +48,7 @@ interface NightAndMessagesViewProps {
   onSpeakText: (text: string, title: string, category: 'custom' | 'morning' | 'energy' | 'gratitude') => void;
   onStopSpeech: () => void;
   onStatusToast: (msg: string) => void;
-  assistantMediaTrigger?: {tab: 'tracks' | 'radio' | 'podcasts'; query?: string; nonce: number} | null;
+  assistantMediaTrigger?: {tab: 'tracks' | 'radio' | 'podcasts' | 'stop'; query?: string; nonce: number} | null;
 }
 
 type OccasionId = 'birthday' | 'anniversary' | 'apology' | 'thanks' | 'encouragement' | 'custom';
@@ -718,7 +718,11 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
     if (!assistantMediaTrigger || assistantMediaTrigger.nonce === lastAssistantTriggerRef.current) return;
     if (Date.now() - assistantMediaTrigger.nonce > 10000) return;
     lastAssistantTriggerRef.current = assistantMediaTrigger.nonce;
-    if (assistantMediaTrigger.tab !== 'podcasts') setMediaTab(assistantMediaTrigger.tab);
+    if (assistantMediaTrigger.tab !== 'podcasts' && assistantMediaTrigger.tab !== 'stop') setMediaTab(assistantMediaTrigger.tab);
+    if (assistantMediaTrigger.tab === 'stop') {
+      stopMusicPlayback();
+      stopRadioPlayback();
+    }
     if (assistantMediaTrigger.tab === 'radio') {
       const requested = assistantMediaTrigger.query?.trim() || '';
       const cat: RadioCategory =
@@ -1508,7 +1512,7 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
         </div>
       </section>
 
-      <PodcastLibraryView isOnline={isOnline} onStatusToast={onStatusToast} searchTrigger={assistantMediaTrigger?.tab === 'podcasts' ? {query: assistantMediaTrigger.query, nonce: assistantMediaTrigger.nonce} : null} />
+      <PodcastLibraryView isOnline={isOnline} onStatusToast={onStatusToast} searchTrigger={assistantMediaTrigger?.tab === 'podcasts' ? {query: assistantMediaTrigger.query, nonce: assistantMediaTrigger.nonce} : null} stopTrigger={assistantMediaTrigger?.tab === 'stop' ? assistantMediaTrigger.nonce : null} />
     </div>
   );
 };
