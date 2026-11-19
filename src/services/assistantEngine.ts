@@ -629,7 +629,7 @@ export function parseOfflineAssistantCommand(
   }
 
   if (norm.includes('پادکست') && /(پخش|گوش|پیدا|جستجو|بذار|بگذار)/.test(norm)) {
-    const query = commandRaw.replace(/^(لطفا|لطفاً)\\s+/, '').replace(/(رو|را)?\\s*(پخش کن|بذار|بگذار|پیدا کن|جستجو کن|گوش بده)$/,'').trim();
+    const query = commandRaw.replace(/^(لطفا|لطفاً)\s+/, '').replace(/(رو|را)?\s*(پخش کن|بذار|بگذار|پیدا کن|جستجو کن|گوش بده)$/,'').trim();
     return {
       action: 'play_podcast',
       query: query || 'پادکست فارسی',
