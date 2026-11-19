@@ -65,6 +65,7 @@ public class HamsedaAccessibilityService extends AccessibilityService {
         return false;
     }
 
+    public static boolean isConnected() { return instance != null; }
     public static void armCameraShutter() { CAMERA_SHUTTER_ARMED.set(true); }
     public static void disarmCameraShutter() { CAMERA_SHUTTER_ARMED.set(false); }
 
@@ -98,6 +99,44 @@ public class HamsedaAccessibilityService extends AccessibilityService {
         }
         for (int i = 0; i < node.getChildCount(); i++) {
             if (clickLabelRecursive(node.getChild(i), wanted)) return true;
+        }
+        return false;
+    }
+
+
+    public static boolean setTextInFocusedField(String value) {
+        HamsedaAccessibilityService s = instance;
+        if (s == null || value == null) return false;
+        AccessibilityNodeInfo root = s.getRootInActiveWindow();
+        return setTextRecursive(root, value);
+    }
+
+    private static boolean setTextRecursive(AccessibilityNodeInfo node, String value) {
+        if (node == null) return false;
+        if (node.isFocused() && node.isEditable() && node.isEnabled()) {
+            android.os.Bundle args = new android.os.Bundle();
+            args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value);
+            return node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args);
+        }
+        for (int i = 0; i < node.getChildCount(); i++) {
+            if (setTextRecursive(node.getChild(i), value)) return true;
+        }
+        return false;
+    }
+
+    public static boolean scrollActiveWindow(boolean down) {
+        HamsedaAccessibilityService s = instance;
+        if (s == null) return false;
+        AccessibilityNodeInfo root = s.getRootInActiveWindow();
+        return scrollRecursive(root, down);
+    }
+
+    private static boolean scrollRecursive(AccessibilityNodeInfo node, boolean down) {
+        if (node == null) return false;
+        int action = down ? AccessibilityNodeInfo.ACTION_SCROLL_FORWARD : AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD;
+        if (node.isScrollable() && node.performAction(action)) return true;
+        for (int i = 0; i < node.getChildCount(); i++) {
+            if (scrollRecursive(node.getChild(i), down)) return true;
         }
         return false;
     }
