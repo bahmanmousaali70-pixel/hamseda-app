@@ -162,11 +162,11 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
   const [importText, setImportText] = useState('');
   const [copied, setCopied] = useState(false);
   const [copiedSpace, setCopiedSpace] = useState(false);
-  const [smsBlockedSenders, setSmsBlockedSenders] = useState('');
-  const [smsBlockedKeywords, setSmsBlockedKeywords] = useState('تبریک برنده شدید\\nجایزه رایگان\\nخرید شارژ\\nوام فوری');
-  const [smsImportantSenders, setSmsImportantSenders] = useState('');
-  const [smsQuietHours, setSmsQuietHours] = useState('0');
-  const [smsSummarize, setSmsSummarize] = useState(true);
+  const [smsBlockedSenders, setSmsBlockedSenders] = useState(() => localStorage.getItem('rmz_sms_blocked_senders') ?? '');
+  const [smsBlockedKeywords, setSmsBlockedKeywords] = useState(() => localStorage.getItem('rmz_sms_blocked_keywords') ?? 'تبریک برنده شدید\\nجایزه رایگان\\nخرید شارژ\\nوام فوری');
+  const [smsImportantSenders, setSmsImportantSenders] = useState(() => localStorage.getItem('rmz_sms_important_senders') ?? '');
+  const [smsQuietHours, setSmsQuietHours] = useState(() => localStorage.getItem('rmz_sms_quiet_hours') ?? '0');
+  const [smsSummarize, setSmsSummarize] = useState(() => localStorage.getItem('rmz_sms_summarize') !== 'false');
   const [smsPolicySaving, setSmsPolicySaving] = useState(false);
 
   const [partnerEmailInput, setPartnerEmailInput] = useState(spaceInfo?.partnerEmail ?? '');
@@ -1234,6 +1234,11 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
         <div className="flex flex-wrap items-center gap-3">
           <button type="button" disabled={!nativeCaps.isNative || smsPolicySaving} onClick={async () => {
             setSmsPolicySaving(true);
+            localStorage.setItem('rmz_sms_blocked_senders', smsBlockedSenders);
+            localStorage.setItem('rmz_sms_blocked_keywords', smsBlockedKeywords);
+            localStorage.setItem('rmz_sms_important_senders', smsImportantSenders);
+            localStorage.setItem('rmz_sms_quiet_hours', smsQuietHours);
+            localStorage.setItem('rmz_sms_summarize', String(smsSummarize));
             const ok = await saveSmsAnnouncementPolicyNative({
               blockedSenders: smsBlockedSenders,
               blockedKeywords: smsBlockedKeywords,
