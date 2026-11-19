@@ -88,6 +88,22 @@ public class RoozhayeNativePlugin extends Plugin {
     }
 
     @PluginMethod
+    public void openAccessibilitySettings(PluginCall call) {
+        try {
+            Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+            JSObject ret = new JSObject();
+            ret.put("ok", true);
+            call.resolve(ret);
+        } catch (Exception e) {
+            JSObject ret = new JSObject();
+            ret.put("ok", false);
+            call.resolve(ret);
+        }
+    }
+
+    @PluginMethod
     public void getNativeCapabilities(PluginCall call) {
         call.resolve(buildCapsObject());
     }
@@ -557,11 +573,21 @@ public class RoozhayeNativePlugin extends Plugin {
                 }
                 case "take_photo": {
                     Intent camIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-                    camIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    ctx.startActivity(camIntent);
-                    ret.put("ok", true);
-                    ret.put("message", "دوربین عکاسی باز شد.");
-                    call.resolve(ret);
+                    if (camIntent.resolveActivity(ctx.getPackageManager()) == null) {
+                        ret.put("ok", false);
+                        ret.put("message", "برنامه دوربین سازگار روی گوشی پیدا نشد.");
+                        call.resolve(ret);
+                        return;
+                    }
+                    File photoDir = new File(ctx.getExternalFilesDir(Environment.DIRECTORY_PICTURES), "Hamseda");
+                    if (!photoDir.exists() && !photoDir.mkdirs()) throw new Exception("ساخت پوشه عکس ممکن نشد.");
+                    File photoFile = new File(photoDir, "Hamseda_" + System.currentTimeMillis() + ".jpg");
+                    Uri photoUri = FileProvider.getUriForFile(ctx, ctx.getPackageName() + ".fileprovider", photoFile);
+                    camIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoUri);
+                    camIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                    camIntent.setClipData(android.content.ClipData.newRawUri("Hamseda photo", photoUri));
+                    HamsedaAccessibilityService.armCameraShutter();
+                    startActivityForResult(call, camIntent, "handleCameraCaptureResult");
                     return;
                 }
                 case "record_video": {
@@ -668,13 +694,25 @@ public class RoozhayeNativePlugin extends Plugin {
                     return;
                 }
                 case "close_app": {
-                    // Android does not let an ordinary app force-stop another package.
-                    Intent homeIntent = new Intent(Intent.ACTION_MAIN);
-                    homeIntent.addCategory(Intent.CATEGORY_HOME);
-                    homeIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    ctx.startActivity(homeIntent);
-                    ret.put("ok", true);
-                    ret.put("message", "به صفحه اصلی برگشتم؛ اندروید بستن اجباری برنامه‌های دیگر را محدود می‌کند.");
+                    if (HamsedaAccessibilityService.performGlobalBack()) {
+                        ret.put("ok", true);
+                        ret.put("message", "دستور برگشت به برنامه فعال فرستاده شد.");
+                    } else {
+                        Intent settingsIntent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+                        settingsIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        ctx.startActivity(settingsIntent);
+                        ret.put("ok", false);
+                        ret.put("needsAccessibility", true);
+                        ret.put("message", "برای کنترل برنامه‌ها، سرویس دسترس‌پذیری هم‌صدا را در این صفحه فعال کن.");
+                    }
+                    call.resolve(ret);
+                    return;
+                }
+                case "accessibility_click": {
+                    String label = queryArg.trim();
+                    boolean clicked = HamsedaAccessibilityService.clickNodeByLabel(label);
+                    ret.put("ok", clicked);
+                    ret.put("message", clicked ? "روی " + label + " زدم." : "این گزینه روی صفحه پیدا نشد؛ صفحه را باز و دسترس‌پذیری را فعال کن.");
                     call.resolve(ret);
                     return;
                 }
@@ -1570,6 +1608,31 @@ public class RoozhayeNativePlugin extends Plugin {
             JSObject ret = new JSObject();
             ret.put("ok", false);
             ret.put("error", "امکان خواندن فایل انتخاب‌شده نبود.");
+            call.resolve(ret);
+        }
+    }
+
+    @ActivityCallback
+    private void handleCameraCaptureResult(PluginCall call, ActivityResult result) {
+        if (call == null) return;
+        if (result.getResultCode() == Activity.RESULT_OK) {
+            JSObject ret = new JSObject();
+            ret.put("ok", true);
+            ret.put("message", "عکس گرفته شد و در پوشه تصاویر هم‌صدا ذخیره شد.");
+            File photoDir = new File(getContext().getExternalFilesDir(Environment.DIRECTORY_PICTURES), "Hamseda");
+            File[] photos = photoDir.listFiles((dir, name) -> name.endsWith(".jpg"));
+            if (photos != null && photos.length > 0) {
+                File newest = photos[0];
+                for (File f : photos) if (f.lastModified() > newest.lastModified()) newest = f;
+                ret.put("savedPath", newest.getAbsolutePath());
+            }
+            call.resolve(ret);
+        } else {
+            HamsedaAccessibilityService.disarmCameraShutter();
+            JSObject ret = new JSObject();
+            ret.put("ok", false);
+            ret.put("cancelled", true);
+            ret.put("message", "عکس‌گرفتن لغو شد.");
             call.resolve(ret);
         }
     }
