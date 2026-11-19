@@ -172,6 +172,7 @@ export type AssistantActionType =
   | 'open_url'
   | 'open_app'
   | 'close_app'
+  | 'accessibility_click'
   | 'open_navigation'
   | 'flashlight_on'
   | 'flashlight_off'
