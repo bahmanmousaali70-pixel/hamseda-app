@@ -446,6 +446,14 @@ public class RoozhayeNativePlugin extends Plugin {
                     return;
                 }
                 case "send_sms": {
+                    // Defense in depth: SMS must never be sent by an unconfirmed
+                    // command path, even if a UI/parser regression occurs.
+                    if (!call.getBoolean("confirmed", false)) {
+                        ret.put("ok", false);
+                        ret.put("message", "ارسال پیامک بدون تأیید صریح کاربر مسدود شد.");
+                        call.resolve(ret);
+                        return;
+                    }
                     if (phone.isEmpty()) {
                         ret.put("ok", false);
                         ret.put("message", "شماره‌ای برای ارسال پیامک به " + (name.isEmpty() ? "این شخص" : name) + " پیدا نشد.");
@@ -694,9 +702,9 @@ public class RoozhayeNativePlugin extends Plugin {
                     return;
                 }
                 case "close_app": {
-                    if (HamsedaAccessibilityService.performGlobalBack()) {
+                    if (HamsedaAccessibilityService.performGlobalHome()) {
                         ret.put("ok", true);
-                        ret.put("message", "دستور برگشت به برنامه فعال فرستاده شد.");
+                        ret.put("message", "از برنامه خارج شدم و به صفحه اصلی برگشتم.");
                     } else {
                         Intent settingsIntent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
                         settingsIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
