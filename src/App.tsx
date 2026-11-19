@@ -167,7 +167,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<AppTab>('today');
 
   const [assistantMediaTrigger, setAssistantMediaTrigger] = useState<{
-    tab: 'tracks' | 'radio' | 'podcasts';
+    tab: 'tracks' | 'radio' | 'podcasts' | 'stop';
     query?: string;
     nonce: number;
   } | null>(null);
