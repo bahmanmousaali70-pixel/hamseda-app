@@ -401,6 +401,12 @@ public class RoozhayeNativePlugin extends Plugin {
         try {
             switch (action) {
                 case "make_call": {
+                    if (!call.getBoolean("confirmed", false)) {
+                        ret.put("ok", false);
+                        ret.put("message", "برقراری تماس بدون تأیید صریح کاربر مسدود شد.");
+                        call.resolve(ret);
+                        return;
+                    }
                     if (phone.isEmpty()) {
                         ret.put("ok", false);
                         ret.put("message", "شماره تلفنی برای " + (name.isEmpty() ? "این مخاطب" : name) + " ثبت نشده است.");
