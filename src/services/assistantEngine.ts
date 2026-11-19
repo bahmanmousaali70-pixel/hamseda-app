@@ -637,13 +637,14 @@ export function parseOfflineAssistantCommand(
   }
 
   if (norm.includes('رادیو') && /(بذار|بگذار|پخش|باز|گوش)/.test(norm)) {
-    let query = 'iran';
-    if (norm.includes('جهان') || norm.includes('خارجی')) query = 'world';
-    else if (norm.includes('ارام') || norm.includes('لایت') || norm.includes('پیانو')) query = 'chill';
+    let query = commandRaw.replace(/^(لطفا|لطفاً)\\s+/,'').replace(/(رو|را)?\\s*(پخش کن|بذار|بگذار|باز کن|گوش بده|پخش)$/,'').trim();
+    if (!query || /^(رادیو|رادیوها)$/.test(normalizeAssistantText(query))) query = 'iran';
+    else if (/(جهان|خارجی|بین المللی)/.test(norm)) query = 'world';
+    else if (/(ارام|لایت|پیانو)/.test(norm)) query = 'chill';
     return {
       action: 'play_radio',
       query,
-      replyText: 'بخش رادیو زنده را باز می‌کنم.',
+      replyText: 'ایستگاه رادیویی را جستجو و آماده پخش می‌کنم.',
     };
   }
 
