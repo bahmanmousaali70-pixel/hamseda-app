@@ -487,18 +487,28 @@ export function parseOfflineAssistantCommand(
     };
   }
 
-  // 6. Media Volume Up / Down / Max / Mute
-  if (/(صدا رو ببند|قطع صدا|میوت کن|صدا رو قطع کن|صدای گوشی رو قطع)/.test(norm)) {
+  // 6. Media Volume: check explicit minimum/down BEFORE maximum so
+  // "صدا رو تا آخر کم کن" can never be mistaken for "تا آخر زیاد کن".
+  if (/(صدا|ولوم|حجم صدا).*(تا اخر|ته|صفر|حداقل|کمترین).*(کم|پایین|صفر)?/.test(norm) ||
+      /(صدا|ولوم).*(کمترین|حداقل|صفر|تا اخر کم|تا ته کم)/.test(norm)) {
     return {
-      action: 'volume_mute',
-      replyText: 'صدای رسانه و پخش گوشی کم/قطع شد.',
+      action: 'volume_min',
+      replyText: 'صدای رسانه و زنگ گوشی تا حداقل پایین آورده شد.',
     };
   }
 
-  if (/(صدا.*حداکثر|صدا.*تا اخر|بلندترین صدا|ماکزیمم صدا)/.test(norm)) {
+  if (/(صدا رو ببند|قطع صدا|میوت کن|صدا رو قطع کن|صدای گوشی رو قطع)/.test(norm)) {
+    return {
+      action: 'volume_mute',
+      replyText: 'صدای رسانه گوشی قطع شد.',
+    };
+  }
+
+  if (/(صدا.*حداکثر|صدا.*تا اخر|بلندترین صدا|ماکزیمم صدا)/.test(norm) &&
+      !/(کم|پایین|صفر|قطع)/.test(norm)) {
     return {
       action: 'volume_max',
-      replyText: 'صدا روی حداکثر تنظیم شد.',
+      replyText: 'صدای گوشی روی حداکثر تنظیم شد.',
     };
   }
 
@@ -509,7 +519,7 @@ export function parseOfflineAssistantCommand(
     };
   }
 
-  if (/(صدا.*کم|اروم تر کن|بیار پایین صدا|ولوم پایین)/.test(norm)) {
+  if (/(صدا.*کم|اروم تر کن|آروم تر کن|بیار پایین صدا|ولوم پایین)/.test(norm)) {
     return {
       action: 'volume_down',
       replyText: 'صدای گوشی کمتر شد.',
