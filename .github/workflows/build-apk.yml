@@ -1,5 +1,9 @@
 name: Build Android APK
 
+concurrency:
+  group: hamseda-android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main, master]
@@ -27,6 +31,9 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
       - name: Accept Android SDK licenses and install Android 36
         run: |
           SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
@@ -38,6 +45,30 @@ jobs:
           echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
 
+      - name: Configure persistent debug signing key
+        run: |
+          mkdir -p "$HOME/.android"
+          base64 --decode android/debug-signing-key.b64 > "$HOME/.android/debug.keystore"
+          chmod 600 "$HOME/.android/debug.keystore"
+          keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey
+
+      - name: Provision offline Persian neural TTS assets
+        run: |
+          mkdir -p android/app/libs android/app/src/main/assets/offline_tts/gyro
+          curl -L --fail --retry 3 "https://huggingface.co/csukuangfj/sherpa-onnx-libs/resolve/main/android/aar/sherpa-onnx-1.10.41.aar" -o android/app/libs/sherpa-onnx.aar
+          curl -L --fail --retry 3 "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-fa_IR-gyro-medium.tar.bz2" -o /tmp/gyro.tar.bz2
+          mkdir -p /tmp/gyro && tar -xjf /tmp/gyro.tar.bz2 -C /tmp/gyro
+          MODEL="$(find /tmp/gyro -name 'fa_IR-gyro-medium.onnx' -type f | head -n 1)"
+          TOKENS="$(find /tmp/gyro -name 'tokens.txt' -type f | head -n 1)"
+          test -n "$MODEL" && test -n "$TOKENS"
+          cp "$MODEL" android/app/src/main/assets/offline_tts/gyro/model.onnx
+          cp "$TOKENS" android/app/src/main/assets/offline_tts/gyro/tokens.txt
+          curl -L --fail --retry 3 "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/espeak-ng-data.tar.bz2" -o /tmp/espeak-ng-data.tar.bz2
+          tar -xjf /tmp/espeak-ng-data.tar.bz2 -C android/app/src/main/assets/offline_tts/
+          test -s android/app/src/main/assets/offline_tts/gyro/model.onnx
+          test -s android/app/src/main/assets/offline_tts/gyro/tokens.txt
+          test -d android/app/src/main/assets/offline_tts/espeak-ng-data
+
       - name: Install dependencies and build web bundle
         run: |
           npm install --legacy-peer-deps
@@ -48,22 +79,40 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          for attempt in 1 2 3; do
+            echo "Build attempt $attempt"
+            if ./gradlew assembleDebug --no-daemon; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Build failed. Retrying in $((attempt * 30)) seconds..."
+              sleep $((attempt * 30))
+            fi
+          done
+          exit 1
+
+      - name: Verify APK signatures and package metadata
+        run: |
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          test -s "$APK"
+          ls -lh "$APK"
 
       - name: Rename APK for easy installation
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk roozhaye-man-o-zari.apk
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk hamseda.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: roozhaye-man-o-zari-apk
-          path: roozhaye-man-o-zari.apk
+          name: hamseda-apk
+          path: hamseda.apk
 
       - name: Publish Latest APK to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-apk
-          name: روزهای من و زری - آخرین نسخه APK
-          body: فایل نصبی اندروید (APK) آماده نصب روی گوشی شیائومی و گوشی زری
-          files: roozhaye-man-o-zari.apk
+          name: هم‌صدا - آخرین نسخه APK
+          body: فایل نصبی اپلیکیشن هم‌صدا
+          files: hamseda.apk
           overwrite_files: true

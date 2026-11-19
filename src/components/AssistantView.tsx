@@ -33,9 +33,12 @@ import {
   type PendingAssistantIntent,
 } from '../services/assistantEngine';
 import {
+  consumePendingWakeCommandNative,
   executeDeviceActionNative,
   isNativeAndroid,
   listenOncePersianNative,
+  startNativeWakeWordService,
+  stopNativeWakeWordService,
   stopListeningNative,
   type NativeCapabilities,
 } from '../services/nativeAndroidBridge';
@@ -50,7 +53,6 @@ import type {
   SyncedPhoneContact,
 } from '../types/app';
 import {
-  extractCommandAfterWakeWord,
   getPartnerNameForDevice,
   getSelfName,
 } from '../utils/deviceIdentity';
@@ -197,7 +199,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
 }) => {
   const selfName = getSelfName(settings, deviceOwner);
   const partnerOtherName = getPartnerNameForDevice(settings, deviceOwner);
-  const assistantName = settings.assistantName?.trim() || 'آوا';
+  const assistantName = settings.assistantName?.trim() || 'هم‌صدا';
   const wakeLoopEnabled = Boolean(settings.assistantWakeWordEnabled);
 
   const [assistantNameDraft, setAssistantNameDraft] = useState(assistantName);
@@ -220,10 +222,12 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
   const webRecRef = useRef<WebSpeechRecognitionInstance | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const processingRef = useRef(false);
+  // Prevent the wake-loop cleanup from cancelling a manually started recording.
+  const manualListenRef = useRef(false);
 
   // Sync draft when settings.assistantName updates
   useEffect(() => {
-    setAssistantNameDraft(settings.assistantName?.trim() || 'آوا');
+    setAssistantNameDraft(settings.assistantName?.trim() || 'هم‌صدا');
   }, [settings.assistantName]);
 
   useEffect(() => {
@@ -300,10 +304,16 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
           callers,
           morningMessage,
           pendingIntent,
+          conversationHistory: messages.slice(-12).map((message) => ({
+            role: message.sender,
+            text: message.text,
+          })),
         });
 
-        // Update conversation pending state
-        if (result.action === 'ask_sms_body') {
+        // Stage every SMS for review; do not execute it on the first pass.
+        if (result.action === 'send_sms' && pendingIntent?.type !== 'awaiting_sms_confirmation') {
+          setPendingIntent({type: 'awaiting_sms_confirmation', targetName: result.targetName || result.targetPhone || 'مخاطب نامشخص', targetPhone: result.targetPhone, smsBody: result.smsBody || ''});
+        } else if (result.action === 'ask_sms_body') {
           if (result.targetPhone) {
             setPendingIntent({
               type: 'awaiting_sms_body',
@@ -319,8 +329,10 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
 
         let finalReply = result.replyText;
 
+        if (result.action === 'send_sms' && pendingIntent?.type !== 'awaiting_sms_confirmation') finalReply = 'قبل از ارسال، نام مخاطب و متن پیام را بررسی و تأیید کن.';
+
         // Execute Android Hardware/OS Action if applicable
-        if (NATIVE_DEVICE_ACTIONS.has(result.action)) {
+        if (NATIVE_DEVICE_ACTIONS.has(result.action) && !(result.action === 'send_sms' && pendingIntent?.type !== 'awaiting_sms_confirmation')) {
           const shouldSkipAutoDownloadIfSearch =
             result.action === 'download_url' && !result.downloadUrl?.trim();
 
@@ -415,97 +427,61 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
     ]
   );
 
-  // Continuous hands-free Wake-Word Loop on Android APK
+  // Android owns the always-on wake-word lifecycle in a microphone foreground service.
   useEffect(() => {
+    if (!isNativeAndroid()) {
+      setIsWakeListening(false);
+      return;
+    }
+    let mounted = true;
     if (!wakeLoopEnabled) {
       setIsWakeListening(false);
-      stopListeningNative();
-      return;
+      void stopNativeWakeWordService();
+      void stopListeningNative();
+      return () => { mounted = false; };
     }
-    if (!isNativeAndroid()) {
-      return;
-    }
-    if (isSpeaking || isRecordingAudio || isListeningOnce || isBusy) {
-      setIsWakeListening(false);
-      return;
-    }
-
-    let cancelled = false;
-
-    const runLoop = async () => {
-      while (!cancelled) {
-        setIsWakeListening(true);
-        const res = await listenOncePersianNative();
-        if (cancelled) break;
-
-        if (res.permissionRequired) {
-          onUpdateSettings({assistantWakeWordEnabled: false});
-          onStatusToast('برای گوش به زنگ بودن دستیار، مجوز میکروفون لازم است.');
-          break;
-        }
-
-        if (res.ok && res.transcript?.trim()) {
-          const transcript = res.transcript.trim();
-          const wakeCheck = extractCommandAfterWakeWord(transcript, assistantName);
-          // If awaiting SMS body/recipient, user doesn't need to repeat wake word
-          const offlineQuick = parseOfflineAssistantCommand(transcript, {
-            settings,
-            deviceOwner,
-            isOnline,
-            syncedContacts,
-            callers,
-            morningMessage,
-            pendingIntent,
-          });
-          const shouldRespond =
-            wakeCheck.matched ||
-            Boolean(pendingIntent) ||
-            (offlineQuick !== null && offlineQuick.action !== 'answer');
-
-          if (shouldRespond) {
-            setIsWakeListening(false);
-            await executeUtterance(transcript, true);
-            break;
-          }
-        }
-
-        // Small cooldown between SpeechRecognizer restarts
-        await new Promise((r) => setTimeout(r, 450));
+    setIsWakeListening(true);
+    void startNativeWakeWordService(assistantName).then((result) => {
+      if (!mounted) return;
+      if (!result.ok) {
+        setIsWakeListening(false);
+        onUpdateSettings({assistantWakeWordEnabled: false});
+        onStatusToast(result.message || (result.permissionRequired
+          ? 'برای گوش‌به‌زنگ بودن، اجازه میکروفون لازم است.'
+          : 'سرویس گوش‌به‌زنگ شروع نشد. برنامه را باز نگه دارید و دوباره امتحان کنید.'));
       }
-      if (!cancelled) setIsWakeListening(false);
+    });
+    return () => { mounted = false; };
+  }, [wakeLoopEnabled, assistantName, onUpdateSettings, onStatusToast]);
+
+  // Commands captured by the Android foreground listener are handed to the same
+  // assistant pipeline. If Android paused the WebView in the background, the
+  // pending command remains stored until the app resumes.
+  useEffect(() => {
+    if (!isNativeAndroid() || !wakeLoopEnabled) return;
+    let disposed = false;
+    let polling = false;
+    const pollPendingCommand = async () => {
+      if (disposed || polling || isBusy || isListeningOnce || isRecordingAudio) return;
+      polling = true;
+      try {
+        const command = await consumePendingWakeCommandNative();
+        if (!disposed && command) await executeUtterance(command, true);
+      } finally {
+        polling = false;
+      }
     };
-
-    const timer = window.setTimeout(() => {
-      runLoop();
-    }, 450);
-
+    void pollPendingCommand();
+    const timer = window.setInterval(() => void pollPendingCommand(), 900);
     return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-      setIsWakeListening(false);
-      stopListeningNative();
+      disposed = true;
+      window.clearInterval(timer);
     };
-  }, [
-    wakeLoopEnabled,
-    isSpeaking,
-    isRecordingAudio,
-    isListeningOnce,
-    isBusy,
-    assistantName,
-    pendingIntent,
-    settings,
-    deviceOwner,
-    isOnline,
-    syncedContacts,
-    callers,
-    morningMessage,
-    executeUtterance,
-    onUpdateSettings,
-    onStatusToast,
-  ]);
+  }, [wakeLoopEnabled, executeUtterance, isBusy, isListeningOnce, isRecordingAudio]);
 
   const handleListenOnce = async () => {
     if (isListeningOnce) {
+      manualListenRef.current = false;
       await stopListeningNative();
       webRecRef.current?.stop();
       setIsListeningOnce(false);
@@ -517,24 +493,73 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
     }
 
     if (isNativeAndroid()) {
-      await stopListeningNative();
+      // Pause the background recognizer while the one-shot microphone session owns audio.
+      if (wakeLoopEnabled) await stopNativeWakeWordService();
+      // Set the ref before React runs the wake-loop effect cleanup.
+      // listenOncePersianNative replaces the previous native recognizer itself.
+      manualListenRef.current = true;
       setIsListeningOnce(true);
       try {
+        await stopListeningNative();
+        await new Promise((resolve) => window.setTimeout(resolve, 500));
         const res = await listenOncePersianNative();
-        setIsListeningOnce(false);
         if (res.permissionRequired) {
           onStatusToast('لطفاً مجوز میکروفون را برای استفاده از دستیار صوتی تایید کنید.');
-          return;
-        }
-        if (res.ok && res.transcript?.trim()) {
-          await executeUtterance(res.transcript.trim(), true);
+        } else if (res.ok && (res.transcripts?.length || res.transcript?.trim())) {
+          // Android returns N-best Persian hypotheses. Prefer the hypothesis that
+          // resolves to a real local contact for call commands instead of blindly
+          // executing Google's first guess (which can turn "Zari" into another word).
+          const alternatives = Array.from(new Set(
+            (res.transcripts?.length ? res.transcripts : [res.transcript || ''])
+              .map((value) => value.trim())
+              .filter(Boolean)
+          ));
+          const context = {
+            settings,
+            deviceOwner,
+            isOnline,
+            syncedContacts,
+            callers,
+            morningMessage,
+            pendingIntent,
+          };
+          const evaluated = alternatives.map((transcript) => ({
+            transcript,
+            result: parseOfflineAssistantCommand(transcript, context),
+          }));
+          const resolvedCalls = evaluated.filter(
+            (item) => item.result?.action === 'make_call' && item.result.targetPhone
+          );
+          const resolvedPhones = new Set(resolvedCalls.map((item) => item.result?.targetPhone));
+          if (resolvedPhones.size > 1) {
+            const reply = 'دو برداشت متفاوت از نام مخاطب شنیدم. برای اینکه با شخص اشتباهی تماس نگیرم، لطفاً فقط نام مخاطب را دوباره و شمرده بگو.';
+            appendMessage('assistant', reply);
+            if (autoSpeakReplies) onSpeakText(reply, `پاسخ ${assistantName}`, 'custom');
+          } else if (resolvedCalls.length > 0) {
+            await executeUtterance(resolvedCalls[0].transcript, true);
+          } else {
+            const callLike = evaluated.find((item) =>
+              /(تماس بگیر|زنگ بزن|شماره بگیر|شماره‌گیری|تلفن بزن|تلفن کن)/.test(item.transcript)
+            );
+            const recognizedCommand = evaluated.find(
+              (item) => item.result && item.result.action !== 'answer'
+            );
+            await executeUtterance(
+              (callLike || recognizedCommand || evaluated[0]).transcript,
+              true
+            );
+          }
         } else if (res.error && res.errorCode !== 6 && res.errorCode !== 7) {
           onStatusToast(res.error);
         } else {
           onStatusToast('صدایی واضح دریافت نشد؛ دوباره دکمه صحبت را بزنید یا دستور را تایپ کنید.');
         }
       } catch {
+        onStatusToast('ارتباط با میکروفون برقرار نشد؛ دوباره تلاش کن.');
+      } finally {
+        manualListenRef.current = false;
         setIsListeningOnce(false);
+        if (wakeLoopEnabled) window.setTimeout(() => void startNativeWakeWordService(assistantName), 1200);
       }
       return;
     }
@@ -581,7 +606,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
 
   const handleSaveAssistantName = (e: React.FormEvent) => {
     e.preventDefault();
-    const cleaned = assistantNameDraft.trim() || 'آوا';
+    const cleaned = assistantNameDraft.trim() || 'هم‌صدا';
     onUpdateSettings({assistantName: cleaned});
     setNameSavedFlash(true);
     onStatusToast(`نام دستیار به «${cleaned}» تغییر کرد. از این به بعد با همین نام صدایش بزنید.`);
@@ -597,7 +622,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
     onUpdateSettings({assistantWakeWordEnabled: next});
     onStatusToast(
       next
-        ? `دستیار «${assistantName}» گوش‌به‌زنگ شد؛ نامش را صدا بزنید تا پاسخ دهد.`
+        ? `در حال فعال‌کردن سرویس گوش‌به‌زنگ «${assistantName}» هستم؛ اعلان دائمی هم‌صدا نمایش داده می‌شود.`
         : 'گوش‌به‌زنگ خودکار دستیار خاموش شد (دکمه میکروفون همچنان فعال است).'
     );
   };
@@ -753,10 +778,18 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
       {pendingIntent && (
         <section className="rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800/70 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="text-sm text-amber-950 dark:text-amber-100">
-            {pendingIntent.type === 'awaiting_sms_body' ? (
+            {pendingIntent.type === 'awaiting_sms_confirmation' ? (
+              <>
+                <strong>بررسی نهایی پیامک</strong>
+                <div className="mt-2">گیرنده: <b>{pendingIntent.targetName}</b></div>
+                <div className="mt-1 break-words">شماره: <b dir="ltr">{pendingIntent.targetPhone || 'نامشخص'}</b></div>
+                <div className="mt-1 whitespace-pre-wrap">متن پیام: «{pendingIntent.smsBody}»</div>
+                <div className="mt-2 font-semibold">فقط اگر همه موارد درست است، تأیید و ارسال را بزن.</div>
+              </>
+            ) : pendingIntent.type === 'awaiting_sms_body' ? (
               <>
                 <strong>در انتظار متن پیامک به {pendingIntent.targetName}:</strong>{' '}
-                متن پیامک را بگویید یا در کادر زیر تایپ کنید تا ارسال شود.
+                متن پیامک را بگو یا تایپ کن؛ قبل از ارسال تأیید نهایی می‌گیری.
               </>
             ) : (
               <>
@@ -764,16 +797,10 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
               </>
             )}
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              setPendingIntent(null);
-              appendMessage('assistant', 'ارسال پیامک لغو شد.');
-            }}
-            className="min-h-[44px] px-4 rounded-xl border border-amber-400 dark:border-amber-700 text-xs font-semibold text-amber-900 dark:text-amber-200 cursor-pointer shrink-0"
-          >
-            لغو پیامک
-          </button>
+          <div className="flex flex-wrap gap-2 shrink-0">
+            {pendingIntent.type === 'awaiting_sms_confirmation' && <button type="button" onClick={() => executeUtterance('تأیید ارسال پیامک', false)} className="min-h-[44px] px-4 rounded-xl bg-green-600 text-white text-xs font-semibold cursor-pointer">تأیید و ارسال</button>}
+            <button type="button" onClick={() => { setPendingIntent(null); appendMessage('assistant', 'ارسال پیامک لغو شد.'); }} className="min-h-[44px] px-4 rounded-xl border border-amber-400 dark:border-amber-700 text-xs font-semibold text-amber-900 dark:text-amber-200 cursor-pointer shrink-0">لغو پیامک</button>
+          </div>
         </section>
       )}
 

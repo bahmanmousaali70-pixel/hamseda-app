@@ -124,9 +124,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   theme: 'light',
   defaultVoice: 'Kore',
   speechRate: 1,
-  myName: 'بهمن',
-  partnerName: 'زری',
-  assistantName: 'آوا',
+  myName: 'من',
+  partnerName: 'همراه',
+  assistantName: 'هم‌صدا',
   assistantWakeWordEnabled: false,
   backgroundKeepAlive: false,
   announceCalls: true,
@@ -159,17 +159,23 @@ export default function App() {
   const [settings, setSettings] = useState<AppSettings>(() => {
     const saved = readJsonStorage<Partial<AppSettings>>(STORAGE_KEYS.settings, {});
     const normalizedMyName =
-      typeof saved.myName === 'string' && saved.myName.trim() && saved.myName.trim() !== 'مهدی'
+      typeof saved.myName === 'string' && saved.myName.trim() && saved.myName.trim() !== 'مهدی' && saved.myName.trim() !== 'بهمن'
         ? saved.myName.trim()
-        : 'بهمن';
+        : 'من';
+    const normalizedPartnerName =
+      typeof saved.partnerName === 'string' && saved.partnerName.trim() && saved.partnerName.trim() !== 'زری'
+        ? saved.partnerName.trim()
+        : 'همراه';
     const normalizedAssistantName =
-      typeof saved.assistantName === 'string' && saved.assistantName.trim()
+      typeof saved.assistantName === 'string' && saved.assistantName.trim() && !['بهمن', 'زری', 'آوا'].includes(saved.assistantName.trim())
         ? saved.assistantName.trim()
-        : 'آوا';
+        : 'هم‌صدا';
     return {
       ...DEFAULT_SETTINGS,
       ...saved,
+      defaultVoice: 'Kore',
       myName: normalizedMyName,
+      partnerName: normalizedPartnerName,
       assistantName: normalizedAssistantName,
     };
   });
@@ -257,8 +263,8 @@ export default function App() {
       writeDeviceOwner(owner);
       showToast(
         owner === 'zari'
-          ? 'هویت این گوشی روی «زری» ذخیره شد؛ از این به بعد برنامه و دستیار اول شما را خطاب می‌کنند.'
-          : 'هویت این گوشی روی «بهمن» ذخیره شد.'
+          ? 'هویت این گوشی برای کاربر دوم ذخیره شد.'
+          : 'هویت این گوشی برای کاربر اول ذخیره شد.'
       );
     },
     [showToast]
@@ -454,8 +460,9 @@ export default function App() {
               ...DEFAULT_SETTINGS,
               ...prev,
               ...cloudSettings,
-              myName: cloudSettings.myName === 'مهدی' ? 'بهمن' : cloudSettings.myName || 'بهمن',
-              assistantName: cloudSettings.assistantName?.trim() || prev.assistantName || 'آوا',
+              myName: cloudSettings.myName === 'مهدی' || cloudSettings.myName === 'بهمن' ? 'من' : cloudSettings.myName || 'من',
+              partnerName: cloudSettings.partnerName === 'زری' ? 'همراه' : cloudSettings.partnerName || prev.partnerName || 'همراه',
+              assistantName: cloudSettings.assistantName?.trim() && !['بهمن', 'زری', 'آوا'].includes(cloudSettings.assistantName.trim()) ? cloudSettings.assistantName.trim() : 'هم‌صدا',
             })),
           onError: (msg) => console.warn('Cloud sync listener notice:', msg),
         });
@@ -880,7 +887,7 @@ export default function App() {
     setCloudBusy(true);
     try {
       await signInWithGoogleSmart();
-      showToast('ورود انجام شد. فضای مشترک من و زری همگام‌سازی می‌شود.');
+      showToast('ورود انجام شد. فضای مشترک هم‌صدا همگام‌سازی می‌شود.');
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'خطا در ورود با گوگل');
     } finally {
@@ -903,7 +910,7 @@ export default function App() {
     setCloudBusy(true);
     try {
       await invitePartnerEmail(spaceInfo.spaceId, email);
-      showToast(`ایمیل ${email} به فضای مشترک اضافه شد. وقتی زری با این جیمیل وارد شود خودکار مچ می‌شوید.`);
+      showToast(`ایمیل ${email} به فضای مشترک اضافه شد. وقتی همراهتان با این جیمیل وارد شود، به‌صورت خودکار متصل می‌شوید.`);
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'خطا در ثبت ایمیل همراه');
     } finally {

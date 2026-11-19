@@ -75,7 +75,7 @@ object PersianSpeechProcessor {
             .replace('أ', 'ا')
             .replace('إ', 'ا')
             .replace('ٱ', 'ا')
-            .replace('ـ', "")
+            .replace("ـ", "")
 
         t = toAsciiDigits(t)
 

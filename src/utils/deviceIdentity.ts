@@ -75,8 +75,8 @@ export function writeDeviceOwner(owner: DeviceOwner): void {
 }
 
 export function getSelfName(settings: Pick<AppSettings, 'myName' | 'partnerName'>, deviceOwner: DeviceOwner): string {
-  const man = settings.myName?.trim() || 'بهمن';
-  const zari = settings.partnerName?.trim() || 'زری';
+  const man = settings.myName?.trim() || 'من';
+  const zari = settings.partnerName?.trim() || 'همراه';
   return deviceOwner === 'zari' ? zari : man;
 }
 
@@ -84,15 +84,14 @@ export function getPartnerNameForDevice(
   settings: Pick<AppSettings, 'myName' | 'partnerName'>,
   deviceOwner: DeviceOwner
 ): string {
-  const man = settings.myName?.trim() || 'بهمن';
-  const zari = settings.partnerName?.trim() || 'زری';
+  const man = settings.myName?.trim() || 'من';
+  const zari = settings.partnerName?.trim() || 'همراه';
   return deviceOwner === 'zari' ? man : zari;
 }
 
 /**
  * Returns the couple names ordered so the current phone's owner is always addressed FIRST.
- * - Bahman's phone: "بهمن و زری"
- * - Zari's phone: "زری و بهمن"
+ * The current device owner is always addressed first.
  */
 export function getOrderedPairNames(
   settings: Pick<AppSettings, 'myName' | 'partnerName'>,
@@ -104,8 +103,7 @@ export function getOrderedPairNames(
 }
 
 /**
- * Adapts shared/offline texts so phrases like «من و زری» or «بهمن و زری»
- * naturally address the current device owner first when running on Zari's phone.
+ * Adapts shared/offline texts so the current device owner is addressed first.
  */
 export function adaptTextForDevice(
   text: string,
@@ -113,10 +111,10 @@ export function adaptTextForDevice(
   deviceOwner: DeviceOwner
 ): string {
   if (!text) return text;
-  const man = settings.myName?.trim() || 'بهمن';
-  const zari = settings.partnerName?.trim() || 'زری';
+  const man = settings.myName?.trim() || 'من';
+  const zari = settings.partnerName?.trim() || 'همراه';
   if (deviceOwner !== 'zari') {
-    return text.replace(/من و زری/g, `${man} و ${zari}`);
+    return text.replace(/من و همراه/g, `${man} و ${zari}`);
   }
   return text
     .replace(new RegExp(`${man} و ${zari}`, 'g'), `${zari} و ${man}`)
@@ -127,7 +125,7 @@ export function adaptTextForDevice(
     .replace(new RegExp(`زحمات امروز ${zari}`, 'g'), `زحمات امروز ${man}`)
     .replace(new RegExp(`${zari} جان،`, 'g'), `${man} جان،`)
     .replace(new RegExp(`حضور گرم ${zari}`, 'g'), `حضور گرم ${man}`)
-    .replace(/من و زری/g, `${zari} و ${man}`);
+    .replace(/من و همراه/g, `${zari} و ${man}`);
 }
 
 export function normalizeAssistantText(raw: string): string {
@@ -144,11 +142,17 @@ export function extractCommandAfterWakeWord(
   transcript: string,
   assistantName: string
 ): {matched: boolean; onlyWakeWord: boolean; command: string} {
-  const cleanName = normalizeAssistantText(assistantName || 'آوا');
+  const cleanName = normalizeAssistantText(assistantName || 'هم‌صدا');
   const norm = normalizeAssistantText(transcript);
   if (!norm) return {matched: false, onlyWakeWord: false, command: ''};
 
   const aliases = new Set<string>([cleanName]);
+  if (cleanName === 'هم صدا' || cleanName === 'همصدا') {
+    aliases.add('هم صدا');
+    aliases.add('همصدا');
+    aliases.add('هم‌صدا');
+    aliases.add('hamseda');
+  }
   if (cleanName === 'اوا' || cleanName === 'آوا') {
     aliases.add('اوا');
     aliases.add('آوا');
@@ -162,11 +166,11 @@ export function extractCommandAfterWakeWord(
     }
     const idx = norm.indexOf(alias);
     if (idx !== -1) {
-      const after = transcript
+      const after = norm
         .slice(idx + alias.length)
         .replace(/^[\s،,:؛.!؟-]+/, '')
         .trim();
-      const before = transcript.slice(0, idx).replace(/^(سلام|هی|بگو)\s+/i, '').trim();
+      const before = norm.slice(0, idx).replace(/^(سلام|هی|بگو)\s+/i, '').trim();
       const combined = after || before;
       return {
         matched: true,

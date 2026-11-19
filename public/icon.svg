@@ -1,22 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
   <defs>
-    <radialGradient id="emBg" cx="50%" cy="44%" r="65%">
-      <stop offset="0%" stop-color="#0C5D49"/>
-      <stop offset="65%" stop-color="#07382B"/>
-      <stop offset="100%" stop-color="#04241C"/>
-    </radialGradient>
-    <linearGradient id="goldArc" x1="120" y1="120" x2="392" y2="392" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#FFF3C4"/>
-      <stop offset="50%" stop-color="#F6D37A"/>
-      <stop offset="100%" stop-color="#D49A3A"/>
+    <linearGradient id="bg" x1="56" y1="24" x2="456" y2="488" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0E8D68"/>
+      <stop offset="1" stop-color="#052F27"/>
     </linearGradient>
-    <radialGradient id="sunCore" cx="50%" cy="60%" r="55%">
-      <stop offset="0%" stop-color="#FDE047"/>
-      <stop offset="100%" stop-color="#EA8C15"/>
-    </radialGradient>
+    <linearGradient id="mic" x1="184" y1="108" x2="328" y2="404" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#C8FFE9"/>
+    </linearGradient>
   </defs>
-  <rect width="512" height="512" rx="112" fill="url(#emBg)"/>
-  <path d="M256 172C220 128 144 134 128 202C114 264 176 328 256 382C336 328 398 264 384 202C368 134 292 128 256 172Z" stroke="url(#goldArc)" stroke-width="26" stroke-linejoin="round" fill="none"/>
-  <path d="M168 232C184 188 228 178 256 206C284 178 328 188 344 232" stroke="url(#goldArc)" stroke-width="16" stroke-linecap="round" fill="none"/>
-  <path d="M204 290A54 54 0 0 1 308 290C284 316 228 316 204 290Z" fill="url(#sunCore)"/>
+  <rect width="512" height="512" rx="116" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="190" stroke="#8CF5CE" stroke-opacity=".12" stroke-width="10"/>
+  <path d="M145 192c-42 48-42 116 0 164M367 192c42 48 42 116 0 164" stroke="#74EAC0" stroke-width="20" stroke-linecap="round"/>
+  <path d="M105 150c-66 76-66 172 0 248M407 150c66 76 66 172 0 248" stroke="#42D5A5" stroke-width="15" stroke-linecap="round" opacity=".9"/>
+  <rect x="211" y="104" width="90" height="204" rx="45" fill="url(#mic)"/>
+  <path d="M166 247v18c0 50 40 90 90 90s90-40 90-90v-18" stroke="url(#mic)" stroke-width="22" stroke-linecap="round"/>
+  <path d="M256 355v54M210 409h92" stroke="url(#mic)" stroke-width="22" stroke-linecap="round"/>
 </svg>

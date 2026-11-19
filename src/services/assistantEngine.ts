@@ -17,13 +17,15 @@ import {
 import {apiUrl, safeReadJsonResponse} from './apiConfig';
 
 export interface PendingAssistantIntent {
-  type: 'awaiting_sms_body' | 'awaiting_sms_recipient';
+  type: 'awaiting_sms_body' | 'awaiting_sms_recipient' | 'awaiting_sms_confirmation';
   targetName?: string;
   targetPhone?: string;
+  smsBody?: string;
 }
 
 export interface AssistantEngineContext {
   settings: AppSettings;
+  conversationHistory?: {role: 'user' | 'assistant'; text: string}[];
   deviceOwner: DeviceOwner;
   isOnline: boolean;
   syncedContacts: SyncedPhoneContact[];
@@ -107,7 +109,21 @@ export function findBestContactMatch(
     }
   }
 
-  if (bestContact) return bestContact;
+  // Never turn a weak phonetic resemblance into a real-world action.
+  // A contact must be an exact or strong prefix match, and the best result must be unique.
+  if (bestContact && bestScore >= 85) {
+    const equallyGood = syncedContacts.filter((contact) => {
+      if (!contact.phone?.trim()) return false;
+      const fields = [contact.name, contact.persianPhonetic]
+        .map((f) => normalizeAssistantText(f || ''))
+        .filter(Boolean);
+      return fields.some((f) =>
+        candidateNames.some((q) => q && (f === q ? 100 : f.startsWith(q) || q.startsWith(f) ? 85 : 0) === bestScore)
+      );
+    });
+    const uniquePhones = new Set(equallyGood.map((contact) => normalizePhoneDigits(contact.phone)));
+    if (uniquePhones.size === 1) return bestContact;
+  }
 
   // 3. Fallback: check saved CallerContacts and cross-match to syncedContacts if available
   for (const caller of callers) {
@@ -135,8 +151,14 @@ export function findBestContactMatch(
 
 function getCurrentPersianTimeAndDate(): {timeStr: string; dateStr: string} {
   const now = new Date();
-  const hh = String(now.getHours()).padStart(2, '0');
-  const mm = String(now.getMinutes()).padStart(2, '0');
+  const clockParts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Tehran',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(now);
+  const hh = clockParts.find((part) => part.type === 'hour')?.value ?? '00';
+  const mm = clockParts.find((part) => part.type === 'minute')?.value ?? '00';
   const timeStr = `${toPersianDigits(hh)} و ${toPersianDigits(mm)} دقیقه`;
   const dateStr = formatJalaliFull(now);
   return {timeStr, dateStr};
@@ -180,7 +202,7 @@ export function parseOfflineAssistantCommand(
   ctx: AssistantEngineContext
 ): AssistantCommandResult | null {
   const selfName = getSelfName(ctx.settings, ctx.deviceOwner);
-  const assistantName = ctx.settings.assistantName?.trim() || 'آوا';
+  const assistantName = ctx.settings.assistantName?.trim() || 'هم‌صدا';
   const wake = extractCommandAfterWakeWord(rawTranscript, assistantName);
 
   if (wake.matched && wake.onlyWakeWord) {
@@ -193,6 +215,13 @@ export function parseOfflineAssistantCommand(
   const commandRaw = wake.matched ? wake.command : rawTranscript.trim();
   const norm = normalizeAssistantText(commandRaw);
   if (!norm) return null;
+
+  // Never send until the exact recipient and body are explicitly confirmed.
+  if (ctx.pendingIntent?.type === 'awaiting_sms_confirmation') {
+    if (/^(لغو|کنسل|بی ?خیال|بیخیال|نفرست|ولش کن|پشیمون شدم|انصراف|نه|خیر)/.test(norm)) return {action: 'answer', replyText: 'باشه، پیام ارسال نشد و لغو شد.'};
+    if (/^(تایید|تأیید|بله|آره|اره|درسته|درست است|ارسال کن|بفرست|اوکی|باشه)/.test(norm)) return {action: 'send_sms', targetName: ctx.pendingIntent.targetName, targetPhone: ctx.pendingIntent.targetPhone, smsBody: ctx.pendingIntent.smsBody, replyText: 'در حال ارسال پیام تأییدشده به ' + ctx.pendingIntent.targetName + ' هستم.'};
+    return {action: 'answer', replyText: 'برای جلوگیری از ارسال اشتباهی، فقط «تأیید» برای ارسال یا «لغو» برای انصراف بگو.'};
+  }
 
   // Handle pending SMS conversation turn first
   if (ctx.pendingIntent?.type === 'awaiting_sms_body') {
@@ -487,6 +516,9 @@ export function parseOfflineAssistantCommand(
     };
   }
 
+  // Telegram requests must never be treated as SMS.
+  if (/تلگرام/.test(norm) && /(پیام|مسیج|بنویس|بفرست|ارسال)/.test(norm)) return {action: 'open_app', targetName: 'تلگرام', query: 'تلگرام', replyText: 'تلگرام را باز می‌کنم؛ اما ارسال پیام تلگرام را خودکار انجام نمی‌دهم. مخاطب و متن را داخل خود تلگرام بررسی و ارسال کن.'};
+
   // 7. Send SMS
   if (/(پیامک|اس ام اس|اس‌ام‌اس|پیام بده|پیام بفرست|مسیج)/.test(norm)) {
     const {targetRaw, bodyRaw} = extractRecipientAndSmsBody(commandRaw);
@@ -634,12 +666,46 @@ export function parseOfflineAssistantCommand(
   return null;
 }
 
+
+function buildOfflineConversationReply(
+  utterance: string,
+  ctx: AssistantEngineContext
+): string {
+  const selfName = getSelfName(ctx.settings, ctx.deviceOwner);
+  const assistantName = ctx.settings.assistantName?.trim() || 'هم‌صدا';
+  const text = normalizeAssistantText(utterance);
+  const previousUser = [...(ctx.conversationHistory || [])].reverse().find((item) => item.role === 'user')?.text;
+
+  if (/^(سلام|درود|صبح بخیر|صبحت بخیر|عصر بخیر|شب بخیر)/.test(text)) {
+    return `سلام ${selfName} جان! خوش اومدی. من ${assistantName} هستم؛ بگو ببینم چه خبر؟`;
+  }
+  if (/(اسم تو چیه|اسمت چیه|تو کی هستی|خودتو معرفی کن)/.test(text)) {
+    return `من ${assistantName} هستم؛ دستیار شخصی تو. هم برای گفت‌وگو کنارتم، هم برای انجام کارهایی که روی گوشی در دسترسمه.`;
+  }
+  if (/(من کیم|اسم من چیه|منو می شناسی|منو میشناسی)/.test(text)) {
+    return `تو ${selfName} هستی. چیزهایی رو که در تنظیمات و حافظه همین برنامه ثبت شده می‌تونم به خاطر بیارم.`;
+  }
+  if (/(چه کار(هایی)? می تونی|چیکار می تونی|چه قابلیت|چه امکاناتی)/.test(text)) {
+    return 'می‌تونم بهت جواب بدم و در کارهای گوشی مثل تماس، پیامک با تأیید، باز کردن برنامه‌ها، آلارم و تنظیمات کمکت کنم. وقتی اینترنت وصل باشه، گفت‌وگوی آزاد و پرسش‌های گسترده‌تری هم دارم.';
+  }
+  if (/(خوبی|حالت چطوره|چه خبر)/.test(text)) {
+    return `خوبم، ممنون که پرسیدی ${selfName} جان! تو چطوری؟ امروز اوضاع چطوره؟`;
+  }
+  if (/(یادت هست|یادته|درباره چی حرف می زدیم|چی گفتم)/.test(text) && previousUser) {
+    return `آخرین چیزی که در این گفت‌وگو گفتی این بود: «${previousUser}». منظورت همون موضوعه؟`;
+  }
+  if (/^(ممنون|مرسی|دمت گرم|تشکر)/.test(text)) {
+    return `قربونت ${selfName} جان؛ هر وقت خواستی من اینجام.`;
+  }
+  return `${selfName} جان، حرفت رو شنیدم. الان موتور گفت‌وگوی آفلاینم هنوز نسخه پایه‌ست و برای جواب دقیق‌تر به اینترنت نیاز دارم. می‌تونی یکم واضح‌تر بگی منظورت چیه؟`;
+}
+
 export async function processAssistantUtterance(
   rawTranscript: string,
   ctx: AssistantEngineContext
 ): Promise<AssistantCommandResult> {
   const selfName = getSelfName(ctx.settings, ctx.deviceOwner);
-  const assistantName = ctx.settings.assistantName?.trim() || 'آوا';
+  const assistantName = ctx.settings.assistantName?.trim() || 'هم‌صدا';
   const wake = extractCommandAfterWakeWord(rawTranscript, assistantName);
   const cleanedUtterance = wake.matched ? wake.command : rawTranscript.trim();
 
@@ -654,10 +720,8 @@ export async function processAssistantUtterance(
   }
 
   if (!ctx.isOnline) {
-    return {
-      action: 'answer',
-      replyText: `${selfName} جان، الان اینترنت قطع است اما دستورات آفلاین مثل «ساعت چنده»، «به همسرم پیامک بده»، «با فلانی تماس بگیر»، «عکس بگیر»، «ضبط صدا»، «سایلنت کن» و «صدا را زیاد کن» فعال هستند.`,
-    };
+    const offlineReply = buildOfflineConversationReply(cleanedUtterance || rawTranscript.trim(), ctx);
+    return {action: 'answer', replyText: offlineReply};
   }
 
   const {timeStr, dateStr} = getCurrentPersianTimeAndDate();
@@ -683,19 +747,26 @@ export async function processAssistantUtterance(
     }
 
     const result = parsed.data;
-    // Safety net: resolve phone from syncedContacts if AI returned targetName without phone
-    if (
-      (result.action === 'make_call' || result.action === 'send_sms' || result.action === 'ask_sms_body') &&
+    // Calls are high-impact: never trust an AI-guessed phone number.
+    // Re-resolve the spoken recipient against the local contact book with a strict match.
+    if (result.action === 'make_call') {
+      const match = result.targetName
+        ? findBestContactMatch(result.targetName, ctx.syncedContacts, ctx.callers, ctx.settings, ctx.deviceOwner)
+        : null;
+      if (!match?.phone) {
+        return {
+          action: 'answer',
+          replyText: `برای اینکه با شخص اشتباهی تماس نگیرم، مخاطب را دقیق پیدا نکردم. گفتی «${result.targetName || cleanedUtterance}». لطفاً اسم مخاطب را دوباره و واضح بگو.`,
+        };
+      }
+      result.targetName = match.name;
+      result.targetPhone = match.phone;
+    } else if (
+      (result.action === 'send_sms' || result.action === 'ask_sms_body') &&
       result.targetName &&
       !result.targetPhone
     ) {
-      const match = findBestContactMatch(
-        result.targetName,
-        ctx.syncedContacts,
-        ctx.callers,
-        ctx.settings,
-        ctx.deviceOwner
-      );
+      const match = findBestContactMatch(result.targetName, ctx.syncedContacts, ctx.callers, ctx.settings, ctx.deviceOwner);
       if (match) {
         result.targetName = match.name;
         result.targetPhone = match.phone;
@@ -709,11 +780,32 @@ export async function processAssistantUtterance(
       };
     }
 
+    if (result.action === 'answer') {
+      try {
+        const chatRes = await fetch(apiUrl('/api/assistant-chat'), {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            assistantName,
+            selfName,
+            partnerName: getPartnerNameForDevice(ctx.settings, ctx.deviceOwner),
+            userMessage: cleanedUtterance || rawTranscript.trim(),
+            history: (ctx.conversationHistory || []).slice(-12),
+          }),
+        });
+        const chatParsed = await safeReadJsonResponse<{replyText?: string; error?: string}>(chatRes);
+        const conversationalReply = chatParsed.data?.replyText?.trim();
+        if (chatRes.ok && conversationalReply) result.replyText = conversationalReply;
+      } catch (chatError) {
+        console.warn('Conversation engine unavailable; keeping command-router reply.', chatError);
+      }
+    }
+
     return result;
   } catch {
     return {
       action: 'answer',
-      replyText: `${selfName} جان، متاسفانه ارتباط با سرویس آنلاین برقرار نشد. می‌توانی دستورات مستقیم مثل ساعت، تماس، پیامک، دوربین، ضبط صدا یا تنظیم صدا را بگویی.`,
+      replyText: buildOfflineConversationReply(cleanedUtterance || rawTranscript.trim(), ctx),
     };
   }
 }

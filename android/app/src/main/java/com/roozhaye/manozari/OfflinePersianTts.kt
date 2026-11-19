@@ -141,7 +141,8 @@ object OfflinePersianTts {
     fun ensureDefaultInstalled(context: Context): Boolean {
         return try {
             val espeak = espeakDir(context)
-            if (!espeak.isDirectory || (espeak.list()?.isEmpty() != false)) {
+            val espeakFiles = espeak.list()
+            if (!espeak.isDirectory || espeakFiles == null || espeakFiles.isEmpty()) {
                 copyAssetDir(context, "offline_tts/espeak-ng-data", espeak)
             }
             val gyroSpec = ENGINES["ava_gyro"]!!
@@ -338,7 +339,8 @@ object OfflinePersianTts {
             }
 
             activeTrack = track
-            track.play()
+            val streamTrack: AudioTrack = track
+            streamTrack.play()
 
             val startNs = System.nanoTime()
             var totalSamples = 0L
@@ -350,7 +352,7 @@ object OfflinePersianTts {
                     if (cancelled.get() || myGen != playbackGen.get()) {
                         0 // Abort streaming synthesis immediately
                     } else {
-                        writeFloatChunk(track, chunkSamples)
+                        writeFloatChunk(streamTrack, chunkSamples)
                         totalSamples += chunkSamples.size
                         1
                     }
@@ -359,7 +361,7 @@ object OfflinePersianTts {
                 // Short natural breath pause between sentences
                 if (idx < sentences.size - 1 && !cancelled.get() && myGen == playbackGen.get()) {
                     val pauseSamples = ShortArray((sampleRate * 0.16f).toInt())
-                    track.write(pauseSamples, 0, pauseSamples.size)
+                    streamTrack.write(pauseSamples, 0, pauseSamples.size)
                 }
             }
 

@@ -1,7 +1,7 @@
 import {Capacitor} from '@capacitor/core';
 
 const SERVER_URL_KEY = 'rmz_cloud_api_base_v1';
-const DEFAULT_NATIVE_API_BASE = 'https://roozhaye-manozari-7.ai.studio';
+const DEFAULT_NATIVE_API_BASE = 'https://hamseda-voice-suite.ai.studio';
 
 export function getCloudApiBaseUrl(): string {
   if (!Capacitor.isNativePlatform()) {
@@ -9,7 +9,15 @@ export function getCloudApiBaseUrl(): string {
   }
   try {
     const saved = localStorage.getItem(SERVER_URL_KEY)?.trim();
-    if (saved) return saved.replace(/\/+$/, '');
+    if (saved) {
+      const normalizedSaved = saved.replace(/\/+$/, '');
+      // Migrate installations that still have the previous Hamseda backend saved.
+      if (normalizedSaved === 'https://roozhaye-manozari-7.ai.studio') {
+        localStorage.setItem(SERVER_URL_KEY, DEFAULT_NATIVE_API_BASE);
+        return DEFAULT_NATIVE_API_BASE;
+      }
+      return normalizedSaved;
+    }
   } catch {
     // ignore storage errors
   }
