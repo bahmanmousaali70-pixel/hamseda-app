@@ -48,7 +48,7 @@ interface NightAndMessagesViewProps {
   onSpeakText: (text: string, title: string, category: 'custom' | 'morning' | 'energy' | 'gratitude') => void;
   onStopSpeech: () => void;
   onStatusToast: (msg: string) => void;
-  assistantMediaTrigger?: {tab: 'tracks' | 'radio'; query?: string; nonce: number} | null;
+  assistantMediaTrigger?: {tab: 'tracks' | 'radio' | 'podcasts'; query?: string; nonce: number} | null;
 }
 
 type OccasionId = 'birthday' | 'anniversary' | 'apology' | 'thanks' | 'encouragement' | 'custom';
