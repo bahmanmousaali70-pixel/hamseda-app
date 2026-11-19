@@ -315,7 +315,7 @@ export function parseOfflineAssistantCommand(
   }
 
   // 4. Camera Photo & Video & Audio Record Start
-  if (/(عکس بگیر|عکس بنداز|عکاسی کن|دوربین عکس|دکمه شاتر|شاتر رو بزن|شاتر را بزن|عکس رو ثبت کن|عکس را ثبت کن|تصویر بگیر|یه عکس بگیر|یک عکس بگیر)/.test(norm)) {
+  if (/(عکس بگیر|عکس بنداز|عکس بگیرم|یه عکس|یک عکس|ی عکس|عکسی بگیر|عکاسی کن|دوربین عکس|دکمه شاتر|شاتر( رو| را)? بزن|عکس( رو| را)? ثبت کن|تصویر بگیر|یه دونه عکس|ازم عکس بگیر)/.test(norm)) {
     return {
       action: 'take_photo',
       replyText: 'دوربین را برای گرفتن عکس باز می‌کنم.',
@@ -461,11 +461,11 @@ export function parseOfflineAssistantCommand(
     'ساعت',
   ];
   const matchedApp = knownApps.find((a) => norm.includes(normalizeAssistantText(a))) || '';
-  if (matchedApp && /(ببند|بندش|خارج شو|بیا بیرون|برو بیرون|جمعش کن)/.test(norm)) {
+  if (matchedApp && /(ببند|بندش|خارج شو|بیا بیرون|برو بیرون|جمعش کن|ازش بیا بیرون|ازش خارج شو)/.test(norm)) {
     return {action: 'close_app', targetName: matchedApp, query: matchedApp,
       replyText: `از ${matchedApp} خارج می‌شوم و به صفحه اصلی برمی‌گردم.`};
   }
-  if (matchedApp && /(باز کن|بازش کن|اجرا کن|بیار بالا|برو تو|برو داخل|بزن تو)/.test(norm) && !/(تب |بخش )/.test(norm)) {
+  if (matchedApp && /(باز کن|بازش کن|اجرا کن|بیار بالا|برو تو|برو داخل|بزن تو|برو توی|برو داخلش|بیارش بالا)/.test(norm) && !/(تب |بخش )/.test(norm)) {
     return {action: matchedApp === 'دوربین' ? 'take_photo' : 'open_app',
       targetName: matchedApp, query: matchedApp,
       replyText: matchedApp === 'دوربین' ? 'دوربین را باز می‌کنم.' : `در حال باز کردن «${matchedApp}» هستم.`};
