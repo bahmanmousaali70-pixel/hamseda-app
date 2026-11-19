@@ -472,7 +472,7 @@ export function parseOfflineAssistantCommand(
   }
 
 
-  const typeMatch = commandRaw.match(/^(?:تایپ کن|بنویس توی کادر|تو کادر بنویس)\\s+(.+)$/);
+  const typeMatch = commandRaw.match(/^(?:تایپ کن|بنویس توی کادر|تو کادر بنویس)\s+(.+)$/);
   if (typeMatch && typeMatch[1].trim()) {
     return {action: 'accessibility_type', query: typeMatch[1].trim(),
       replyText: 'متن را در کادر فعال می‌نویسم.'};
