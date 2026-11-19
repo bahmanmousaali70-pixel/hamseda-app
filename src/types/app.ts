@@ -192,6 +192,7 @@ export type AssistantActionType =
   | 'volume_up'
   | 'volume_down'
   | 'volume_max'
+  | 'volume_min'
   | 'volume_mute'
   | 'ringer_silent'
   | 'ringer_vibrate'
