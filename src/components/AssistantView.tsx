@@ -398,6 +398,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
               action: result.action,
               phone: result.targetPhone,
               smsBody: result.smsBody,
+              confirmed: result.action === 'send_sms' && pendingIntent?.type === 'awaiting_sms_confirmation',
               name: result.downloadTitle || result.targetName || result.goalTitle,
               url: result.downloadUrl,
               query: result.query,
