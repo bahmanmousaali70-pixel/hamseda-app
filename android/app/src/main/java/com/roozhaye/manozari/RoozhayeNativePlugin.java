@@ -667,6 +667,17 @@ public class RoozhayeNativePlugin extends Plugin {
                     call.resolve(ret);
                     return;
                 }
+                case "close_app": {
+                    // Android does not let an ordinary app force-stop another package.
+                    Intent homeIntent = new Intent(Intent.ACTION_MAIN);
+                    homeIntent.addCategory(Intent.CATEGORY_HOME);
+                    homeIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    ctx.startActivity(homeIntent);
+                    ret.put("ok", true);
+                    ret.put("message", "به صفحه اصلی برگشتم؛ اندروید بستن اجباری برنامه‌های دیگر را محدود می‌کند.");
+                    call.resolve(ret);
+                    return;
+                }
                 case "download_url": {
                     String targetUrl = urlArg.trim();
                     if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
