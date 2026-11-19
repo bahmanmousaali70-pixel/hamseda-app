@@ -637,7 +637,7 @@ export function parseOfflineAssistantCommand(
   }
 
   if (norm.includes('رادیو') && /(بذار|بگذار|پخش|باز|گوش)/.test(norm)) {
-    let query = commandRaw.replace(/^(لطفا|لطفاً)\\s+/,'').replace(/(رو|را)?\\s*(پخش کن|بذار|بگذار|باز کن|گوش بده|پخش)$/,'').trim();
+    let query = commandRaw.replace(/^(لطفا|لطفاً)\s+/,'').replace(/(رو|را)?\s*(پخش کن|بذار|بگذار|باز کن|گوش بده|پخش)$/,'').trim();
     if (!query || /^(رادیو|رادیوها)$/.test(normalizeAssistantText(query))) query = 'iran';
     else if (/(جهان|خارجی|بین المللی)/.test(norm)) query = 'world';
     else if (/(ارام|لایت|پیانو)/.test(norm)) query = 'chill';
