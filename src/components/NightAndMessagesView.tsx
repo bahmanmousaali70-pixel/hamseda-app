@@ -34,6 +34,7 @@ import type {
   VoiceName,
 } from '../types/app';
 import {getPartnerNameForDevice, getSelfName} from '../utils/deviceIdentity';
+import {PodcastLibraryView} from './PodcastLibraryView';
 
 interface NightAndMessagesViewProps {
   settings: AppSettings;
@@ -1509,6 +1510,8 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
           )}
         </div>
       </section>
+
+      <PodcastLibraryView isOnline={isOnline} onStatusToast={onStatusToast} />
     </div>
   );
 };
