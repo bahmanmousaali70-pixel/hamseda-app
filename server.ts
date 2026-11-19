@@ -1870,7 +1870,7 @@ ${JSON.stringify(compactContacts)}
 - ringer_silent / ringer_vibrate / ringer_normal: گذاشتن گوشی روی سایلنت، ویبره یا حالت عادی.
 - take_photo / record_video: باز کردن دوربین عکس یا فیلم‌برداری.
 - record_audio_start / record_audio_stop: شروع یا توقف ضبط صدا.
-- play_radio / play_music / stop_audio: پخش رادیو زنده، موزیک شبانه یا توقف پخش.
+- play_radio / play_music / play_podcast / stop_audio: پخش رادیو زنده، موزیک شبانه، جستجوی پادکست و توقف پخش.
 - open_tab: باز کردن یکی از بخش‌های برنامه (tab: today | assistant | gratitude | night | voice | caller | sync).
 - add_goal: افزودن یک هدف/یادآور جدید به لیست امروز (goalTitle پر شود).
 - answer: گفت‌وگو، مشورت یا پرسش عمومی. اگر پاسخ به اطلاعات به‌روز اینترنتی نیاز دارد needsLiveWeb را true کن.
@@ -1929,6 +1929,7 @@ ${JSON.stringify(compactContacts)}
                 'open_tab',
                 'play_radio',
                 'play_music',
+                'play_podcast',
                 'stop_audio',
                 'add_goal',
                 'add_gratitude',
