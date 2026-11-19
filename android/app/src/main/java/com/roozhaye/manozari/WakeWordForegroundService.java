@@ -218,39 +218,71 @@ public class WakeWordForegroundService extends Service {
 
     private void installModel(File modelDir, File expectedRoot) throws Exception {
         File zipFile = new File(getCacheDir(), MODEL_NAME + ".zip.part");
-        HttpURLConnection connection = null;
+        boolean loadedBundledModel = false;
+
+        // Prefer the model packaged inside the APK so first-time setup works fully offline.
         try {
-            connection = (HttpURLConnection) new URL(MODEL_URL).openConnection();
-            connection.setConnectTimeout(20000);
-            connection.setReadTimeout(60000);
-            connection.setInstanceFollowRedirects(true);
-            connection.connect();
-            int status = connection.getResponseCode();
-            if (status < 200 || status >= 300) throw new IllegalStateException("Model download HTTP " + status);
-            long declared = connection.getContentLengthLong();
-            if (declared > MAX_MODEL_BYTES) throw new IllegalStateException("Model archive too large");
-            try (InputStream in = new BufferedInputStream(connection.getInputStream());
+            updateNotification("در حال آماده‌سازی مدل فارسی آفلاین…");
+            try (InputStream in = new BufferedInputStream(getAssets().open("wake/" + MODEL_NAME + ".zip"));
                  FileOutputStream out = new FileOutputStream(zipFile)) {
                 byte[] buffer = new byte[32768];
-                long total = 0;
-                long lastProgressUpdate = 0L;
+                long total = 0L;
                 int count;
                 while ((count = in.read(buffer)) != -1) {
-                    if (stopping || Thread.currentThread().isInterrupted()) throw new InterruptedException("stopped");
-                    total += count;
-                    if (total > MAX_MODEL_BYTES) throw new IllegalStateException("Model archive too large");
-                    out.write(buffer, 0, count);
-                    long now = System.currentTimeMillis();
-                    if (now - lastProgressUpdate >= 300L) {
-                        updateDownloadProgress(total, declared);
-                        lastProgressUpdate = now;
+                    if (stopping || Thread.currentThread().isInterrupted()) {
+                        throw new InterruptedException("stopped");
                     }
+                    total += count;
+                    if (total > MAX_MODEL_BYTES) throw new IllegalStateException("Bundled model archive too large");
+                    out.write(buffer, 0, count);
                 }
                 out.getFD().sync();
-                updateDownloadProgress(total, declared);
+                loadedBundledModel = total > 0L;
             }
-        } finally {
-            if (connection != null) connection.disconnect();
+        } catch (InterruptedException interrupted) {
+            throw interrupted;
+        } catch (Exception missingOrInvalidBundledAsset) {
+            // Backward-compatible fallback for builds that do not yet include the bundled model.
+            // A model downloaded once is retained in app-private storage for future offline starts.
+            zipFile.delete();
+        }
+
+        if (!loadedBundledModel) {
+            updateNotification("مدل فارسی روی گوشی نیست؛ برای دریافت اولیه به اینترنت وصل شوید…");
+            HttpURLConnection connection = null;
+            try {
+                connection = (HttpURLConnection) new URL(MODEL_URL).openConnection();
+                connection.setConnectTimeout(20000);
+                connection.setReadTimeout(60000);
+                connection.setInstanceFollowRedirects(true);
+                connection.connect();
+                int status = connection.getResponseCode();
+                if (status < 200 || status >= 300) throw new IllegalStateException("Model download HTTP " + status);
+                long declared = connection.getContentLengthLong();
+                if (declared > MAX_MODEL_BYTES) throw new IllegalStateException("Model archive too large");
+                try (InputStream in = new BufferedInputStream(connection.getInputStream());
+                     FileOutputStream out = new FileOutputStream(zipFile)) {
+                    byte[] buffer = new byte[32768];
+                    long total = 0;
+                    long lastProgressUpdate = 0L;
+                    int count;
+                    while ((count = in.read(buffer)) != -1) {
+                        if (stopping || Thread.currentThread().isInterrupted()) throw new InterruptedException("stopped");
+                        total += count;
+                        if (total > MAX_MODEL_BYTES) throw new IllegalStateException("Model archive too large");
+                        out.write(buffer, 0, count);
+                        long now = System.currentTimeMillis();
+                        if (now - lastProgressUpdate >= 300L) {
+                            updateDownloadProgress(total, declared);
+                            lastProgressUpdate = now;
+                        }
+                    }
+                    out.getFD().sync();
+                    updateDownloadProgress(total, declared);
+                }
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
         }
 
         File staging = new File(getFilesDir(), "vosk-fa-staging");
