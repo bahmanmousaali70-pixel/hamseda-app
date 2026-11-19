@@ -74,6 +74,11 @@ public class HamsedaAccessibilityService extends AccessibilityService {
         return s != null && s.performGlobalAction(GLOBAL_ACTION_BACK);
     }
 
+    public static boolean performGlobalHome() {
+        HamsedaAccessibilityService s = instance;
+        return s != null && s.performGlobalAction(GLOBAL_ACTION_HOME);
+    }
+
     public static boolean clickNodeByLabel(String wanted) {
         HamsedaAccessibilityService s = instance;
         if (s == null || wanted == null || wanted.trim().isEmpty()) return false;
@@ -128,7 +133,25 @@ public class HamsedaAccessibilityService extends AccessibilityService {
         HamsedaAccessibilityService s = instance;
         if (s == null) return false;
         AccessibilityNodeInfo root = s.getRootInActiveWindow();
-        return scrollRecursive(root, down);
+        if (scrollRecursive(root, down)) return true;
+
+        // Some apps (including many WebViews) expose no scrollable accessibility
+        // node. Fall back to a user-requested swipe gesture in the active window.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            android.util.DisplayMetrics metrics = s.getResources().getDisplayMetrics();
+            float x = metrics.widthPixels * 0.5f;
+            float startY = down ? metrics.heightPixels * 0.78f : metrics.heightPixels * 0.28f;
+            float endY = down ? metrics.heightPixels * 0.28f : metrics.heightPixels * 0.78f;
+            android.graphics.Path path = new android.graphics.Path();
+            path.moveTo(x, startY);
+            path.lineTo(x, endY);
+            android.accessibilityservice.GestureDescription gesture =
+                    new android.accessibilityservice.GestureDescription.Builder()
+                            .addStroke(new android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 350))
+                            .build();
+            return s.dispatchGesture(gesture, null, null);
+        }
+        return false;
     }
 
     private static boolean scrollRecursive(AccessibilityNodeInfo node, boolean down) {
