@@ -83,6 +83,7 @@ interface RoozhayeNativePlugin {
   wasScheduleFiredNatively(options: {scheduleId: string; todayKey: string}): Promise<{fired: boolean}>;
   markScheduleFiredNatively(options: {scheduleId: string; todayKey: string}): Promise<{ok: boolean}>;
   stopNativeAudio(): Promise<{ok: boolean}>;
+  openAccessibilitySettings(): Promise<{ok: boolean}>;
   saveBackupJson(options: {
     filename: string;
     content: string;
@@ -174,6 +175,8 @@ interface RoozhayeNativePlugin {
     permissionRequired?: boolean;
     needsPolicyAccess?: boolean;
     needsWriteSettings?: boolean;
+  needsAccessibility?: boolean;
+  savedPath?: string;
   }>;
 }
 
@@ -788,6 +791,12 @@ export async function stopListeningNative(): Promise<void> {
   } catch {
     // ignore
   }
+}
+
+export async function openAccessibilitySettingsNative(): Promise<{ok: boolean}> {
+  if (!isNativeAndroid()) return {ok: false};
+  try { return await RoozhayeNative.openAccessibilitySettings(); }
+  catch { return {ok: false}; }
 }
 
 export async function executeDeviceActionNative(options: {
