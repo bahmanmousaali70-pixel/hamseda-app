@@ -111,6 +111,7 @@ const ACTION_LABELS: Partial<Record<AssistantActionType, string>> = {
   download_url: 'دانلود فایل',
   open_url: 'باز کردن صفحه وب',
   open_app: 'باز کردن برنامه گوشی',
+  close_app: 'خروج از برنامه',
   open_navigation: 'مسیریاب و نقشه',
   flashlight_on: 'روشن شدن چراغ قوه',
   flashlight_off: 'خاموش شدن چراغ قوه',
@@ -152,6 +153,7 @@ const NATIVE_DEVICE_ACTIONS = new Set<AssistantActionType>([
   'download_url',
   'open_url',
   'open_app',
+  'close_app',
   'open_navigation',
   'flashlight_on',
   'flashlight_off',
@@ -239,6 +241,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
   const webRecRef = useRef<WebSpeechRecognitionInstance | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const processingRef = useRef(false);
+  const utteranceQueueRef = useRef<{text: string; speak: boolean}[]>([]);
   // Prevent the wake-loop cleanup from cancelling a manually started recording.
   const manualListenRef = useRef(false);
 
@@ -328,7 +331,11 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
   const executeUtterance = useCallback(
     async (rawUtterance: string, speakReply = true) => {
       const cleaned = rawUtterance.trim();
-      if (!cleaned || processingRef.current) return;
+      if (!cleaned) return;
+      if (processingRef.current) {
+        utteranceQueueRef.current.push({text: cleaned, speak: speakReply});
+        return;
+      }
       processingRef.current = true;
       setIsBusy(true);
 
@@ -349,9 +356,11 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
           })),
         });
 
-        // Stage every SMS for review; do not execute it on the first pass.
+        // Stage SMS and calls for explicit review; neither executes on its first pass.
         if (result.action === 'send_sms' && pendingIntent?.type !== 'awaiting_sms_confirmation') {
           setPendingIntent({type: 'awaiting_sms_confirmation', targetName: result.targetName || result.targetPhone || 'مخاطب نامشخص', targetPhone: result.targetPhone, smsBody: result.smsBody || ''});
+        } else if (result.action === 'make_call' && pendingIntent?.type !== 'awaiting_call_confirmation') {
+          setPendingIntent({type: 'awaiting_call_confirmation', targetName: result.targetName || result.targetPhone || 'مخاطب نامشخص', targetPhone: result.targetPhone});
         } else if (result.action === 'ask_sms_body') {
           if (result.targetPhone) {
             setPendingIntent({
@@ -368,10 +377,11 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
 
         let finalReply = result.replyText;
 
-        if (result.action === 'send_sms' && pendingIntent?.type !== 'awaiting_sms_confirmation') finalReply = 'قبل از ارسال، نام مخاطب و متن پیام را بررسی و تأیید کن.';
+        if (result.action === 'send_sms' && pendingIntent?.type !== 'awaiting_sms_confirmation') finalReply = `پیام به ${result.targetName} با متن «${result.smsBody}» آماده است. اگر درست است بگو تأیید؛ برای انصراف بگو لغو کن.`;
+        if (result.action === 'make_call' && pendingIntent?.type !== 'awaiting_call_confirmation') finalReply = `با ${result.targetName} به شماره ${result.targetPhone} تماس بگیرم؟ اگر درست است بگو تأیید؛ برای انصراف بگو لغو کن.`;
 
         // Execute Android Hardware/OS Action if applicable
-        if (NATIVE_DEVICE_ACTIONS.has(result.action) && !(result.action === 'send_sms' && pendingIntent?.type !== 'awaiting_sms_confirmation')) {
+        if (NATIVE_DEVICE_ACTIONS.has(result.action) && !(result.action === 'send_sms' && pendingIntent?.type !== 'awaiting_sms_confirmation') && !(result.action === 'make_call' && pendingIntent?.type !== 'awaiting_call_confirmation')) {
           const shouldSkipAutoDownloadIfSearch =
             result.action === 'download_url' && !result.downloadUrl?.trim();
 
@@ -439,11 +449,15 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
           result.action !== 'record_audio_start' &&
           result.action !== 'stop_audio'
         ) {
+          // Replace unfinished speech so two replies are never played together.
+          onStopSpeech();
           onSpeakText(finalReply, `پاسخ ${assistantName}`, 'custom');
         }
       } finally {
         setIsBusy(false);
         processingRef.current = false;
+        const nextUtterance = utteranceQueueRef.current.shift();
+        if (nextUtterance) void Promise.resolve().then(() => executeUtterance(nextUtterance.text, nextUtterance.speak));
       }
     },
     [
