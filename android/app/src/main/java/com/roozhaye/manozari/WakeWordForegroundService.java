@@ -62,6 +62,8 @@ public class WakeWordForegroundService extends Service {
     private SpeechService speechService;
     private String assistantName = "هم‌صدا";
     private long lastWakeAt = 0L;
+    private String lastHandledHypothesis = "";
+    private long lastHandledHypothesisAt = 0L;
 
     public static boolean start(Context context, String name) {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
@@ -358,6 +360,14 @@ public class WakeWordForegroundService extends Service {
 
     private void handleRecognizedText(String spoken) {
         if (stopping || spoken == null || spoken.trim().isEmpty()) return;
+        // Vosk may emit the same utterance via both onResult and onFinalResult.
+        // Drop duplicate callbacks before they can speak the wake acknowledgement twice.
+        String normalizedHypothesis = normalize(spoken);
+        long now = System.currentTimeMillis();
+        if (normalizedHypothesis.equals(lastHandledHypothesis)
+                && now - lastHandledHypothesisAt < 2200L) return;
+        lastHandledHypothesis = normalizedHypothesis;
+        lastHandledHypothesisAt = now;
         if (awaitingCommand) {
             awaitingCommand = false;
             savePendingCommand(spoken);
