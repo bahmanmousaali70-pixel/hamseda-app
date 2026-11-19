@@ -375,7 +375,7 @@ public class WakeWordForegroundService extends Service {
         }
         if (!containsWakeWord(spoken)) return;
 
-        onWakeWordHeard();
+        if (!onWakeWordHeard()) return;
         String command = extractCommandAfterWakeWord(spoken);
         if (!command.isEmpty()) {
             savePendingCommand(command);
@@ -489,11 +489,14 @@ public class WakeWordForegroundService extends Service {
                 .toLowerCase(Locale.ROOT);
     }
 
-    private void onWakeWordHeard() {
+    private boolean onWakeWordHeard() {
         long now = System.currentTimeMillis();
-        if (now - lastWakeAt < 2500L) return;
+        // A slightly wider cooldown also suppresses near-identical Vosk hypotheses
+        // that differ by one or two recognized words and used to queue repeated "جانم".
+        if (now - lastWakeAt < 3500L) return false;
         lastWakeAt = now;
         updateNotification("نام هم‌صدا شنیده شد؛ منتظر فرمان هستم.");
+        return true;
     }
 
     private void savePendingCommand(String command) {
