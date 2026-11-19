@@ -718,7 +718,7 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
     if (!assistantMediaTrigger || assistantMediaTrigger.nonce === lastAssistantTriggerRef.current) return;
     if (Date.now() - assistantMediaTrigger.nonce > 10000) return;
     lastAssistantTriggerRef.current = assistantMediaTrigger.nonce;
-    setMediaTab(assistantMediaTrigger.tab);
+    if (assistantMediaTrigger.tab !== 'podcasts') setMediaTab(assistantMediaTrigger.tab);
     if (assistantMediaTrigger.tab === 'radio') {
       const requested = assistantMediaTrigger.query?.trim() || '';
       const cat: RadioCategory =
