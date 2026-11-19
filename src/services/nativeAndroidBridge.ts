@@ -71,6 +71,13 @@ interface RoozhayeNativePlugin {
     preferredOfflineEngine?: string;
     speechRate?: number;
   }): Promise<{ok: boolean}>;
+  setSmsAnnouncementPolicy(options: {
+    blockedSenders: string;
+    blockedKeywords: string;
+    importantSenders: string;
+    quietHours: number;
+    summarize: boolean;
+  }): Promise<{ok: boolean; quietUntil?: number}>;
   syncCallers(options: {callersJson: string}): Promise<{count: number}>;
   syncSchedules(options: {schedulesJson: string}): Promise<{count: number}>;
   wasScheduleFiredNatively(options: {scheduleId: string; todayKey: string}): Promise<{fired: boolean}>;
@@ -402,6 +409,22 @@ export async function syncAnnounceTogglesToNative(options: {
     });
   } catch {
     // ignore
+  }
+}
+
+export async function saveSmsAnnouncementPolicyNative(options: {
+  blockedSenders: string;
+  blockedKeywords: string;
+  importantSenders: string;
+  quietHours: number;
+  summarize: boolean;
+}): Promise<boolean> {
+  if (!isNativeAndroid()) return false;
+  try {
+    const result = await RoozhayeNative.setSmsAnnouncementPolicy(options);
+    return Boolean(result.ok);
+  } catch {
+    return false;
   }
 }
 
