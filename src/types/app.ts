@@ -208,6 +208,7 @@ export type AssistantActionType =
   | 'open_tab'
   | 'play_radio'
   | 'play_music'
+  | 'play_podcast'
   | 'stop_audio'
   | 'add_goal'
   | 'add_gratitude';
