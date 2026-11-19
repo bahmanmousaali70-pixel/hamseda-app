@@ -1414,6 +1414,10 @@ app.post('/api/radio-stations', async (req, res) => {
         'آلمان': 'germany',
         'آمریکا': 'usa',
         'انگلیس': 'uk',
+        'رادیو جوان': 'radio javan',
+        'رادیو خورشید': 'radio khorshid',
+        'جوان': 'radio javan',
+        'خورشید': 'radio khorshid',
       };
       for (const [fa, en] of Object.entries(persianDict)) {
         if (rawQuery.includes(fa)) {
