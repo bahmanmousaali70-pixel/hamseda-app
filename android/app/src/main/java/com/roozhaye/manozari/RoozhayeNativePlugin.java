@@ -486,6 +486,12 @@ public class RoozhayeNativePlugin extends Plugin {
                         am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI);
                         am.adjustStreamVolume(AudioManager.STREAM_RING, AudioManager.ADJUST_LOWER, 0);
                         ret.put("message", "صدای گوشی کم شد.");
+                    } else if ("volume_min".equals(action)) {
+                        am.setStreamVolume(AudioManager.STREAM_MUSIC, 0, AudioManager.FLAG_SHOW_UI);
+                        try {
+                            am.setStreamVolume(AudioManager.STREAM_RING, 0, 0);
+                        } catch (Exception ignored) {}
+                        ret.put("message", "صدای رسانه و زنگ گوشی تا حداقل پایین آورده شد.");
                     } else if ("volume_max".equals(action)) {
                         am.setStreamVolume(AudioManager.STREAM_MUSIC, am.getStreamMaxVolume(AudioManager.STREAM_MUSIC), AudioManager.FLAG_SHOW_UI);
                         try {
