@@ -586,7 +586,7 @@ public class RoozhayeNativePlugin extends Plugin {
                     camIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoUri);
                     camIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
                     camIntent.setClipData(android.content.ClipData.newRawUri("Hamseda photo", photoUri));
-                    HamsedaAccessibilityService.armCameraShutter();
+                    if (HamsedaAccessibilityService.isConnected()) HamsedaAccessibilityService.armCameraShutter();
                     startActivityForResult(call, camIntent, "handleCameraCaptureResult");
                     return;
                 }
@@ -713,6 +713,21 @@ public class RoozhayeNativePlugin extends Plugin {
                     boolean clicked = HamsedaAccessibilityService.clickNodeByLabel(label);
                     ret.put("ok", clicked);
                     ret.put("message", clicked ? "روی " + label + " زدم." : "این گزینه روی صفحه پیدا نشد؛ صفحه را باز و دسترس‌پذیری را فعال کن.");
+                    call.resolve(ret);
+                    return;
+                }
+                case "accessibility_type": {
+                    boolean typed = HamsedaAccessibilityService.setTextInFocusedField(queryArg);
+                    ret.put("ok", typed);
+                    ret.put("message", typed ? "متن در کادر فعال نوشته شد." : "کادر نوشتاری فعالی پیدا نکردم.");
+                    call.resolve(ret);
+                    return;
+                }
+                case "accessibility_scroll": {
+                    boolean down = !"up".equalsIgnoreCase(queryArg);
+                    boolean scrolled = HamsedaAccessibilityService.scrollActiveWindow(down);
+                    ret.put("ok", scrolled);
+                    ret.put("message", scrolled ? (down ? "صفحه را پایین بردم." : "صفحه را بالا بردم.") : "صفحه قابل پیمایش پیدا نشد.");
                     call.resolve(ret);
                     return;
                 }
