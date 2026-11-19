@@ -171,6 +171,7 @@ export type AssistantActionType =
   | 'download_url'
   | 'open_url'
   | 'open_app'
+  | 'close_app'
   | 'open_navigation'
   | 'flashlight_on'
   | 'flashlight_off'
