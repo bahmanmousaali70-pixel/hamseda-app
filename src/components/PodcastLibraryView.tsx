@@ -9,7 +9,7 @@ interface PodcastItem {
 }
 interface PodcastSearchResponse { podcasts?: PodcastItem[]; error?: string; }
 
-export const PodcastLibraryView: React.FC<{isOnline: boolean; onStatusToast: (message: string) => void; searchTrigger?: {query?: string; nonce: number} | null}> = ({isOnline, onStatusToast, searchTrigger}) => {
+export const PodcastLibraryView: React.FC<{isOnline: boolean; onStatusToast: (message: string) => void; searchTrigger?: {query?: string; nonce: number} | null; stopTrigger?: number | null}> = ({isOnline, onStatusToast, searchTrigger, stopTrigger}) => {
   const [query, setQuery] = useState('پادکست فارسی');
   const [busy, setBusy] = useState(false);
   const [podcasts, setPodcasts] = useState<PodcastItem[]>([]);
@@ -43,6 +43,10 @@ export const PodcastLibraryView: React.FC<{isOnline: boolean; onStatusToast: (me
     setQuery(requested);
     void search(requested);
   }, [searchTrigger]);
+
+  useEffect(() => {
+    if (stopTrigger && audioRef.current) audioRef.current.pause();
+  }, [stopTrigger]);
 
   const playEpisode = (podcast: PodcastItem, episode: PodcastEpisode) => {
     const audio = audioRef.current;
