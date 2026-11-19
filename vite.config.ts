@@ -27,22 +27,10 @@ export default defineConfig(() => {
           scope: '/',
           icons: [
             {
-              src: '/pwa-192x192.png',
-              sizes: '192x192',
-              type: 'image/png',
-              purpose: 'any',
-            },
-            {
-              src: '/pwa-512x512.png',
-              sizes: '512x512',
-              type: 'image/png',
-              purpose: 'any',
-            },
-            {
-              src: '/pwa-maskable-512x512.png',
-              sizes: '512x512',
-              type: 'image/png',
-              purpose: 'maskable',
+              src: '/icon.svg',
+              sizes: 'any',
+              type: 'image/svg+xml',
+              purpose: 'any maskable',
             },
           ],
         },
@@ -51,6 +39,7 @@ export default defineConfig(() => {
           cleanupOutdatedCaches: true,
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+          globIgnores: ['ort/**'],
           navigateFallback: '/index.html',
           navigateFallbackDenylist: [/^\/__\/auth/, /^\/api\//],
           runtimeCaching: [
@@ -89,9 +78,8 @@ export default defineConfig(() => {
           type: 'module',
         },
       }),
-      // Copies src/assets into dist/ so root-relative URLs like
-      // "/src/assets/images/..." (e.g. generate_image output) still resolve
-      // in production builds. Do not remove.
+      // Copies src/assets into dist/ and serves/copies onnxruntime-web WASM runtime
+      // into /ort/ so Pocket TTS Farsi ONNX runs 100% offline inside Capacitor APK.
       {
         name: 'copy-unbundled-src-assets',
         apply: 'build',
@@ -105,9 +93,48 @@ export default defineConfig(() => {
           if (fs.existsSync(distDir) && fs.existsSync(srcAssets)) {
             fs.cpSync(srcAssets, distAssets, {recursive: true, force: true});
           }
+          const ortSrcDir = path.resolve(__dirname, 'node_modules/onnxruntime-web/dist');
+          const ortDestDir = path.resolve(distDir, 'ort');
+          const ortFiles = [
+            'ort-wasm-simd-threaded.asyncify.mjs',
+            'ort-wasm-simd-threaded.asyncify.wasm',
+          ];
+          if (fs.existsSync(distDir) && fs.existsSync(ortSrcDir)) {
+            fs.mkdirSync(ortDestDir, {recursive: true});
+            for (const file of ortFiles) {
+              const srcFile = path.resolve(ortSrcDir, file);
+              if (fs.existsSync(srcFile)) {
+                fs.copyFileSync(srcFile, path.resolve(ortDestDir, file));
+              }
+            }
+          }
+        },
+      },
+      {
+        name: 'serve-ort-wasm-dev',
+        configureServer(server) {
+          server.middlewares.use('/ort', (req, res, next) => {
+            const cleanName = (req.url || '').split('?')[0].replace(/^\/+/, '');
+            if (!cleanName || cleanName.includes('..')) {
+              return next();
+            }
+            const filePath = path.resolve(__dirname, 'node_modules/onnxruntime-web/dist', cleanName);
+            if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+              return next();
+            }
+            if (cleanName.endsWith('.wasm')) {
+              res.setHeader('Content-Type', 'application/wasm');
+            } else if (cleanName.endsWith('.mjs') || cleanName.endsWith('.js')) {
+              res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+            }
+            fs.createReadStream(filePath).pipe(res);
+          });
         },
       },
     ],
+    worker: {
+      format: 'es',
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

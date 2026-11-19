@@ -75,6 +75,18 @@ public class RoozhayeNativePlugin extends Plugin {
     private MediaRecorder activeRecorder = null;
     private File activeRecorderTempFile = null;
 
+    @Override
+    public void load() {
+        super.load();
+        final Context appCtx = getContext().getApplicationContext();
+        new Thread(() -> {
+            try {
+                OfflinePersianTts.ensureDefaultInstalled(appCtx);
+            } catch (Exception ignored) {
+            }
+        }, "HamsedaOfflineWarmup").start();
+    }
+
     @PluginMethod
     public void getNativeCapabilities(PluginCall call) {
         call.resolve(buildCapsObject());
@@ -238,7 +250,7 @@ public class RoozhayeNativePlugin extends Plugin {
                     @Override
                     public void onError(int error) {
                         if (!settled.compareAndSet(false, true)) return;
-                        destroyActiveRecognizer();
+                        destroyRecognizerIfCurrent(recognizer);
                         JSObject ret = new JSObject();
                         ret.put("ok", false);
                         ret.put("errorCode", error);
@@ -249,14 +261,23 @@ public class RoozhayeNativePlugin extends Plugin {
                     @Override
                     public void onResults(Bundle results) {
                         if (!settled.compareAndSet(false, true)) return;
-                        destroyActiveRecognizer();
+                        destroyRecognizerIfCurrent(recognizer);
                         ArrayList<String> matches = results != null
                                 ? results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                                 : null;
-                        String transcript = (matches != null && !matches.isEmpty()) ? matches.get(0).trim() : "";
+                        ArrayList<String> transcripts = new ArrayList<>();
+                        if (matches != null) {
+                            for (String match : matches) {
+                                if (match != null && !match.trim().isEmpty() && !transcripts.contains(match.trim())) {
+                                    transcripts.add(match.trim());
+                                }
+                            }
+                        }
+                        String transcript = !transcripts.isEmpty() ? transcripts.get(0) : "";
                         JSObject ret = new JSObject();
                         ret.put("ok", !transcript.isEmpty());
                         ret.put("transcript", transcript);
+                        ret.put("transcripts", new JSONArray(transcripts));
                         if (transcript.isEmpty()) {
                             ret.put("error", "صدایی شنیده نشد.");
                         }
@@ -268,9 +289,11 @@ public class RoozhayeNativePlugin extends Plugin {
                 intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
                 intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fa-IR");
                 intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "fa-IR");
-                intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3);
+                intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5);
                 intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false);
-                intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1400L);
+                intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 10000L);
+                intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 7000L);
+                intent.putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, ctx.getPackageName());
                 recognizer.startListening(intent);
             } catch (Exception e) {
                 if (settled.compareAndSet(false, true)) {
@@ -292,18 +315,19 @@ public class RoozhayeNativePlugin extends Plugin {
         call.resolve(ret);
     }
 
+    private void destroyRecognizerIfCurrent(SpeechRecognizer recognizer) {
+        if (recognizer == null) return;
+        if (activeRecognizer == recognizer) activeRecognizer = null;
+        try { recognizer.cancel(); } catch (Exception ignored) {}
+        try { recognizer.destroy(); } catch (Exception ignored) {}
+    }
+
     private void destroyActiveRecognizer() {
-        if (activeRecognizer != null) {
-            try {
-                activeRecognizer.cancel();
-            } catch (Exception ignored) {
-            }
-            try {
-                activeRecognizer.destroy();
-            } catch (Exception ignored) {
-            }
-            activeRecognizer = null;
-        }
+        SpeechRecognizer recognizer = activeRecognizer;
+        activeRecognizer = null;
+        if (recognizer == null) return;
+        try { recognizer.cancel(); } catch (Exception ignored) {}
+        try { recognizer.destroy(); } catch (Exception ignored) {}
     }
 
     private String mapSpeechError(int error) {
@@ -1085,6 +1109,43 @@ public class RoozhayeNativePlugin extends Plugin {
     }
 
     @PluginMethod
+    public void startWakeWordService(PluginCall call) {
+        Context ctx = getContext();
+        if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            JSObject ret = new JSObject();
+            ret.put("ok", false);
+            ret.put("permissionRequired", true);
+            ret.put("message", "برای گوش‌به‌زنگ بودن، اجازه میکروفون لازم است.");
+            call.resolve(ret);
+            return;
+        }
+        String assistantName = call.getString("assistantName", "هم‌صدا");
+        boolean started = WakeWordForegroundService.start(ctx, assistantName);
+        JSObject ret = new JSObject();
+        ret.put("ok", started);
+        if (!started) ret.put("message", "شروع سرویس شنود ممکن نشد؛ برنامه را باز نگه دارید و دوباره تلاش کنید.");
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void stopWakeWordService(PluginCall call) {
+        WakeWordForegroundService.stop(getContext());
+        JSObject ret = new JSObject();
+        ret.put("ok", true);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void consumePendingWakeCommand(PluginCall call) {
+        SharedPreferences prefs = getContext().getSharedPreferences("rmz_native_prefs", Context.MODE_PRIVATE);
+        String command = prefs.getString("pending_wake_command", "");
+        prefs.edit().remove("pending_wake_command").remove("pending_wake_command_at").apply();
+        JSObject ret = new JSObject();
+        ret.put("command", command == null ? "" : command);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
     public void setServerBaseUrl(PluginCall call) {
         String url = call.getString("url", "");
         SharedPreferences prefs = getContext().getSharedPreferences("rmz_native_prefs", Context.MODE_PRIVATE);
@@ -1463,6 +1524,137 @@ public class RoozhayeNativePlugin extends Plugin {
             ret.put("error", "امکان خواندن فایل انتخاب‌شده نبود.");
             call.resolve(ret);
         }
+    }
+
+    @PluginMethod
+    public void speakOfflineNeuralPersian(PluginCall call) {
+        String text = call.getString("text", "");
+        Double rateValue = call.getDouble("rate", 1.0);
+        float rate = rateValue != null ? rateValue.floatValue() : 1.0f;
+        if (text == null || text.trim().isEmpty()) {
+            JSObject result = new JSObject();
+            result.put("ok", false);
+            result.put("error", "متن خالی است.");
+            call.resolve(result);
+            return;
+        }
+        new Thread(() -> {
+            boolean ok = OfflinePersianTts.speak(getContext(), text, rate);
+            JSObject result = new JSObject();
+            result.put("ok", ok);
+            if (!ok) result.put("error", "موتور عصبی آفلاین فارسی آماده نیست یا نتوانست صدا تولید کند.");
+            mainHandler.post(() -> call.resolve(result));
+        }, "HamsedaOfflinePersianTTS").start();
+    }
+
+    @PluginMethod
+    public void getOfflineEngineStatuses(PluginCall call) {
+        final Context appCtx = getContext().getApplicationContext();
+        new Thread(() -> {
+            try {
+                String activeId = OfflinePersianTts.getActiveEngineId(appCtx);
+                String enginesJson = OfflinePersianTts.getStatusesJson(appCtx);
+                JSObject result = new JSObject();
+                result.put("ok", true);
+                result.put("activeEngineId", activeId);
+                result.put("enginesJson", enginesJson);
+                mainHandler.post(() -> call.resolve(result));
+            } catch (Exception e) {
+                JSObject result = new JSObject();
+                result.put("ok", false);
+                result.put("error", e.getMessage() != null ? e.getMessage() : "خطا در بررسی وضعیت موتورها");
+                mainHandler.post(() -> call.resolve(result));
+            }
+        }, "HamsedaOfflineStatuses").start();
+    }
+
+    @PluginMethod
+    public void installOfflineEngine(PluginCall call) {
+        final String engineId = call.getString("engineId", "");
+        if (engineId == null || engineId.trim().isEmpty()) {
+            JSObject result = new JSObject();
+            result.put("ok", false);
+            result.put("error", "شناسه موتور نامعتبر است.");
+            call.resolve(result);
+            return;
+        }
+        final Context appCtx = getContext().getApplicationContext();
+        new Thread(() -> {
+            kotlin.Pair<Boolean, String> outcome = OfflinePersianTts.installEngine(
+                    appCtx,
+                    engineId.trim(),
+                    (id, got, total, stage) -> {
+                        JSObject evt = new JSObject();
+                        evt.put("engineId", id);
+                        evt.put("bytesDownloaded", got);
+                        evt.put("totalBytes", total);
+                        evt.put("stage", stage);
+                        mainHandler.post(() -> notifyListeners("offlineTtsProgress", evt));
+                    }
+            );
+            JSObject result = new JSObject();
+            result.put("ok", Boolean.TRUE.equals(outcome.getFirst()));
+            if (outcome.getSecond() != null) {
+                result.put("error", outcome.getSecond());
+            }
+            mainHandler.post(() -> call.resolve(result));
+        }, "HamsedaInstallOfflineTTS").start();
+    }
+
+    @PluginMethod
+    public void deleteOfflineEngine(PluginCall call) {
+        String engineId = call.getString("engineId", "");
+        boolean ok = engineId != null && OfflinePersianTts.deleteEngine(getContext().getApplicationContext(), engineId.trim());
+        JSObject result = new JSObject();
+        result.put("ok", ok);
+        call.resolve(result);
+    }
+
+    @PluginMethod
+    public void setActiveOfflineEngine(PluginCall call) {
+        String engineId = call.getString("engineId", "");
+        boolean ok = engineId != null && OfflinePersianTts.setActiveEngineId(getContext().getApplicationContext(), engineId.trim());
+        JSObject result = new JSObject();
+        result.put("ok", ok);
+        call.resolve(result);
+    }
+
+    @PluginMethod
+    public void speakOfflineEngine(PluginCall call) {
+        final String engineId = call.getString("engineId");
+        final String text = call.getString("text", "");
+        final Double rateValue = call.getDouble("rate", 1.0);
+        final float rate = rateValue != null ? rateValue.floatValue() : 1.0f;
+        final Boolean goftari = call.hasOption("goftari") ? call.getBoolean("goftari") : null;
+
+        if (text == null || text.trim().isEmpty()) {
+            JSObject result = new JSObject();
+            result.put("ok", false);
+            result.put("error", "متن خالی است.");
+            call.resolve(result);
+            return;
+        }
+
+        final Context appCtx = getContext().getApplicationContext();
+        new Thread(() -> {
+            OfflinePersianTts.SpeakResult res = OfflinePersianTts.speakWithEngine(
+                    appCtx,
+                    engineId != null && !engineId.trim().isEmpty() ? engineId.trim() : null,
+                    text,
+                    rate,
+                    goftari
+            );
+            JSObject result = new JSObject();
+            result.put("ok", res.getOk());
+            result.put("engineId", res.getEngineId());
+            result.put("synthesisMs", res.getSynthesisMs());
+            result.put("durationSec", res.getDurationSec());
+            result.put("rtf", res.getRtf());
+            if (res.getError() != null) {
+                result.put("error", res.getError());
+            }
+            mainHandler.post(() -> call.resolve(result));
+        }, "HamsedaSpeakOfflineEngine").start();
     }
 
     @PluginMethod

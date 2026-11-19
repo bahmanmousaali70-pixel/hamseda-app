@@ -69,6 +69,9 @@ public class CallAnnouncerService extends Service {
     }
 
     public static void announce(Context context, String title, String text, String voiceName, boolean isMale, int repeatCount, boolean isCall) {
+        // All native announcements use Negin, including incoming calls and SMS.
+        voiceName = "Kore";
+        isMale = false;
         final Context appCtx = context.getApplicationContext();
         final int safeRepeat = Math.max(1, Math.min(2, repeatCount));
         Intent intent = new Intent(appCtx, CallAnnouncerService.class);
@@ -112,6 +115,7 @@ public class CallAnnouncerService extends Service {
     public static void stopActive(Context context) {
         GLOBAL_PLAY_GEN.incrementAndGet();
         stopDirectPlayerOnly();
+        OfflinePersianTts.stop();
         BilingualSpeechHelper.stopActiveTts();
         try {
             context.stopService(new Intent(context, CallAnnouncerService.class));
@@ -235,6 +239,14 @@ public class CallAnnouncerService extends Service {
                     localLock = null; // released on completion
                     return;
                 }
+                if (myGen == GLOBAL_PLAY_GEN.get()) {
+                    String spoken = repeatCount == 2 ? (text + " . " + text) : text;
+                    OfflinePersianTts.SpeakResult neuralRes =
+                            OfflinePersianTts.speakWithEngine(appCtx, null, spoken, 1.0f, null);
+                    if (neuralRes.getOk()) {
+                        return;
+                    }
+                }
             } catch (Exception ignored) {
             } finally {
                 try {
@@ -284,8 +296,8 @@ public class CallAnnouncerService extends Service {
         String title = intent != null ? intent.getStringExtra(EXTRA_TITLE) : "اعلام صوتی";
         String rawText = intent != null ? intent.getStringExtra(EXTRA_TEXT) : "";
         String text = rawText != null ? rawText.trim() : "";
-        boolean isMale = intent != null && intent.getBooleanExtra(EXTRA_IS_MALE, false);
-        String extraVoice = intent != null ? intent.getStringExtra(EXTRA_VOICE_NAME) : null;
+        boolean isMale = false;
+        String extraVoice = "Kore";
         int repeat = intent != null ? Math.max(1, Math.min(2, intent.getIntExtra(EXTRA_REPEAT, 1))) : 1;
         boolean isCall = intent != null && intent.getBooleanExtra(EXTRA_IS_CALL, false);
 
@@ -342,13 +354,28 @@ public class CallAnnouncerService extends Service {
                 if (cancelled || sessionId != activeSessionId || myGen != GLOBAL_PLAY_GEN.get()) return;
                 if (!playWavFile(sessionId, wavFile, repeat)) {
                     if (myGen == GLOBAL_PLAY_GEN.get()) {
-                        fallbackOfflineSpeak(sessionId, title, singleText, isMale, repeat, isCall);
+                        new Thread(() -> tryNeuralThenBilingualFallback(sessionId, myGen, title, singleText, isMale, repeat, isCall)).start();
                     }
                 }
             });
             return;
         }
 
+        tryNeuralThenBilingualFallback(sessionId, myGen, title, singleText, isMale, repeat, isCall);
+    }
+
+    private void tryNeuralThenBilingualFallback(int sessionId, long myGen, String title, String singleText, boolean isMale, int repeat, boolean isCall) {
+        if (cancelled || sessionId != activeSessionId || myGen != GLOBAL_PLAY_GEN.get()) return;
+        String spoken = repeat == 2 ? (singleText + " . " + singleText) : singleText;
+        OfflinePersianTts.SpeakResult res = OfflinePersianTts.speakWithEngine(this, null, spoken, 1.0f, null);
+        if (res.getOk()) {
+            handler.post(() -> {
+                if (sessionId == activeSessionId) {
+                    stopSelfSafely();
+                }
+            });
+            return;
+        }
         handler.post(() -> {
             if (!cancelled && sessionId == activeSessionId && myGen == GLOBAL_PLAY_GEN.get()) {
                 fallbackOfflineSpeak(sessionId, title, singleText, isMale, repeat, isCall);

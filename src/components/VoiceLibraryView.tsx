@@ -28,6 +28,7 @@ import {
   unlockAudioPlayback,
 } from '../services/speechEngine';
 import type {AudioLibraryEntry, VoiceName} from '../types/app';
+import {OfflineEngineLab} from './OfflineEngineLab';
 
 interface VoiceLibraryViewProps {
   clips: AudioLibraryEntry[];
@@ -76,6 +77,7 @@ export const VoiceLibraryView: React.FC<VoiceLibraryViewProps> = ({
   const [selectedStyleId, setSelectedStyleId] = useState('warm');
   const [isBuildingCustom, setIsBuildingCustom] = useState(false);
 
+  const [viewMode, setViewMode] = useState<'lab' | 'online'>('lab');
   const [packProgress, setPackProgress] = useState<{current: number; total: number} | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
 
@@ -295,7 +297,48 @@ export const VoiceLibraryView: React.FC<VoiceLibraryViewProps> = ({
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      {/* Mode Switcher Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl bg-white dark:bg-[#121E1C] border border-slate-200/80 dark:border-emerald-950/70 p-3">
+        <div className="grid grid-cols-2 gap-2 w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={() => setViewMode('lab')}
+            className={`min-h-[44px] px-4 rounded-xl text-xs sm:text-sm font-bold transition-colors cursor-pointer ${
+              viewMode === 'lab'
+                ? 'bg-emerald-700 text-white'
+                : 'bg-slate-100 dark:bg-[#0B1312] text-slate-700 dark:text-slate-300'
+            }`}
+          >
+            آزمایشگاه ۴ موتور آفلاین
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('online')}
+            className={`min-h-[44px] px-4 rounded-xl text-xs sm:text-sm font-bold transition-colors cursor-pointer ${
+              viewMode === 'online'
+                ? 'bg-emerald-700 text-white'
+                : 'bg-slate-100 dark:bg-[#0B1312] text-slate-700 dark:text-slate-300'
+            }`}
+          >
+            صداهای آنلاین روان (نگین، نسیم و...)
+          </button>
+        </div>
+
+        <div className="text-xs text-slate-500 dark:text-slate-400 px-2 tabular-nums">
+          {toPersianDigits(clips.length)} کلیپ آنلاین ذخیره‌شده ({totalSizeLabel})
+        </div>
+      </div>
+
+      {viewMode === 'lab' ? (
+        <OfflineEngineLab
+          speechRate={speechRate}
+          onUpdateRate={onUpdateRate}
+          onStopAll={onStopSpeech}
+          onStatusToast={onStatusToast}
+        />
+      ) : (
+        <div className="space-y-8">
       {/* Header & Offline Cache Manager */}
       <section className="rounded-2xl bg-white dark:bg-[#121E1C] border border-slate-200/80 dark:border-emerald-950/70 p-6 sm:p-8">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
@@ -582,6 +625,8 @@ export const VoiceLibraryView: React.FC<VoiceLibraryViewProps> = ({
           </div>
         </section>
       </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,1 +1,161 @@
-if(!self.define){let e,i={};const s=(s,n)=>(s=new URL(s+".js",n).href,i[s]||new Promise(i=>{if("document"in self){const e=document.createElement("script");e.src=s,e.onload=i,document.head.appendChild(e)}else e=s,importScripts(s),i()}).then(()=>{let e=i[s];if(!e)throw new Error(`Module ${s} didn’t register its module`);return e}));self.define=(n,a)=>{const o=e||("document"in self?document.currentScript.src:"")||location.href;if(i[o])return;let c={};const r=e=>s(e,o),t={module:{uri:o},exports:c,require:r};i[o]=Promise.all(n.map(e=>t[e]||r(e))).then(e=>(a(...e),c))}}define(["./workbox-835c8c05"],function(e){"use strict";importScripts("/sw-notifications.js"),self.skipWaiting(),e.clientsClaim(),e.precacheAndRoute([{url:"sw-notifications.js",revision:"cc7e116baa56bab425cca3aeaedf08bd"},{url:"pwa-maskable-512x512.png",revision:"bb891985fade4e3eb2932eb938afc88e"},{url:"pwa-512x512.png",revision:"13e42577daef8f4f35a64d6a3a82271f"},{url:"pwa-192x192.png",revision:"9759bede1947f1e50179d5a76cedb6b2"},{url:"index.html",revision:"178a42c2eeeec56b58719fcab13fc1dd"},{url:"icon.svg",revision:"1221a8f76e4b2cbb2d423f251f578012"},{url:"favicon.ico",revision:"afba9aa520deea453cbf6e7d090d7fbd"},{url:"apple-touch-icon.png",revision:"fdb0f65d756a5bfd695f9e7f72b5b087"},{url:"assets/workbox-window.prod.es5-CzJxx9q2.js",revision:null},{url:"assets/index-C87EDc-7.css",revision:null},{url:"assets/index-BeKDbXHO.js",revision:null},{url:"apple-touch-icon.png",revision:"fdb0f65d756a5bfd695f9e7f72b5b087"},{url:"icon.svg",revision:"1221a8f76e4b2cbb2d423f251f578012"},{url:"pwa-192x192.png",revision:"9759bede1947f1e50179d5a76cedb6b2"},{url:"pwa-512x512.png",revision:"13e42577daef8f4f35a64d6a3a82271f"},{url:"pwa-maskable-512x512.png",revision:"bb891985fade4e3eb2932eb938afc88e"},{url:"sw-notifications.js",revision:"cc7e116baa56bab425cca3aeaedf08bd"},{url:"manifest.webmanifest",revision:"2cc3092c91f160fca64603a10392d9ee"}],{}),e.cleanupOutdatedCaches(),e.registerRoute(new e.NavigationRoute(e.createHandlerBoundToURL("/index.html"),{denylist:[/^\/__\/auth/,/^\/api\//]})),e.registerRoute(/^https:\/\/fonts\.googleapis\.com\/.*/i,new e.CacheFirst({cacheName:"google-fonts-cache",plugins:[new e.ExpirationPlugin({maxEntries:10,maxAgeSeconds:31536e3}),new e.CacheableResponsePlugin({statuses:[0,200]})]}),"GET"),e.registerRoute(/^https:\/\/fonts\.gstatic\.com\/.*/i,new e.CacheFirst({cacheName:"gstatic-fonts-cache",plugins:[new e.ExpirationPlugin({maxEntries:10,maxAgeSeconds:31536e3}),new e.CacheableResponsePlugin({statuses:[0,200]})]}),"GET")});
+/**
+ * Copyright 2018 Google Inc. All Rights Reserved.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+// If the loader is already loaded, just stop.
+if (!self.define) {
+  let registry = {};
+
+  // Used for `eval` and `importScripts` where we can't get script URL by other means.
+  // In both cases, it's safe to use a global var because those functions are synchronous.
+  let nextDefineUri;
+
+  const singleRequire = (uri, parentUri) => {
+    uri = new URL(uri + ".js", parentUri).href;
+    return registry[uri] || (
+      
+        new Promise(resolve => {
+          if ("document" in self) {
+            const script = document.createElement("script");
+            script.src = uri;
+            script.onload = resolve;
+            document.head.appendChild(script);
+          } else {
+            nextDefineUri = uri;
+            importScripts(uri);
+            resolve();
+          }
+        })
+      
+      .then(() => {
+        let promise = registry[uri];
+        if (!promise) {
+          throw new Error(`Module ${uri} didn’t register its module`);
+        }
+        return promise;
+      })
+    );
+  };
+
+  self.define = (depsNames, factory) => {
+    const uri = nextDefineUri || ("document" in self ? document.currentScript.src : "") || location.href;
+    if (registry[uri]) {
+      // Module is already loading or loaded.
+      return;
+    }
+    let exports = {};
+    const require = depUri => singleRequire(depUri, uri);
+    const specialDeps = {
+      module: { uri },
+      exports,
+      require
+    };
+    registry[uri] = Promise.all(depsNames.map(
+      depName => specialDeps[depName] || require(depName)
+    )).then(deps => {
+      factory(...deps);
+      return exports;
+    });
+  };
+}
+define(['./workbox-afac4cd2'], (function (workbox) { 'use strict';
+
+  importScripts("/sw-notifications.js");
+  self.skipWaiting();
+  workbox.clientsClaim();
+  /**
+   * The precacheAndRoute() method efficiently caches and responds to
+   * requests for URLs in the manifest.
+   * See https://goo.gl/S9QRab
+   */
+  workbox.precacheAndRoute([{
+    "url": "sw-notifications.js",
+    "revision": "cc7e116baa56bab425cca3aeaedf08bd"
+  }, {
+    "url": "pwa-maskable-512x512.png",
+    "revision": "bb891985fade4e3eb2932eb938afc88e"
+  }, {
+    "url": "pwa-512x512.png",
+    "revision": "13e42577daef8f4f35a64d6a3a82271f"
+  }, {
+    "url": "pwa-192x192.png",
+    "revision": "9759bede1947f1e50179d5a76cedb6b2"
+  }, {
+    "url": "index.html",
+    "revision": "129300532e034da5e3aada12837d8525"
+  }, {
+    "url": "icon.svg",
+    "revision": "4f748340753a47785f077697aaf8b10a"
+  }, {
+    "url": "favicon.ico",
+    "revision": "afba9aa520deea453cbf6e7d090d7fbd"
+  }, {
+    "url": "apple-touch-icon.png",
+    "revision": "fdb0f65d756a5bfd695f9e7f72b5b087"
+  }, {
+    "url": "assets/workbox-window.prod.es5-Bd17z0YL.js",
+    "revision": null
+  }, {
+    "url": "assets/pocketFarsiWorker-DVC2cazq.js",
+    "revision": null
+  }, {
+    "url": "assets/index-CvBJiXM0.js",
+    "revision": null
+  }, {
+    "url": "assets/index-BdDVKsRX.css",
+    "revision": null
+  }, {
+    "url": "apple-touch-icon.png",
+    "revision": "fdb0f65d756a5bfd695f9e7f72b5b087"
+  }, {
+    "url": "icon.svg",
+    "revision": "4f748340753a47785f077697aaf8b10a"
+  }, {
+    "url": "pwa-192x192.png",
+    "revision": "9759bede1947f1e50179d5a76cedb6b2"
+  }, {
+    "url": "pwa-512x512.png",
+    "revision": "13e42577daef8f4f35a64d6a3a82271f"
+  }, {
+    "url": "pwa-maskable-512x512.png",
+    "revision": "bb891985fade4e3eb2932eb938afc88e"
+  }, {
+    "url": "sw-notifications.js",
+    "revision": "cc7e116baa56bab425cca3aeaedf08bd"
+  }, {
+    "url": "manifest.webmanifest",
+    "revision": "11213665a47b9450c3e9842812b04cd1"
+  }], {});
+  workbox.cleanupOutdatedCaches();
+  workbox.registerRoute(new workbox.NavigationRoute(workbox.createHandlerBoundToURL("/index.html"), {
+    denylist: [/^\/__\/auth/, /^\/api\//]
+  }));
+  workbox.registerRoute(/^https:\/\/fonts\.googleapis\.com\/.*/i, new workbox.CacheFirst({
+    "cacheName": "google-fonts-cache",
+    plugins: [new workbox.ExpirationPlugin({
+      maxEntries: 10,
+      maxAgeSeconds: 31536000
+    }), new workbox.CacheableResponsePlugin({
+      statuses: [0, 200]
+    })]
+  }), 'GET');
+  workbox.registerRoute(/^https:\/\/fonts\.gstatic\.com\/.*/i, new workbox.CacheFirst({
+    "cacheName": "gstatic-fonts-cache",
+    plugins: [new workbox.ExpirationPlugin({
+      maxEntries: 10,
+      maxAgeSeconds: 31536000
+    }), new workbox.CacheableResponsePlugin({
+      statuses: [0, 200]
+    })]
+  }), 'GET');
+
+}));

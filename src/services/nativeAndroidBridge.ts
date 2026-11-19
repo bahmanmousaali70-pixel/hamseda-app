@@ -1,4 +1,4 @@
-import {Capacitor, registerPlugin} from '@capacitor/core';
+import {Capacitor, type PluginListenerHandle, registerPlugin} from '@capacitor/core';
 import {VOICE_PERSONAS} from '../data/persianLibrary';
 import type {
   CallerContact,
@@ -93,6 +93,38 @@ interface RoozhayeNativePlugin {
     error?: string;
   }>;
   saveLearnedPhonetics(options: {phoneticsJson: string}): Promise<{ok: boolean; count?: number}>;
+  speakOfflineNeuralPersian(options: {text: string; rate: number}): Promise<{ok: boolean; error?: string}>;
+  getOfflineEngineStatuses(): Promise<{
+    ok: boolean;
+    activeEngineId?: string;
+    enginesJson?: string;
+    error?: string;
+  }>;
+  installOfflineEngine(options: {engineId: string}): Promise<{ok: boolean; error?: string}>;
+  deleteOfflineEngine(options: {engineId: string}): Promise<{ok: boolean}>;
+  setActiveOfflineEngine(options: {engineId: string}): Promise<{ok: boolean}>;
+  speakOfflineEngine(options: {
+    engineId?: string;
+    text: string;
+    rate: number;
+    goftari?: boolean;
+  }): Promise<{
+    ok: boolean;
+    engineId?: string;
+    synthesisMs?: number;
+    durationSec?: number;
+    rtf?: number;
+    error?: string;
+  }>;
+  addListener(
+    eventName: 'offlineTtsProgress',
+    listenerFunc: (event: {
+      engineId: string;
+      bytesDownloaded: number;
+      totalBytes: number;
+      stage: string;
+    }) => void
+  ): Promise<PluginListenerHandle>;
   speakNativeBilingual(options: {text: string; gender: 'male' | 'female'; rate: number}): Promise<{ok: boolean}>;
   testNativeCallAnnouncement(options: {name: string; script: string; gender: 'male' | 'female'; voiceName?: string}): Promise<{ok: boolean}>;
   testNativeSmsAnnouncement(options: {sender: string; body: string; gender: 'male' | 'female'; voiceName?: string}): Promise<{ok: boolean}>;
@@ -105,11 +137,15 @@ interface RoozhayeNativePlugin {
   listenOncePersian(): Promise<{
     ok: boolean;
     transcript?: string;
+    transcripts?: string[];
     permissionRequired?: boolean;
     errorCode?: number;
     error?: string;
   }>;
   stopListening(): Promise<{ok: boolean}>;
+  startWakeWordService(options: {assistantName: string}): Promise<{ok: boolean; permissionRequired?: boolean; message?: string}>;
+  stopWakeWordService(): Promise<{ok: boolean}>;
+  consumePendingWakeCommand(): Promise<{command: string}>;
   executeDeviceAction(options: {
     action: string;
     phone?: string;
@@ -403,6 +439,145 @@ export async function syncSchedulesToNative(
   }
 }
 
+export async function speakOfflineNeuralPersian(text: string, rate = 1): Promise<boolean> {
+  if (!isNativeAndroid()) return false;
+  try {
+    const result = await RoozhayeNative.speakOfflineNeuralPersian({text, rate});
+    return Boolean(result.ok);
+  } catch {
+    return false;
+  }
+}
+
+export interface NativeOfflineEngineStatus {
+  id: 'ava_gyro' | 'mana_piper' | 'amir_piper';
+  installed: boolean;
+  bundledInApk: boolean;
+  sizeBytes: number;
+  isActive: boolean;
+}
+
+export async function getOfflineEngineStatusesNative(): Promise<{
+  ok: boolean;
+  activeEngineId: string;
+  engines: NativeOfflineEngineStatus[];
+  error?: string;
+}> {
+  if (!isNativeAndroid()) {
+    return {ok: false, activeEngineId: 'ava_gyro', engines: [], error: 'فقط در نسخه اندروید (APK)'};
+  }
+  try {
+    const res = await RoozhayeNative.getOfflineEngineStatuses();
+    if (!res.ok) {
+      return {
+        ok: false,
+        activeEngineId: res.activeEngineId || 'ava_gyro',
+        engines: [],
+        error: res.error,
+      };
+    }
+    const parsed = res.enginesJson
+      ? (JSON.parse(res.enginesJson) as NativeOfflineEngineStatus[])
+      : [];
+    return {
+      ok: true,
+      activeEngineId: res.activeEngineId || 'ava_gyro',
+      engines: Array.isArray(parsed) ? parsed : [],
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      activeEngineId: 'ava_gyro',
+      engines: [],
+      error: err instanceof Error ? err.message : 'خطا در بررسی وضعیت موتورها',
+    };
+  }
+}
+
+export async function installOfflineEngineNative(
+  engineId: 'mana_piper' | 'amir_piper'
+): Promise<{ok: boolean; error?: string}> {
+  if (!isNativeAndroid()) {
+    return {ok: false, error: 'نصب موتورهای Sherpa-ONNX فقط در نسخه اندروید (APK) انجام می‌شود.'};
+  }
+  try {
+    return await RoozhayeNative.installOfflineEngine({engineId});
+  } catch (err) {
+    return {ok: false, error: err instanceof Error ? err.message : 'خطا در دانلود موتور'};
+  }
+}
+
+export async function deleteOfflineEngineNative(
+  engineId: 'mana_piper' | 'amir_piper'
+): Promise<boolean> {
+  if (!isNativeAndroid()) return false;
+  try {
+    const res = await RoozhayeNative.deleteOfflineEngine({engineId});
+    return Boolean(res.ok);
+  } catch {
+    return false;
+  }
+}
+
+export async function setActiveOfflineEngineNative(
+  engineId: 'ava_gyro' | 'mana_piper' | 'amir_piper'
+): Promise<boolean> {
+  if (!isNativeAndroid()) return false;
+  try {
+    const res = await RoozhayeNative.setActiveOfflineEngine({engineId});
+    return Boolean(res.ok);
+  } catch {
+    return false;
+  }
+}
+
+export async function speakOfflineEngineNative(options: {
+  engineId?: 'ava_gyro' | 'mana_piper' | 'amir_piper';
+  text: string;
+  rate?: number;
+  goftari?: boolean;
+}): Promise<{
+  ok: boolean;
+  engineId?: string;
+  synthesisMs?: number;
+  durationSec?: number;
+  rtf?: number;
+  error?: string;
+}> {
+  if (!isNativeAndroid()) {
+    return {ok: false, error: 'فقط در نسخه اندروید (APK) در دسترس است.'};
+  }
+  try {
+    return await RoozhayeNative.speakOfflineEngine({
+      engineId: options.engineId,
+      text: options.text,
+      rate: options.rate ?? 1.0,
+      goftari: options.goftari,
+    });
+  } catch (err) {
+    return {ok: false, error: err instanceof Error ? err.message : 'خطا در پخش آفلاین'};
+  }
+}
+
+export async function addOfflineInstallProgressListener(
+  cb: (event: {
+    engineId: string;
+    bytesDownloaded: number;
+    totalBytes: number;
+    stage: string;
+  }) => void
+): Promise<() => void> {
+  if (!isNativeAndroid()) return () => {};
+  try {
+    const handle = await RoozhayeNative.addListener('offlineTtsProgress', cb);
+    return () => {
+      handle.remove().catch(() => {});
+    };
+  } catch {
+    return () => {};
+  }
+}
+
 export async function speakNativeBilingual(
   text: string,
   gender: 'male' | 'female',
@@ -531,6 +706,7 @@ export async function setDeviceIdentityNative(options: {
 export async function listenOncePersianNative(): Promise<{
   ok: boolean;
   transcript?: string;
+  transcripts?: string[];
   permissionRequired?: boolean;
   errorCode?: number;
   error?: string;
@@ -542,6 +718,34 @@ export async function listenOncePersianNative(): Promise<{
     return await RoozhayeNative.listenOncePersian();
   } catch (err) {
     return {ok: false, error: err instanceof Error ? err.message : 'خطای میکروفون'};
+  }
+}
+
+export async function startNativeWakeWordService(assistantName: string): Promise<{ok: boolean; permissionRequired?: boolean; message?: string}> {
+  if (!isNativeAndroid()) return {ok: false};
+  try {
+    return await RoozhayeNative.startWakeWordService({assistantName});
+  } catch (err) {
+    return {ok: false, message: err instanceof Error ? err.message : 'شروع شنود پس‌زمینه ممکن نشد'};
+  }
+}
+
+export async function consumePendingWakeCommandNative(): Promise<string> {
+  if (!isNativeAndroid()) return '';
+  try {
+    const result = await RoozhayeNative.consumePendingWakeCommand();
+    return result.command?.trim() || '';
+  } catch {
+    return '';
+  }
+}
+
+export async function stopNativeWakeWordService(): Promise<void> {
+  if (!isNativeAndroid()) return;
+  try {
+    await RoozhayeNative.stopWakeWordService();
+  } catch {
+    // Native service may already be stopped.
   }
 }
 

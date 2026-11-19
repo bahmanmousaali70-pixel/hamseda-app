@@ -9,7 +9,74 @@ import {
   isRiffWavBuffer,
   saveAudioClip,
 } from './audioLibraryDb';
-import {isNativeAndroid, precacheNativeWav, speakNativeBilingual, stopNativeAudio} from './nativeAndroidBridge';
+import {
+  isNativeAndroid,
+  precacheNativeWav,
+  speakNativeBilingual,
+  speakOfflineEngineNative,
+  speakOfflineNeuralPersian,
+  stopNativeAudio,
+} from './nativeAndroidBridge';
+import {
+  getPocketFarsiStatus,
+  type PocketVoicePreset,
+  speakWithPocketFarsi,
+  stopPocketFarsi,
+} from './pocketFarsiEngine';
+
+export type OfflineEngineId = 'ava_gyro' | 'mana_piper' | 'amir_piper' | 'pocket_farsi';
+const PREFERRED_OFFLINE_ENGINE_KEY = 'hamseda_preferred_offline_engine';
+const POCKET_VOICE_KEY = 'hamseda_pocket_voice_preset';
+
+export function getPreferredOfflineEngineId(): OfflineEngineId {
+  try {
+    const raw = localStorage.getItem(PREFERRED_OFFLINE_ENGINE_KEY);
+    if (
+      raw === 'ava_gyro' ||
+      raw === 'mana_piper' ||
+      raw === 'amir_piper' ||
+      raw === 'pocket_farsi'
+    ) {
+      return raw;
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return 'ava_gyro';
+}
+
+export function setPreferredOfflineEngineId(id: OfflineEngineId): void {
+  try {
+    localStorage.setItem(PREFERRED_OFFLINE_ENGINE_KEY, id);
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export function getPocketVoicePreset(): PocketVoicePreset {
+  try {
+    const raw = localStorage.getItem(POCKET_VOICE_KEY);
+    if (
+      raw === 'female_short' ||
+      raw === 'male_news' ||
+      raw === 'hello' ||
+      raw === 'custom'
+    ) {
+      return raw;
+    }
+  } catch {
+    // ignore
+  }
+  return 'female_short';
+}
+
+export function setPocketVoicePreset(preset: PocketVoicePreset): void {
+  try {
+    localStorage.setItem(POCKET_VOICE_KEY, preset);
+  } catch {
+    // ignore
+  }
+}
 
 let sharedAudioCtx: AudioContext | null = null;
 let activeSourceNode: AudioBufferSourceNode | null = null;
@@ -99,6 +166,7 @@ export function stopAllSpeech(): void {
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     window.speechSynthesis.cancel();
   }
+  stopPocketFarsi();
   if (isNativeAndroid()) {
     stopNativeAudio().catch(() => {});
   }
@@ -360,21 +428,29 @@ export async function generateAndCacheGeminiWav(params: {
   clipId?: string;
   forceRefresh?: boolean;
 }): Promise<{id: string; buffer: ArrayBuffer; isStudioWav: boolean} | {fallbackOffline: true; reason: string}> {
-  const voiceName = params.voiceName ?? 'Kore';
+  const voiceName: VoiceName = params.voiceName ?? 'Kore';
   const id = params.clipId ?? hashTextKey(params.text, voiceName);
   const persona = getPersonaInfo(voiceName);
   const style = [persona.tone, params.style ?? 'Fluent natural Tehran Persian voice.'].filter(Boolean).join(' ');
 
-  const res = await fetch(apiUrl('/api/tts'), {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 12000);
+  let res: Response;
+  try {
+    res = await fetch(apiUrl('/api/tts'), {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
+    signal: controller.signal,
     body: JSON.stringify({
       text: params.text,
       voiceName,
       style,
       forceRefresh: Boolean(params.forceRefresh),
     }),
-  });
+    });
+  } finally {
+    window.clearTimeout(timeout);
+  }
 
   const parsed = await safeReadJsonResponse<{
     audioBase64?: string;
@@ -448,7 +524,7 @@ export async function speakFluentPersian(
   stopAllSpeech();
   unlockAudioPlayback();
   const token = playbackToken;
-  const voiceName = options.voiceName ?? 'Kore';
+  const voiceName: VoiceName = options.voiceName ?? 'Kore';
   const persona = getPersonaInfo(voiceName);
   const rate = options.rate ?? 1;
   const clipId = options.clipId ?? hashTextKey(options.text, voiceName);
@@ -472,7 +548,9 @@ export async function speakFluentPersian(
     }
 
     // 2. If online (or existing cached clip is legacy/fallback), fetch styled Studio Gemini WAV
-    if (navigator.onLine) {
+    {
+      // Do not trust navigator.onLine inside Android WebView; attempt the cloud TTS
+      // and fall back to the local engine only after a bounded network timeout.
       options.onLoading?.();
       try {
         const result = await generateAndCacheGeminiWav({
@@ -514,24 +592,54 @@ export async function speakFluentPersian(
 
     if (token !== playbackToken) return 'offline-speech';
 
-    // 3. Native Android TTS (if inside APK) or Web Speech bilingual fallback
+    // 3. Offline TTS engines (Pocket TTS Farsi ONNX / Sherpa-ONNX native engines / Web Speech fallback)
     options.onStart?.('offline-speech');
     let ok = false;
-    if (isNativeAndroid()) {
-      ok = await speakNativeBilingual(options.text, persona.gender, rate);
+    const preferredOffline = getPreferredOfflineEngineId();
+
+    if (preferredOffline === 'pocket_farsi') {
+      const pocketStatus = await getPocketFarsiStatus();
+      if (token !== playbackToken) return 'offline-speech';
+      if (pocketStatus.installed) {
+        const pocketVoice = getPocketVoicePreset();
+        const safeVoice =
+          pocketVoice === 'custom' && !pocketStatus.customVoiceLoaded ? 'female_short' : pocketVoice;
+        const pocketRes = await speakWithPocketFarsi(options.text, safeVoice, rate);
+        ok = pocketRes.ok;
+      }
       if (token !== playbackToken) return 'offline-speech';
     }
+
+    if (!ok && isNativeAndroid()) {
+      const nativeEngine =
+        preferredOffline === 'pocket_farsi' ? 'ava_gyro' : preferredOffline;
+      const nativeRes = await speakOfflineEngineNative({
+        engineId: nativeEngine,
+        text: options.text,
+        rate,
+      });
+      ok = nativeRes.ok;
+      if (!ok) ok = await speakOfflineNeuralPersian(options.text, rate);
+      if (!ok) ok = await speakNativeBilingual(options.text, persona.gender, rate);
+      if (token !== playbackToken) return 'offline-speech';
+    }
+
+    if (!ok && preferredOffline !== 'pocket_farsi') {
+      const pocketStatus = await getPocketFarsiStatus();
+      if (token !== playbackToken) return 'offline-speech';
+      if (pocketStatus.installed) {
+        const pocketRes = await speakWithPocketFarsi(options.text, getPocketVoicePreset(), rate);
+        ok = pocketRes.ok;
+      }
+      if (token !== playbackToken) return 'offline-speech';
+    }
+
     if (!ok) {
       ok = await speakOfflineBilingual(options.text, rate, persona.gender, token);
       if (token === playbackToken) options.onEnd?.();
       return 'offline-speech';
     }
     options.onEnd?.();
-    if (!ok) {
-      options.onError?.(
-        'برای پخش صوت، اتصال اینترنت (و در صورت نیاز فیلترشکن برای برنامه) را بررسی کنید تا فایل در حافظه آفلاین ذخیره شود.'
-      );
-    }
     return 'offline-speech';
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'خطا در پخش صوت';
