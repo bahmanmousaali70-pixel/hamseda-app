@@ -90,7 +90,7 @@ interface AssistantViewProps {
   onSpeakText: (text: string, title: string, category: 'custom' | 'morning' | 'energy' | 'gratitude') => void;
   onStopSpeech: () => void;
   onOpenTab: (tab: AppTab) => void;
-  onTriggerMedia: (tab: 'tracks' | 'radio', query?: string) => void;
+  onTriggerMedia: (tab: 'tracks' | 'radio' | 'podcasts', query?: string) => void;
   onAddGoalTitle: (title: string) => void;
   onStatusToast: (msg: string) => void;
 }
@@ -148,6 +148,7 @@ const ACTION_LABELS: Partial<Record<AssistantActionType, string>> = {
   open_tab: 'تغییر بخش برنامه',
   play_radio: 'رادیو زنده',
   play_music: 'موزیک شبانه',
+  play_podcast: 'جستجوی پادکست',
   stop_audio: 'توقف پخش',
   add_goal: 'افزودن هدف امروز',
 };
@@ -439,6 +440,9 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
         } else if (result.action === 'play_music') {
           onOpenTab('night');
           onTriggerMedia('tracks', result.query);
+        } else if (result.action === 'play_podcast') {
+          onOpenTab('night');
+          onTriggerMedia('podcasts', result.query);
         } else if (result.action === 'stop_audio') {
           onStopSpeech();
         } else if (result.action === 'add_goal' && result.goalTitle?.trim()) {
