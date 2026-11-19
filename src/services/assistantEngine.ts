@@ -471,6 +471,14 @@ export function parseOfflineAssistantCommand(
       replyText: matchedApp === 'دوربین' ? 'دوربین را باز می‌کنم.' : `در حال باز کردن «${matchedApp}» هستم.`};
   }
 
+  // Natural UI interaction: "روی ارسال بزن", "روی جستجو کلیک کن".
+  const tapMatch = commandRaw.match(/(?:روی|روى|رو)\s+(.+?)\s+(?:بزن|کلیک کن|لمس کن|انتخاب کن)$/);
+  if (tapMatch && tapMatch[1].trim().length > 1) {
+    const label = tapMatch[1].trim();
+    return {action: 'accessibility_click', query: label,
+      replyText: `روی «${label}» می‌زنم.`};
+  }
+
   // 5. Ringer / Silent / Vibrate / Normal
   if (/(سایلنت|حالت سکوت|گوشی رو بی صدا|گوشی را بی صدا|ساکت کن گوشی)/.test(norm)) {
     return {
