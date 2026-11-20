@@ -167,6 +167,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
   const [smsImportantSenders, setSmsImportantSenders] = useState(() => localStorage.getItem('rmz_sms_important_senders') ?? '');
   const [smsQuietHours, setSmsQuietHours] = useState(() => localStorage.getItem('rmz_sms_quiet_hours') ?? '0');
   const [smsSummarize, setSmsSummarize] = useState(() => localStorage.getItem('rmz_sms_summarize') !== 'false');
+  const [smsFilterOperatorPromotions, setSmsFilterOperatorPromotions] = useState(() => localStorage.getItem('rmz_sms_filter_operator_promotions') !== 'false');
   const [smsPolicySaving, setSmsPolicySaving] = useState(false);
 
   const [partnerEmailInput, setPartnerEmailInput] = useState(spaceInfo?.partnerEmail ?? '');
@@ -1227,6 +1228,10 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
             </select>
           </div>
         </div>
+        <label className="flex items-start gap-2 rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/70 dark:bg-emerald-950/25 p-3 text-xs text-slate-700 dark:text-slate-200">
+          <input type="checkbox" checked={smsFilterOperatorPromotions} onChange={(e) => setSmsFilterOperatorPromotions(e.target.checked)} className="mt-0.5 accent-emerald-700" />
+          <span><strong>پیامک‌های تبلیغاتی اپراتورها خوانده نشوند</strong><span className="block mt-1 leading-5 text-slate-500 dark:text-slate-400">تبلیغات قابل‌شناسایی ایرانسل، همراه اول و رایتل را بی‌صدا رد می‌کند؛ پیامک‌های خدماتی و رمز یک‌بارمصرف نباید صرفاً به‌خاطر نام اپراتور حذف شوند.</span></span>
+        </label>
         <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200">
           <input type="checkbox" checked={smsSummarize} onChange={(e) => setSmsSummarize(e.target.checked)} className="accent-emerald-700" />
           خواندن کوتاه و خلاصه‌وار پیام‌های طولانی
@@ -1239,12 +1244,14 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
             localStorage.setItem('rmz_sms_important_senders', smsImportantSenders);
             localStorage.setItem('rmz_sms_quiet_hours', smsQuietHours);
             localStorage.setItem('rmz_sms_summarize', String(smsSummarize));
+            localStorage.setItem('rmz_sms_filter_operator_promotions', String(smsFilterOperatorPromotions));
             const ok = await saveSmsAnnouncementPolicyNative({
               blockedSenders: smsBlockedSenders,
               blockedKeywords: smsBlockedKeywords,
               importantSenders: smsImportantSenders,
               quietHours: Number(smsQuietHours),
               summarize: smsSummarize,
+              filterOperatorPromotions: smsFilterOperatorPromotions,
             });
             setSmsPolicySaving(false);
             onStatusToast(ok ? 'تنظیمات فیلتر پیامک روی گوشی ذخیره شد.' : 'ذخیره تنظیمات ناموفق بود؛ نسخه APK اندروید لازم است.');
