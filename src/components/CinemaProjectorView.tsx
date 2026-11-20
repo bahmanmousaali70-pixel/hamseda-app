@@ -255,7 +255,12 @@ export const CinemaProjectorView: React.FC = () => {
             بازکردن تنظیمات اتصال بی‌سیم گوشی
           </button>
         </div>
-        <div className="rounded-lg bg-white/70 dark:bg-slate-900/40 border border-sky-100 dark:border-sky-900 p-3 text-[11px] leading-6 text-slate-700 dark:text-slate-200 space-y-1">\n          <p><strong>مراحل اتصال:</strong> دکمه Cast را بزن، در فهرست گوشی نام پروژکتور Owlenz را انتخاب کن و اتصال را تأیید کن. سپس فیلم را روی گوشی پخش کن.</p>\n          <p>فیلترشکن باید روی گوشی روشن باشد؛ ترافیک اینترنت گوشی از VPN عبور می‌کند و برای آینه‌کردن تصویر، نصب VPN روی پروژکتور لازم نیست. اگر پروژکتور دیده نشد، حالت Screen Mirroring / Miracast / WiFi Display را از منوی خود پروژکتور فعال کن.</p>\n          <p>برخی سرویس‌های اشتراکی به‌دلیل DRM ممکن است هنگام آینه‌کردن تصویر سیاه نشان دهند؛ این محدودیت را نمی‌توان با هم‌صدا دور زد.</p>\n        </div>\n        {castDevices.length > 0 && (
+        <div className="rounded-lg bg-white/70 dark:bg-slate-900/40 border border-sky-100 dark:border-sky-900 p-3 text-[11px] leading-6 text-slate-700 dark:text-slate-200 space-y-1">
+          <p><strong>مراحل اتصال:</strong> دکمه Cast را بزن، در فهرست گوشی نام پروژکتور Owlenz را انتخاب کن و اتصال را تأیید کن. سپس فیلم را روی گوشی پخش کن.</p>
+          <p>فیلترشکن باید روی گوشی روشن باشد؛ ترافیک اینترنت گوشی از VPN عبور می‌کند و برای آینه‌کردن تصویر، نصب VPN روی پروژکتور لازم نیست. اگر پروژکتور دیده نشد، حالت Screen Mirroring / Miracast / WiFi Display را از منوی خود پروژکتور فعال کن.</p>
+          <p>برخی سرویس‌های اشتراکی به‌دلیل DRM ممکن است هنگام آینه‌کردن تصویر سیاه نشان دهند؛ این محدودیت را نمی‌توان با هم‌صدا دور زد.</p>
+        </div>
+        {castDevices.length > 0 && (
           <div className="space-y-2">
             <label className="block text-xs font-semibold text-slate-800 dark:text-slate-100">دستگاه پیدا‌شده</label>
             <select value={selectedCastDevice} onChange={(event) => setSelectedCastDevice(event.target.value)} className="w-full min-h-[42px] px-3 rounded-lg border border-slate-200 dark:border-sky-900 bg-white dark:bg-[#0B1312] text-sm">
