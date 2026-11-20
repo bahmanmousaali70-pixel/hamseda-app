@@ -1867,6 +1867,87 @@ app.post('/api/assistant-chat', async (req, res) => {
   }
 });
 
+
+type PublicSearchResult = {title: string; url: string; snippet: string};
+
+function decodeSearchHtml(value: string): string {
+  return value.replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'").replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+    .replace(/&#(\d+);/g, (_m, n) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_m, n) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/\s+/g, ' ').trim();
+}
+
+function unwrapSearchUrl(rawUrl: string, base: string): string {
+  try {
+    const parsed = new URL(rawUrl, base);
+    const redirected = parsed.searchParams.get('q') || parsed.searchParams.get('uddg') || parsed.searchParams.get('url');
+    const candidate = redirected ? decodeURIComponent(redirected) : parsed.href;
+    if (/^https?:\/\//i.test(candidate) && !/^(https?:\/\/)?(www\.)?(google|duckduckgo)\.com\//i.test(candidate)) return candidate;
+  } catch {
+    // Ignore malformed result links.
+  }
+  return '';
+}
+
+async function searchPublicWeb(query: string): Promise<PublicSearchResult[]> {
+  const cleanQuery = query.trim().slice(0, 240);
+  if (!cleanQuery) return [];
+  const engines = [
+    {url: 'https://www.google.com/search?hl=fa&num=8&q=' + encodeURIComponent(cleanQuery), kind: 'google' as const, base: 'https://www.google.com'},
+    {url: 'https://html.duckduckgo.com/html/?q=' + encodeURIComponent(cleanQuery), kind: 'duckduckgo' as const, base: 'https://html.duckduckgo.com'},
+  ];
+  for (const engine of engines) {
+    try {
+      const response = await fetch(engine.url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml',
+          'Accept-Language': 'fa-IR,fa;q=0.9,en;q=0.8',
+        },
+        signal: AbortSignal.timeout(9000),
+      });
+      if (!response.ok) continue;
+      const html = await response.text();
+      const found: PublicSearchResult[] = [];
+      const seen = new Set<string>();
+      const anchors = [...html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)];
+      if (engine.kind === 'duckduckgo') {
+        const snippets = anchors.filter((m) => /\bresult__snippet\b/i.test(m[1])).map((m) => decodeSearchHtml(m[2]));
+        for (const match of anchors) {
+          if (!/\bresult__a\b/i.test(match[1])) continue;
+          const href = match[1].match(/\bhref=["']([^"']+)["']/i)?.[1] || '';
+          const url = unwrapSearchUrl(href, engine.base);
+          const title = decodeSearchHtml(match[2]);
+          if (!url || !title || seen.has(url)) continue;
+          seen.add(url);
+          found.push({title: title.slice(0, 140), url, snippet: snippets[found.length] || ''});
+          if (found.length >= 7) break;
+        }
+      } else {
+        const googleAnchors = [...html.matchAll(/<a\b([^>]*)>([\s\S]*?<h3\b[\s\S]*?<\/h3>[\s\S]*?)<\/a>/gi)];
+        for (let i = 0; i < googleAnchors.length; i++) {
+          const match = googleAnchors[i];
+          const href = match[1].match(/\bhref=["']([^"']+)["']/i)?.[1] || '';
+          const url = unwrapSearchUrl(href, engine.base);
+          const title = decodeSearchHtml(match[2]);
+          if (!url || !title || seen.has(url)) continue;
+          seen.add(url);
+          const nextIndex = googleAnchors[i + 1]?.index ?? Math.min(html.length, (match.index ?? 0) + 4200);
+          const snippet = decodeSearchHtml(html.slice((match.index ?? 0) + match[0].length, nextIndex));
+          found.push({title: title.slice(0, 140), url, snippet: snippet.slice(0, 420)});
+          if (found.length >= 7) break;
+        }
+      }
+      if (found.length) return found;
+    } catch (error) {
+      console.warn('Public web search ' + engine.kind + ' failed:', error instanceof Error ? error.message : error);
+    }
+  }
+  return [];
+}
+
 app.post('/api/assistant-command', async (req, res) => {
   const utterance = typeof req.body?.utterance === 'string' ? req.body.utterance.trim() : '';
   if (!utterance) {
@@ -2044,53 +2125,87 @@ ${JSON.stringify(compactContacts)}
 
     if (shouldSearchWeb) {
       const searchClient = getTtsAiClient() ?? ai;
+      const requestedQuery = (parsed.query || utterance).trim();
+      let gotGroundedAnswer = false;
       try {
         const searchPrompt =
           action === 'download_url'
-            ? `کاربر (${ownerSelf}) این مورد را برای پیدا کردن صفحه معتبر دانلود در اینترنت خواسته است: "${parsed.query || utterance}".
+            ? `کاربر (${ownerSelf}) این مورد را برای پیدا کردن صفحه معتبر دانلود در اینترنت خواسته است: "${requestedQuery}".
 به فارسی کوتاه و شفاف نتیجه را بگو و منابع/صفحات معتبر وب را پیدا کن تا لینک آن‌ها به کاربر نمایش داده شود.`
             : `به درخواست «${ownerSelf}» با استفاده از جستجوی زنده گوگل به فارسی بسیار روان، دقیق و خلاصه (در ۲ تا ۴ جمله مناسب خواندن صوتی) پاسخ بده:
-"${parsed.query || utterance}"`;
+"${requestedQuery}"`;
 
         const webRes = await searchClient.models.generateContent({
           model: 'gemini-4-hydrogen',
           contents: searchPrompt,
           config: {
             systemInstruction:
-              'پاسخ را کوتاه، دقیق و به فارسی روان بنویس تا هم خواندنی باشد و هم با صدای بلند دلنشین پخش شود. اطلاعات به‌روز اینترنتی را از جستجوی گوگل بگیر.',
+              'پاسخ را کوتاه، دقیق و به فارسی روان بنویس تا هم خواندنی باشد و هم با صدای بلند دلنشین پخش شود. اطلاعات به‌روز اینترنتی را از جستجوی گوگل بگیر. اگر جستجو انجام نشد یا منبع نداری، ادعای جستجو و آمار نکن.',
             tools: [{googleSearch: {}}],
           },
         });
 
-        const webText = (webRes.text ?? '').replace(/[#*_`]/g, '').trim();
+        const webText = (webRes.text ?? '').replace(/[#*_\`]/g, '').trim();
         const rawChunks = webRes.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [];
         const links: {title: string; url: string}[] = [];
         const seenUrls = new Set<string>();
-
         for (const ch of rawChunks) {
           const uri = ch?.web?.uri;
           if (uri && (uri.startsWith('https://') || uri.startsWith('http://')) && !seenUrls.has(uri)) {
             seenUrls.add(uri);
-            links.push({
-              title: (ch?.web?.title || uri).slice(0, 70),
-              url: uri,
-            });
+            links.push({title: (ch?.web?.title || uri).slice(0, 70), url: uri});
           }
           if (links.length >= 6) break;
         }
-
-        if (webText) {
+        if (webText && links.length > 0) {
           parsed.replyText = webText;
-        }
-        if (links.length > 0) {
           parsed.links = links;
-          if (action === 'download_url' && !parsed.downloadUrl) {
-            parsed.downloadUrl = links[0].url;
-            parsed.downloadTitle = links[0].title;
-          }
+          gotGroundedAnswer = true;
+        }
+        if (action === 'download_url' && links.length > 0 && !parsed.downloadUrl) {
+          parsed.downloadUrl = links[0].url;
+          parsed.downloadTitle = links[0].title;
         }
       } catch (searchErr) {
-        console.warn('Live web search grounding fallback:', searchErr instanceof Error ? searchErr.message : searchErr);
+        console.warn('Google Search grounding unavailable; trying public search fallback:', searchErr instanceof Error ? searchErr.message : searchErr);
+      }
+
+      if (!gotGroundedAnswer) {
+        const results = await searchPublicWeb(requestedQuery);
+        const googleSearchUrl = 'https://www.google.com/search?q=' + encodeURIComponent(requestedQuery);
+        if (results.length > 0) {
+          const sourceText = results.map((item, index) =>
+            '[' + (index + 1) + '] ' + item.title + '\nURL: ' + item.url + '\nخلاصه نتیجه: ' + (item.snippet || 'خلاصه‌ای در صفحه نتایج موجود نبود.')
+          ).join('\n\n');
+          parsed.links = results.slice(0, 6).map(({title, url}) => ({title, url}));
+          parsed.links.push({title: 'مشاهده همین جستجو در گوگل', url: googleSearchUrl});
+          try {
+            const summary = await ai.models.generateContent({
+              model: 'gemini-4-hydrogen',
+              contents: 'پرسش کاربر: "' + requestedQuery + '"\n\nنتایج واقعی جستجوی وب زیر را بررسی کن و فقط بر اساس همین داده‌ها پاسخ فارسی کوتاه و کاربردی بده. اگر آمار یا قیمت در نتایج نیست، صریح بگو پیدا نشد. تاریخ/بازه زمانی اعداد را ذکر کن اگر در داده‌ها وجود دارد. در انتهای پاسخ شماره منابع مرتبط را مثل [1] بیاور.\n\n' + sourceText,
+              config: {
+                systemInstruction: 'تو دستیار فارسی دقیق هستی. هیچ عدد، تاریخ یا واقعیتی را از خودت نساز. در صورت تعارض منابع، اختلاف را توضیح بده.',
+                thinkingConfig: {thinkingLevel: ThinkingLevel.LOW},
+              },
+            });
+            const summaryText = (summary.text ?? '').replace(/[#*_\`]/g, '').trim();
+            parsed.replyText = summaryText || results.slice(0, 3).map((item, index) =>
+              'نتیجه ' + (index + 1) + ': ' + item.title + '. ' + item.snippet
+            ).join('\n');
+          } catch (summaryErr) {
+            console.warn('Search result summarization failed:', summaryErr instanceof Error ? summaryErr.message : summaryErr);
+            parsed.replyText = results.slice(0, 3).map((item, index) =>
+              'نتیجه ' + (index + 1) + ': ' + item.title + '. ' + (item.snippet || item.url)
+            ).join('\n');
+          }
+          if (action === 'download_url' && !parsed.downloadUrl) {
+            parsed.downloadUrl = results[0].url;
+            parsed.downloadTitle = results[0].title;
+          }
+        } else {
+          parsed.replyText = 'برای این سؤال نتوانستم نتیجه زنده و قابل‌اعتماد دریافت کنم. جستجوی گوگل را باز می‌کنم تا مستقیم بررسی کنی.';
+          parsed.links = [{title: 'جستجوی گوگل برای این سؤال', url: googleSearchUrl}];
+        }
       }
     }
 
