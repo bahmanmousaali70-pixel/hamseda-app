@@ -329,6 +329,10 @@ export const OfflineEngineLab: React.FC<OfflineEngineLabProps> = ({
   const handleDeletePocket = async () => {
     const st = await uninstallPocketFarsi();
     setPocketStatus(st);
+    if (!st.customVoiceLoaded && pocketVoice === 'custom') {
+      setPocketVoice('female_short');
+      setPocketVoicePreset('female_short');
+    }
     if (activeOfflineId === 'pocket_farsi') {
       setActiveOfflineId('ava_gyro');
       setPreferredOfflineEngineId('ava_gyro');
@@ -417,7 +421,7 @@ export const OfflineEngineLab: React.FC<OfflineEngineLabProps> = ({
     if (!file) return;
     setIsEncodingClone(true);
     try {
-      await setPocketCustomVoiceFromBlob(file);
+      await setPocketCustomVoiceFromBlob(file, pocketPrecision);
       const nextSt = await getPocketFarsiStatus();
       setPocketStatus(nextSt);
       setPocketVoice('custom');
@@ -454,7 +458,7 @@ export const OfflineEngineLab: React.FC<OfflineEngineLabProps> = ({
         const blob = new Blob(chunks, {type: mr.mimeType || 'audio/webm'});
         setIsEncodingClone(true);
         try {
-          await setPocketCustomVoiceFromBlob(blob);
+          await setPocketCustomVoiceFromBlob(blob, pocketPrecision);
           const nextSt = await getPocketFarsiStatus();
           setPocketStatus(nextSt);
           setPocketVoice('custom');

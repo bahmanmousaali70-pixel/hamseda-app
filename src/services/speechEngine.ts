@@ -140,6 +140,8 @@ let sharedAudioCtx: AudioContext | null = null;
 let activeSourceNode: AudioBufferSourceNode | null = null;
 let activeAudioEl: HTMLAudioElement | null = null;
 let activeUrl: string | null = null;
+let activeStreamController: AbortController | null = null;
+const activeStreamSources = new Set<AudioBufferSourceNode>();
 let playbackToken = 0;
 
 export interface SpeakOptions {
@@ -200,6 +202,24 @@ export function unlockAudioPlayback(): void {
 
 export function stopAllSpeech(): void {
   playbackToken++;
+  if (activeStreamController) {
+    try {
+      activeStreamController.abort();
+    } catch {
+      // already aborted
+    }
+    activeStreamController = null;
+  }
+  for (const node of activeStreamSources) {
+    try {
+      node.onended = null;
+      node.stop();
+      node.disconnect();
+    } catch {
+      // already stopped
+    }
+  }
+  activeStreamSources.clear();
   if (activeSourceNode) {
     try {
       activeSourceNode.onended = null;
@@ -576,6 +596,344 @@ export async function generateAndCacheGeminiWav(params: {
   return {id, buffer, isStudioWav};
 }
 
+function buildWavFromPcmChunks(chunks: Uint8Array[], sampleRate = 24000): ArrayBuffer {
+  let totalPcmLen = 0;
+  for (const c of chunks) totalPcmLen += c.length;
+  const wav = new Uint8Array(44 + totalPcmLen);
+  const view = new DataView(wav.buffer);
+  const writeAscii = (offset: number, str: string) => {
+    for (let i = 0; i < str.length; i++) wav[offset + i] = str.charCodeAt(i);
+  };
+  writeAscii(0, 'RIFF');
+  view.setUint32(4, 36 + totalPcmLen, true);
+  writeAscii(8, 'WAVE');
+  writeAscii(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeAscii(36, 'data');
+  view.setUint32(40, totalPcmLen, true);
+  let pos = 44;
+  for (const c of chunks) {
+    wav.set(c, pos);
+    pos += c.length;
+  }
+  return wav.buffer;
+}
+
+async function cacheClipRecord(params: {
+  id: string;
+  title: string;
+  text: string;
+  category: AudioLibraryEntry['category'];
+  voiceName: VoiceName;
+  style: string;
+  buffer: ArrayBuffer;
+  isStudioWav: boolean;
+}): Promise<void> {
+  if (params.isStudioWav) {
+    await saveAudioClip(
+      {
+        id: params.id,
+        title: params.title,
+        text: params.text,
+        category: params.category,
+        voiceName: params.voiceName,
+        style: params.style,
+        source: 'gemini',
+        studioVersion: 4,
+      },
+      params.buffer
+    );
+    if (isNativeAndroid()) {
+      precacheNativeWav(params.text, params.voiceName, params.buffer).catch(() => {});
+    }
+    return;
+  }
+
+  const existing = await getAudioClipRecord(params.id);
+  if (!existing || !isRiffWavBuffer(existing.wavData) || existing.entry.source !== 'gemini') {
+    await saveAudioClip(
+      {
+        id: params.id,
+        title: params.title,
+        text: params.text,
+        category: params.category,
+        voiceName: params.voiceName,
+        style: params.style,
+        source: 'fallback',
+      },
+      params.buffer
+    );
+  }
+}
+
+async function streamAndCacheGeminiSpeech(params: {
+  text: string;
+  title: string;
+  category: AudioLibraryEntry['category'];
+  voiceName: VoiceName;
+  style?: string;
+  rate: number;
+  clipId: string;
+  forceRefresh?: boolean;
+  hasCachedStudioWav?: boolean;
+  token: number;
+  onStart?: (source: 'cache' | 'gemini' | 'neural-fallback' | 'offline-speech') => void;
+}): Promise<{played: true; source: 'gemini' | 'neural-fallback'} | {played: false; reason: string}> {
+  const persona = getPersonaInfo(params.voiceName);
+  const style = [persona.tone, params.style ?? 'Fluent natural Tehran Persian voice.'].filter(Boolean).join(' ');
+
+  const controller = new AbortController();
+  activeStreamController = controller;
+  const firstChunkTimeout = window.setTimeout(() => controller.abort(), 11000);
+  let totalTimeout = 0;
+
+  let res: Response;
+  try {
+    res = await fetch(apiUrl('/api/tts-stream'), {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      signal: controller.signal,
+      body: JSON.stringify({
+        text: params.text,
+        voiceName: params.voiceName,
+        style,
+        forceRefresh: Boolean(params.forceRefresh),
+      }),
+    });
+  } catch (err) {
+    window.clearTimeout(firstChunkTimeout);
+    if (activeStreamController === controller) activeStreamController = null;
+    throw err;
+  }
+
+  const contentType = res.headers.get('content-type') || '';
+  if (!res.ok || contentType.includes('text/html') || !res.body) {
+    window.clearTimeout(firstChunkTimeout);
+    if (activeStreamController === controller) activeStreamController = null;
+    return {played: false, reason: 'unavailable'};
+  }
+
+  const ctx = getOrCreateAudioContext();
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let lineBuffer = '';
+  const pcmChunks: Uint8Array[] = [];
+  let leftoverByte: number | null = null;
+  let lastSampleRate = 24000;
+  let startedStreaming = false;
+  let nextPlayTime = 0;
+  let pendingNodes = 0;
+  let isPartial = false;
+  let finishAllNodesResolve: (() => void) | null = null;
+  const allNodesDone = new Promise<void>((resolve) => {
+    finishAllNodesResolve = resolve;
+  });
+
+  const safeRate = Math.max(0.5, Math.min(2.0, Number(params.rate) || 1));
+
+  const schedulePcmChunk = async (chunkBytes: Uint8Array, sampleRate: number): Promise<void> => {
+    if (!ctx || params.token !== playbackToken) return;
+    if (ctx.state === 'suspended') {
+      await ctx.resume().catch(() => {});
+    }
+    if (params.token !== playbackToken) return;
+
+    let merged: Uint8Array;
+    if (leftoverByte !== null) {
+      merged = new Uint8Array(chunkBytes.length + 1);
+      merged[0] = leftoverByte;
+      merged.set(chunkBytes, 1);
+      leftoverByte = null;
+    } else {
+      merged = chunkBytes;
+    }
+
+    const evenLen = merged.length - (merged.length % 2);
+    if (merged.length % 2 === 1) {
+      leftoverByte = merged[merged.length - 1];
+    }
+    if (evenLen <= 0) return;
+
+    const sampleCount = evenLen / 2;
+    const float32 = new Float32Array(sampleCount);
+    const view = new DataView(merged.buffer, merged.byteOffset, evenLen);
+    for (let i = 0; i < sampleCount; i++) {
+      float32[i] = view.getInt16(i * 2, true) / 32768;
+    }
+
+    const audioBuffer = ctx.createBuffer(1, sampleCount, sampleRate);
+    audioBuffer.copyToChannel(float32, 0);
+
+    const source = ctx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.playbackRate.value = safeRate;
+    source.connect(ctx.destination);
+
+    const startAt = Math.max(ctx.currentTime + 0.025, nextPlayTime);
+    nextPlayTime = startAt + audioBuffer.duration / safeRate;
+
+    pendingNodes++;
+    activeStreamSources.add(source);
+    source.onended = () => {
+      activeStreamSources.delete(source);
+      pendingNodes = Math.max(0, pendingNodes - 1);
+      if (pendingNodes === 0 && finishAllNodesResolve) {
+        finishAllNodesResolve();
+      }
+    };
+
+    if (!startedStreaming) {
+      startedStreaming = true;
+      params.onStart?.('gemini');
+    }
+    source.start(startAt);
+  };
+
+  try {
+    totalTimeout = window.setTimeout(() => controller.abort(), 30000);
+    while (true) {
+      if (params.token !== playbackToken) {
+        controller.abort();
+        break;
+      }
+      const {done, value} = await reader.read();
+      if (done) break;
+      lineBuffer += decoder.decode(value, {stream: true});
+      const lines = lineBuffer.split('\n');
+      lineBuffer = lines.pop() ?? '';
+
+      for (const rawLine of lines) {
+        const trimmed = rawLine.trim();
+        if (!trimmed) continue;
+        let event: {
+          type?: string;
+          data?: string;
+          sampleRate?: number;
+          audioBase64?: string;
+          provider?: 'gemini' | 'neural-fallback';
+          reason?: string;
+          partial?: boolean;
+        };
+        try {
+          event = JSON.parse(trimmed);
+        } catch {
+          continue;
+        }
+
+        if (event.type === 'pcm' && event.data) {
+          window.clearTimeout(firstChunkTimeout);
+          lastSampleRate = typeof event.sampleRate === 'number' && event.sampleRate >= 8000 ? event.sampleRate : 24000;
+          const bytes = new Uint8Array(base64ToArrayBuffer(event.data));
+          if (bytes.length > 0) {
+            pcmChunks.push(bytes);
+            await schedulePcmChunk(bytes, lastSampleRate);
+          }
+        } else if (event.type === 'wav' && event.audioBase64) {
+          window.clearTimeout(firstChunkTimeout);
+          window.clearTimeout(totalTimeout);
+          if (activeStreamController === controller) activeStreamController = null;
+          const buffer = base64ToArrayBuffer(event.audioBase64);
+          const isStudio = isRiffWavBuffer(buffer);
+          await cacheClipRecord({
+            id: params.clipId,
+            title: params.title,
+            text: params.text,
+            category: params.category,
+            voiceName: params.voiceName,
+            style,
+            buffer,
+            isStudioWav: isStudio,
+          });
+          if (params.token !== playbackToken) return {played: true, source: 'gemini'};
+          params.onStart?.('gemini');
+          await playWavBuffer(buffer, safeRate, params.token);
+          return {played: true, source: 'gemini'};
+        } else if (event.type === 'fallback_audio' && event.audioBase64 && !startedStreaming) {
+          window.clearTimeout(firstChunkTimeout);
+          window.clearTimeout(totalTimeout);
+          if (activeStreamController === controller) activeStreamController = null;
+          if (params.hasCachedStudioWav) {
+            return {played: false, reason: 'prefer-cached-studio'};
+          }
+          const buffer = base64ToArrayBuffer(event.audioBase64);
+          await cacheClipRecord({
+            id: params.clipId,
+            title: params.title,
+            text: params.text,
+            category: params.category,
+            voiceName: params.voiceName,
+            style,
+            buffer,
+            isStudioWav: false,
+          });
+          if (params.token !== playbackToken) return {played: true, source: 'neural-fallback'};
+          params.onStart?.('neural-fallback');
+          await playWavBuffer(buffer, safeRate, params.token);
+          return {played: true, source: 'neural-fallback'};
+        } else if (event.type === 'fallback_offline' && !startedStreaming) {
+          window.clearTimeout(firstChunkTimeout);
+          window.clearTimeout(totalTimeout);
+          if (activeStreamController === controller) activeStreamController = null;
+          return {played: false, reason: event.reason || 'unavailable'};
+        } else if (event.type === 'done' && event.partial) {
+          isPartial = true;
+        }
+      }
+    }
+  } catch (err) {
+    if (!startedStreaming) {
+      window.clearTimeout(firstChunkTimeout);
+      window.clearTimeout(totalTimeout);
+      if (activeStreamController === controller) activeStreamController = null;
+      throw err;
+    }
+    isPartial = true;
+  } finally {
+    window.clearTimeout(firstChunkTimeout);
+    window.clearTimeout(totalTimeout);
+    if (activeStreamController === controller) activeStreamController = null;
+  }
+
+  if (params.token !== playbackToken) {
+    return {played: true, source: 'gemini'};
+  }
+
+  if (pcmChunks.length > 0) {
+    const fullWav = buildWavFromPcmChunks(pcmChunks, lastSampleRate);
+    if (!isPartial) {
+      cacheClipRecord({
+        id: params.clipId,
+        title: params.title,
+        text: params.text,
+        category: params.category,
+        voiceName: params.voiceName,
+        style,
+        buffer: fullWav,
+        isStudioWav: true,
+      }).catch(() => {});
+    }
+
+    if (startedStreaming) {
+      if (pendingNodes > 0) {
+        await allNodesDone;
+      }
+      return {played: true, source: 'gemini'};
+    }
+
+    params.onStart?.('gemini');
+    await playWavBuffer(fullWav, safeRate, params.token);
+    return {played: true, source: 'gemini'};
+  }
+
+  return {played: false, reason: 'empty-stream'};
+}
+
 export async function speakFluentPersian(
   options: SpeakOptions
 ): Promise<'cache' | 'gemini' | 'neural-fallback' | 'offline-speech'> {
@@ -608,41 +966,35 @@ export async function speakFluentPersian(
         return 'cache';
       }
 
-      // 2. If online (or existing cached clip is legacy/fallback), fetch styled Studio Gemini WAV
+      // 2. Stream styled Studio Gemini PCM chunks progressively for instant first-audio playback & offline caching
       {
-        // Do not trust navigator.onLine inside Android WebView; attempt the cloud TTS
-        // and fall back to the local engine only after a bounded network timeout.
+        // Do not trust navigator.onLine inside Android WebView; attempt the cloud stream
+        // and fall back to the local offline engine only after a bounded network timeout.
         options.onLoading?.();
         try {
-          const result = await generateAndCacheGeminiWav({
+          const streamed = await streamAndCacheGeminiSpeech({
             text: options.text,
             title: options.title,
             category: options.category,
             voiceName,
             style: options.style,
+            rate,
             clipId,
             forceRefresh: Boolean(options.forceOnlineRefresh),
+            hasCachedStudioWav: cachedIsTrueStudioWav,
+            token,
+            onStart: options.onStart,
           });
           if (token !== playbackToken) return 'gemini';
-          if ('buffer' in result) {
-            // If server hit Free Tier quota (neural-fallback) but we already had an older Gemini WAV locally, keep playing the studio WAV
-            if (!result.isStudioWav && cachedRecord && cachedIsTrueStudioWav) {
-              options.onStart?.('cache');
-              await playWavBuffer(cachedRecord.wavData, rate, token);
-              if (token === playbackToken) options.onEnd?.();
-              return 'cache';
-            }
-            const srcKind = result.isStudioWav ? 'gemini' : 'neural-fallback';
-            options.onStart?.(srcKind);
-            await playWavBuffer(result.buffer, rate, token);
-            if (token === playbackToken) options.onEnd?.();
-            return srcKind;
+          if (streamed.played) {
+            options.onEnd?.();
+            return streamed.source;
           }
         } catch (err) {
-          console.warn('Online TTS fallback to cached/bilingual speech:', err);
+          console.info('Online streaming TTS fallback to cached/offline speech:', err);
         }
 
-        // If network attempt failed but we had a fallback clip cached, play it rather than staying silent
+        // If network attempt failed or quota was hit but we had a clip cached locally, play it seamlessly
         if (cachedRecord) {
           options.onStart?.(cachedIsTrueStudioWav ? 'cache' : 'neural-fallback');
           await playWavBuffer(cachedRecord.wavData, rate, token);

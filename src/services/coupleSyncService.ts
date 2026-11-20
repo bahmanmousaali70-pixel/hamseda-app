@@ -436,7 +436,7 @@ export function subscribeToCoupleSpace(
           myName: rawMyName === 'مهدی' ? 'بهمن' : rawMyName,
           partnerName: typeof data.partnerName === 'string' && data.partnerName.trim() ? data.partnerName : 'زری',
           assistantName:
-            typeof data.assistantName === 'string' && data.assistantName.trim() ? data.assistantName.trim() : 'آوا',
+            typeof data.assistantName === 'string' && data.assistantName.trim() ? data.assistantName.trim() : 'هم‌صدا',
           assistantWakeWordEnabled: Boolean(data.assistantWakeWordEnabled ?? false),
           backgroundKeepAlive: Boolean(data.backgroundKeepAlive),
           announceCalls: data.announceCalls !== undefined ? Boolean(data.announceCalls) : true,
@@ -706,7 +706,7 @@ export async function pushSettingsToCloud(spaceId: string, settings: AppSettings
     speechRate: Math.max(0.5, Math.min(2, Number(settings.speechRate || 1))),
     myName: clampStr(settings.myName, 60, 'بهمن'),
     partnerName: clampStr(settings.partnerName, 60, 'زری'),
-    assistantName: clampStr(settings.assistantName, 40, 'آوا'),
+    assistantName: clampStr(settings.assistantName, 40, 'هم‌صدا'),
     assistantWakeWordEnabled: Boolean(settings.assistantWakeWordEnabled ?? false),
     backgroundKeepAlive: Boolean(settings.backgroundKeepAlive),
     announceCalls: Boolean(settings.announceCalls ?? true),

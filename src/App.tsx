@@ -400,7 +400,7 @@ export default function App() {
       deviceOwner,
       selfName: getSelfName(settings, deviceOwner),
       partnerName: getPartnerNameForDevice(settings, deviceOwner),
-      assistantName: settings.assistantName?.trim() || 'آوا',
+      assistantName: settings.assistantName?.trim() || 'هم‌صدا',
     });
   }, [deviceOwner, settings.myName, settings.partnerName, settings.assistantName]);
 
@@ -561,10 +561,10 @@ export default function App() {
         category,
         voiceName: settings.defaultVoice,
         rate: settings.speechRate,
-        onLoading: () => setSpeechSourceLabel('در حال تولید صدای روان فارسی...'),
+        onLoading: () => setSpeechSourceLabel('در حال اتصال به جریان صدای روان فارسی...'),
         onStart: (src) => {
-          if (src === 'cache') setSpeechSourceLabel('پخش از کتابخانه آفلاین');
-          else if (src === 'gemini') setSpeechSourceLabel('صدای روان فارسی (ذخیره برای آفلاین شد)');
+          if (src === 'cache') setSpeechSourceLabel('پخش فوری از کتابخانه آفلاین');
+          else if (src === 'gemini') setSpeechSourceLabel('پخش زنده صدای روان فارسی (ذخیره برای آفلاین)');
           else if (src === 'neural-fallback')
             setSpeechSourceLabel('صدای کمکی موقت (سهمیه استودیویی امروز پر شده)');
           else setSpeechSourceLabel('پخش با موتور گفتار آفلاین');
@@ -1259,7 +1259,7 @@ export default function App() {
         activeTab={activeTab}
         deviceOwner={deviceOwner}
         selfName={selfName}
-        assistantName={settings.assistantName?.trim() || 'آوا'}
+        assistantName={settings.assistantName?.trim() || 'هم‌صدا'}
         masterSpeakerEnabled={localVoiceControls.masterSpeakerEnabled}
         onToggleMasterSpeaker={handleToggleMasterSpeaker}
         onRefreshApp={handleRefreshApp}

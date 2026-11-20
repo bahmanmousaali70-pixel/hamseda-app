@@ -202,12 +202,17 @@ async function inspectCacheStatus() {
   } catch {
     cache = null;
   }
+  const savedCustom = await loadCustomVoiceEmbedding().catch(() => null);
+  const customVoiceLoaded = Boolean(savedCustom?.embedding?.length && savedCustom.frames);
+
   if (!cache) {
     return {
       installed: false,
+      q4Installed: false,
       highPrecisionInstalled: false,
       sizeBytes: 0,
       voiceCloneReady: false,
+      customVoiceLoaded,
       device: 'wasm' as const,
     };
   }
@@ -227,9 +232,10 @@ async function inspectCacheStatus() {
     }
   }
 
-  const hasQ4 =
+  const q4Installed =
     keySet.has(REPO + 'onnx/flow_lm_step_q4.onnx') ||
     keySet.has(REPO + 'onnx/flow_lm_step_q4f16.onnx');
+  const q4WasmInstalled = keySet.has(REPO + 'onnx/flow_lm_step_q4.onnx');
   const highPrecisionInstalled = keySet.has(REPO + 'onnx/flow_lm_step_fp16.onnx');
   const requiredRest = [
     'onnx/mimi_decoder.onnx',
@@ -241,14 +247,18 @@ async function inspectCacheStatus() {
     'tokenizer_ph.json',
     'voices/female_short.f32.bin',
   ];
-  const installed = (hasQ4 || highPrecisionInstalled) && requiredRest.every((f) => keySet.has(REPO + f));
+  const installed =
+    (q4Installed || highPrecisionInstalled) && requiredRest.every((f) => keySet.has(REPO + f));
   const voiceCloneReady = keySet.has(REPO + 'onnx/voice_encoder.onnx');
   const backend = await detectComputeBackend();
   return {
     installed,
+    q4Installed,
+    q4WasmInstalled,
     highPrecisionInstalled,
     sizeBytes: totalBytes,
     voiceCloneReady,
+    customVoiceLoaded,
     device: backend.device,
   };
 }
@@ -330,8 +340,18 @@ async function installModels(includeVoiceClone = false, precision: PocketPrecisi
 
 async function ensureInitialized(requestedPrecision: PocketPrecisionMode = 'q4') {
   const st = await inspectCacheStatus();
+  if (!st.installed) {
+    throw new Error('فایل‌های آفلاین Pocket TTS Farsi هنوز نصب نشده‌اند؛ لطفاً ابتدا مدل را دانلود کنید.');
+  }
+
   const effectivePrecision: PocketPrecisionMode =
-    requestedPrecision === 'high' && st.highPrecisionInstalled ? 'high' : 'q4';
+    requestedPrecision === 'high'
+      ? st.highPrecisionInstalled
+        ? 'high'
+        : 'q4'
+      : st.q4Installed
+        ? 'q4'
+        : 'high';
 
   if (flow && dec && g2pE && g2pD && bpe && lut && W && bos && activePrecision === effectivePrecision) {
     return;
@@ -402,11 +422,15 @@ async function ensureInitialized(requestedPrecision: PocketPrecisionMode = 'q4')
     try {
       await createSessions(device, activeVariant);
     } catch (err) {
-      if (activeVariant === 'fp16' || device === 'webgpu') {
+      // Only fall back to local WASM q4 when q4 is actually cached in storage;
+      // otherwise surface the real WASM/WebGPU initialization error instead of triggering a network download offline.
+      const canFallbackQ4 = st.q4WasmInstalled && (activeVariant !== 'q4' || device === 'webgpu');
+      if (canFallbackQ4) {
         await resetSessions();
         activePrecision = 'q4';
         await createSessions('wasm', 'q4');
       } else {
+        await resetSessions();
         throw err;
       }
     }
@@ -614,8 +638,8 @@ async function voiceState(name: string): Promise<ort.Tensor[]> {
   return r.presents;
 }
 
-async function encodeCustomVoice(audio24k: Float32Array) {
-  await ensureInitialized();
+async function encodeCustomVoice(audio24k: Float32Array, precision: PocketPrecisionMode = 'q4') {
+  await ensureInitialized(precision);
   if (!venc) {
     const encoderBuf = await fetchCached('onnx/voice_encoder.onnx');
     venc = await ort.InferenceSession.create(encoderBuf, {executionProviders: ['wasm']});
@@ -870,7 +894,7 @@ self.onmessage = (e: MessageEvent) => {
         }
         post('uninstalled', await inspectCacheStatus());
       } else if (m.type === 'voice' && m.audio) {
-        await encodeCustomVoice(m.audio);
+        await encodeCustomVoice(m.audio, m.precision || 'q4');
       } else if (m.type === 'synth' && m.id && m.text) {
         await runSynth(
           m.id,

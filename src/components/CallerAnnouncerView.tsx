@@ -348,25 +348,42 @@ export const CallerAnnouncerView: React.FC<CallerAnnouncerViewProps> = ({
         return;
       }
 
-      // Browser fallback: Web Contact Picker API if supported, otherwise open .vcf picker
+      // Browser fallback: Web Contact Picker API works ONLY in a top-level frame (not inside an iframe preview).
+      let isTopFrame = true;
+      try {
+        isTopFrame = window.self === window.top;
+      } catch {
+        isTopFrame = false;
+      }
+
       const navWithContacts = navigator as Navigator & {
         contacts?: {
           select: (props: string[], opts?: {multiple?: boolean}) => Promise<{name?: string[]; tel?: string[]}[]>;
         };
       };
-      if (navWithContacts.contacts?.select) {
-        const picked = await navWithContacts.contacts.select(['name', 'tel'], {multiple: true});
-        const mapped: SyncedPhoneContact[] = picked
-          .filter((p) => p.name?.[0])
-          .map((p) => ({
-            name: String(p.name![0]).trim(),
-            phone: String(p.tel?.[0] || '').trim(),
-            persianPhonetic: localFinglishToPersian(String(p.name![0])),
-          }));
-        if (mapped.length > 0) {
-          await enrichAndPersistPhonebook(mapped);
-          return;
+      if (isTopFrame && navWithContacts.contacts?.select) {
+        try {
+          const picked = await navWithContacts.contacts.select(['name', 'tel'], {multiple: true});
+          const mapped: SyncedPhoneContact[] = picked
+            .filter((p) => p.name?.[0])
+            .map((p) => ({
+              name: String(p.name![0]).trim(),
+              phone: String(p.tel?.[0] || '').trim(),
+              persianPhonetic: localFinglishToPersian(String(p.name![0])),
+            }));
+          if (mapped.length > 0) {
+            await enrichAndPersistPhonebook(mapped);
+            return;
+          }
+        } catch (pickerErr) {
+          const errName = pickerErr instanceof Error ? pickerErr.name : '';
+          if (errName === 'AbortError') {
+            return;
+          }
+          onStatusToast('انتخاب مستقیم مخاطبین در این مرورگر در دسترس نیست؛ لطفاً فایل مخاطبین (.vcf) را انتخاب کنید.');
         }
+      } else if (!isTopFrame) {
+        onStatusToast('در نمای پیش‌نمایش، دسترسی مستقیم مرورگر به دفترچه مجاز نیست؛ فایل .vcf مخاطبین را انتخاب کنید.');
       }
 
       vcfInputRef.current?.click();

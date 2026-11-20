@@ -43,10 +43,14 @@ export function formatJalaliFull(date: Date = new Date()): string {
       day: 'numeric',
       month: 'long',
       year: 'numeric',
-      timeZone: 'Asia/Tehran',
     }).format(date);
   } catch {
-    return new Intl.DateTimeFormat('fa-IR-u-ca-persian', {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Tehran'}).format(date);
+    return new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    }).format(date);
   }
 }
 

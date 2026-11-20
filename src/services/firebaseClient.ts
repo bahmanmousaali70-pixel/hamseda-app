@@ -10,11 +10,27 @@ import {
   signOut,
   type User,
 } from 'firebase/auth';
-import {doc, getDocFromServer, getFirestore} from 'firebase/firestore';
+import {
+  doc,
+  getDocFromServer,
+  getFirestore,
+  initializeFirestore,
+  type Firestore,
+} from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db: Firestore = (() => {
+  try {
+    return initializeFirestore(
+      app,
+      {experimentalForceLongPolling: true},
+      firebaseConfig.firestoreDatabaseId
+    );
+  } catch {
+    return getFirestore(app, firebaseConfig.firestoreDatabaseId);
+  }
+})();
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({prompt: 'select_account'});
@@ -71,7 +87,48 @@ export function handleFirestoreError(
   throw new Error(JSON.stringify(errInfo));
 }
 
+function hasValidFirebaseConfig(): boolean {
+  return Boolean(
+    firebaseConfig?.projectId &&
+      firebaseConfig.projectId !== 'remixed-project-id' &&
+      firebaseConfig?.apiKey &&
+      firebaseConfig?.firestoreDatabaseId
+  );
+}
+
 async function testConnection(): Promise<void> {
+  if (!hasValidFirebaseConfig()) {
+    console.error('Please check your Firebase configuration.');
+    return;
+  }
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return;
+  }
+
+  // Fast pre-flight reachability check so an unreachable network/VPN does not trigger
+  // Firestore's 10-second WebChannel timeout error and misleading config error on boot.
+  if (typeof fetch === 'function') {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3500);
+    try {
+      const probeUrl = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(
+        firebaseConfig.projectId
+      )}/databases/${encodeURIComponent(
+        firebaseConfig.firestoreDatabaseId
+      )}/documents/test/connection?key=${encodeURIComponent(firebaseConfig.apiKey)}`;
+      const res = await fetch(probeUrl, {method: 'GET', signal: controller.signal});
+      clearTimeout(timer);
+      if (res.status === 400 || res.status === 404) {
+        console.error('Please check your Firebase configuration.');
+        return;
+      }
+    } catch {
+      clearTimeout(timer);
+      console.info('Firestore backend unreachable from current network; running in offline-first local mode.');
+      return;
+    }
+  }
+
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
   } catch (error) {

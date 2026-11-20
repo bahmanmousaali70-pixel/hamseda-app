@@ -36,12 +36,14 @@ import {
   consumePendingWakeCommandNative,
   executeDeviceActionNative,
   getOfflineEngineStatusesNative,
+  getWakeWordStatusNative,
   isNativeAndroid,
   listenOncePersianNative,
   startNativeWakeWordService,
   stopNativeWakeWordService,
   stopListeningNative,
   type NativeCapabilities,
+  type WakeWordStatusNative,
 } from '../services/nativeAndroidBridge';
 import {getPocketFarsiStatus} from '../services/pocketFarsiEngine';
 import type {OfflineEngineId} from '../services/speechEngine';
@@ -233,6 +235,12 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
   const [isBusy, setIsBusy] = useState(false);
   const [isListeningOnce, setIsListeningOnce] = useState(false);
   const [isWakeListening, setIsWakeListening] = useState(false);
+  const [wakeStatus, setWakeStatus] = useState<WakeWordStatusNative>({
+    enabled: false,
+    state: 'stopped',
+    error: '',
+    modelReady: false,
+  });
   const [isRecordingAudio, setIsRecordingAudio] = useState(false);
   const [pendingIntent, setPendingIntent] = useState<PendingAssistantIntent | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
@@ -499,27 +507,49 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
   useEffect(() => {
     if (!isNativeAndroid()) {
       setIsWakeListening(false);
+      setWakeStatus({enabled: false, state: 'stopped', error: '', modelReady: false});
       return;
     }
     let mounted = true;
     if (!wakeLoopEnabled) {
       setIsWakeListening(false);
+      setWakeStatus({enabled: false, state: 'stopped', error: '', modelReady: false});
       void stopNativeWakeWordService();
       void stopListeningNative();
       return () => { mounted = false; };
     }
     setIsWakeListening(true);
+    setWakeStatus((prev) => ({...prev, enabled: true, state: 'preparing', error: ''}));
     void startNativeWakeWordService(assistantName).then((result) => {
       if (!mounted) return;
       if (!result.ok) {
         setIsWakeListening(false);
+        setWakeStatus({
+          enabled: false,
+          state: 'error',
+          error: result.message || 'سرویس گوش‌به‌زنگ شروع نشد.',
+          modelReady: false,
+        });
         onUpdateSettings({assistantWakeWordEnabled: false});
         onStatusToast(result.message || (result.permissionRequired
           ? 'برای گوش‌به‌زنگ بودن، اجازه میکروفون لازم است.'
           : 'سرویس گوش‌به‌زنگ شروع نشد. برنامه را باز نگه دارید و دوباره امتحان کنید.'));
       }
     });
-    return () => { mounted = false; };
+
+    const pollWakeStatus = async () => {
+      const status = await getWakeWordStatusNative();
+      if (!mounted) return;
+      setWakeStatus(status);
+      setIsWakeListening(status.state === 'listening' || status.state === 'preparing');
+    };
+    void pollWakeStatus();
+    const statusTimer = window.setInterval(() => void pollWakeStatus(), 2500);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(statusTimer);
+    };
   }, [wakeLoopEnabled, assistantName, onUpdateSettings, onStatusToast]);
 
   // Commands captured by the Android foreground listener are handed to the same
@@ -757,7 +787,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
                 type="text"
                 value={assistantNameDraft}
                 onChange={(e) => setAssistantNameDraft(e.target.value)}
-                placeholder="مثلاً: آوا، نگار، سارا"
+                placeholder="مثلاً: هم‌صدا، نگار، سارا"
                 className="w-full sm:w-44 min-h-[44px] rounded-xl border border-slate-200 dark:border-emerald-950 bg-slate-50 dark:bg-[#0D1614] px-3.5 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-emerald-700"
               />
             </div>
@@ -819,21 +849,40 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
             type="button"
             onClick={handleToggleWakeWord}
             className={`min-h-[44px] px-4 py-2.5 rounded-xl border text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer ${
-              wakeLoopEnabled
-                ? 'border-emerald-700 bg-emerald-50 text-emerald-900 dark:border-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-200'
-                : 'border-slate-200 dark:border-emerald-950 text-slate-700 dark:text-slate-300'
+              wakeLoopEnabled && wakeStatus.state === 'error'
+                ? 'border-rose-400 bg-rose-50 text-rose-900 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200'
+                : wakeLoopEnabled
+                  ? 'border-emerald-700 bg-emerald-50 text-emerald-900 dark:border-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-200'
+                  : 'border-slate-200 dark:border-emerald-950 text-slate-700 dark:text-slate-300'
             }`}
           >
             <Mic className="w-4 h-4" />
             <span>
               {wakeLoopEnabled
-                ? isWakeListening
-                  ? `گوش‌به‌زنگ صدای «${assistantName}» روشن است...`
-                  : `گوش‌به‌زنگ «${assistantName}» آماده است`
+                ? wakeStatus.state === 'error'
+                  ? `خطا در گوش‌به‌زنگ «${assistantName}»`
+                  : wakeStatus.state === 'preparing'
+                    ? `در حال آماده‌سازی شنود آفلاین «${assistantName}»...`
+                    : isWakeListening
+                      ? `گوش‌به‌زنگ صدای «${assistantName}» روشن است...`
+                      : `گوش‌به‌زنگ «${assistantName}» آماده است`
                 : `گوش‌به‌زنگ صدا زدن «${assistantName}»`}
             </span>
           </button>
         </div>
+
+        {wakeLoopEnabled && wakeStatus.state === 'error' && wakeStatus.error && (
+          <div className="mt-3 rounded-xl border border-rose-300 dark:border-rose-800/70 bg-rose-50 dark:bg-rose-950/30 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-rose-900 dark:text-rose-100">
+            <span>{wakeStatus.error}</span>
+            <button
+              type="button"
+              onClick={() => void startNativeWakeWordService(assistantName)}
+              className="min-h-[36px] px-3 rounded-lg bg-rose-700 hover:bg-rose-800 text-white font-semibold shrink-0 cursor-pointer"
+            >
+              تلاش مجدد
+            </button>
+          </div>
+        )}
 
         {/* Default Voice & Engine Selection for Wake Prompt ("جانم، بفرمایید") and Replies */}
         <div className="mt-5 pt-5 border-t border-slate-100 dark:border-emerald-950/60 grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -922,11 +971,18 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
         )}
       </section>
 
-      {/* Pending Multi-Turn SMS Prompt Banner */}
+      {/* Pending Multi-Turn Call / SMS Confirmation Banner */}
       {pendingIntent && (
         <section className="rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800/70 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="text-sm text-amber-950 dark:text-amber-100">
-            {pendingIntent.type === 'awaiting_sms_confirmation' ? (
+            {pendingIntent.type === 'awaiting_call_confirmation' ? (
+              <>
+                <strong>بررسی نهایی تماس تلفنی</strong>
+                <div className="mt-2">مخاطب: <b>{pendingIntent.targetName}</b></div>
+                <div className="mt-1 break-words">شماره: <b dir="ltr">{pendingIntent.targetPhone || 'نامشخص'}</b></div>
+                <div className="mt-2 font-semibold">فقط اگر نام و شماره درست است، تأیید تماس را بزنید.</div>
+              </>
+            ) : pendingIntent.type === 'awaiting_sms_confirmation' ? (
               <>
                 <strong>بررسی نهایی پیامک</strong>
                 <div className="mt-2">گیرنده: <b>{pendingIntent.targetName}</b></div>
@@ -946,8 +1002,35 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
             )}
           </div>
           <div className="flex flex-wrap gap-2 shrink-0">
-            {pendingIntent.type === 'awaiting_sms_confirmation' && <button type="button" onClick={() => executeUtterance('تأیید ارسال پیامک', false)} className="min-h-[44px] px-4 rounded-xl bg-green-600 text-white text-xs font-semibold cursor-pointer">تأیید و ارسال</button>}
-            <button type="button" onClick={() => { setPendingIntent(null); appendMessage('assistant', 'ارسال پیامک لغو شد.'); }} className="min-h-[44px] px-4 rounded-xl border border-amber-400 dark:border-amber-700 text-xs font-semibold text-amber-900 dark:text-amber-200 cursor-pointer shrink-0">لغو پیامک</button>
+            {pendingIntent.type === 'awaiting_call_confirmation' && (
+              <button
+                type="button"
+                onClick={() => executeUtterance('تأیید تماس', false)}
+                className="min-h-[44px] px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold cursor-pointer"
+              >
+                تأیید و برقراری تماس
+              </button>
+            )}
+            {pendingIntent.type === 'awaiting_sms_confirmation' && (
+              <button
+                type="button"
+                onClick={() => executeUtterance('تأیید ارسال پیامک', false)}
+                className="min-h-[44px] px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold cursor-pointer"
+              >
+                تأیید و ارسال
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                const isCall = pendingIntent.type === 'awaiting_call_confirmation';
+                setPendingIntent(null);
+                appendMessage('assistant', isCall ? 'تماس لغو شد و شماره‌گیری انجام نمی‌شود.' : 'ارسال پیامک لغو شد.');
+              }}
+              className="min-h-[44px] px-4 rounded-xl border border-amber-400 dark:border-amber-700 text-xs font-semibold text-amber-900 dark:text-amber-200 cursor-pointer shrink-0"
+            >
+              {pendingIntent.type === 'awaiting_call_confirmation' ? 'لغو تماس' : 'لغو پیامک'}
+            </button>
           </div>
         </section>
       )}

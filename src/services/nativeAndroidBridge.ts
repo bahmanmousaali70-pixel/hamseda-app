@@ -77,6 +77,7 @@ interface RoozhayeNativePlugin {
     importantSenders: string;
     quietHours: number;
     summarize: boolean;
+    filterOperatorPromotions?: boolean;
   }): Promise<{ok: boolean; quietUntil?: number}>;
   syncCallers(options: {callersJson: string}): Promise<{count: number}>;
   syncSchedules(options: {schedulesJson: string}): Promise<{count: number}>;
@@ -156,6 +157,7 @@ interface RoozhayeNativePlugin {
   stopListening(): Promise<{ok: boolean}>;
   startWakeWordService(options: {assistantName: string}): Promise<{ok: boolean; permissionRequired?: boolean; message?: string}>;
   stopWakeWordService(): Promise<{ok: boolean}>;
+  getWakeWordStatus(): Promise<{enabled: boolean; state: 'preparing' | 'listening' | 'error' | 'stopped'; error?: string; modelReady: boolean}>;
   consumePendingWakeCommand(): Promise<{command: string}>;
   executeDeviceAction(options: {
     action: string;
@@ -176,8 +178,7 @@ interface RoozhayeNativePlugin {
     permissionRequired?: boolean;
     needsPolicyAccess?: boolean;
     needsWriteSettings?: boolean;
-  needsAccessibility?: boolean;
-  savedPath?: string;
+    needsAccessibility?: boolean;
   }>;
 }
 
@@ -786,6 +787,35 @@ export async function stopNativeWakeWordService(): Promise<void> {
   }
 }
 
+export interface WakeWordStatusNative {
+  enabled: boolean;
+  state: 'preparing' | 'listening' | 'error' | 'stopped';
+  error: string;
+  modelReady: boolean;
+}
+
+export async function getWakeWordStatusNative(): Promise<WakeWordStatusNative> {
+  if (!isNativeAndroid()) {
+    return {enabled: false, state: 'stopped', error: '', modelReady: false};
+  }
+  try {
+    const res = await RoozhayeNative.getWakeWordStatus();
+    return {
+      enabled: Boolean(res.enabled),
+      state: res.state || 'stopped',
+      error: res.error || '',
+      modelReady: Boolean(res.modelReady),
+    };
+  } catch (err) {
+    return {
+      enabled: false,
+      state: 'error',
+      error: err instanceof Error ? err.message : 'بررسی وضعیت سرویس گوش‌به‌زنگ ناموفق بود.',
+      modelReady: false,
+    };
+  }
+}
+
 export async function stopListeningNative(): Promise<void> {
   if (!isNativeAndroid()) return;
   try {
@@ -820,6 +850,7 @@ export async function executeDeviceActionNative(options: {
   permissionRequired?: boolean;
   needsPolicyAccess?: boolean;
   needsWriteSettings?: boolean;
+  needsAccessibility?: boolean;
 }> {
   if (!isNativeAndroid()) {
     if (options.action === 'open_url' && options.url) {

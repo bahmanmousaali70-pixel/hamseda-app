@@ -155,7 +155,6 @@ export function findBestContactMatch(
 function getCurrentPersianTimeAndDate(): {timeStr: string; dateStr: string} {
   const now = new Date();
   const clockParts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Asia/Tehran',
     hour: '2-digit',
     minute: '2-digit',
     hourCycle: 'h23',
@@ -226,11 +225,15 @@ export function parseOfflineAssistantCommand(
       : 'باشه، پیامک لغو شد و هیچ پیامی ارسال نمی‌شه.'};
   }
   if (ctx.pendingIntent?.type === 'awaiting_sms_confirmation') {
-    if (/^(تایید|تأیید|بله|آره|اره|درسته|درست است|ارسال کن|بفرست|اوکی|باشه)$/.test(norm)) return {action: 'send_sms', targetName: ctx.pendingIntent.targetName, targetPhone: ctx.pendingIntent.targetPhone, smsBody: ctx.pendingIntent.smsBody, replyText: 'تأیید شد؛ پیامک را ارسال می‌کنم.'};
+    if (/^(تایید|تأیید|بله|آره|اره|درسته|درست است|ارسال کن|بفرست|اوکی|باشه|تایید ارسال پیامک|تأیید ارسال پیامک|تایید و ارسال|تأیید و ارسال)$/.test(norm)) {
+      return {action: 'send_sms', targetName: ctx.pendingIntent.targetName, targetPhone: ctx.pendingIntent.targetPhone, smsBody: ctx.pendingIntent.smsBody, replyText: 'تأیید شد؛ پیامک را ارسال می‌کنم.'};
+    }
     return {action: 'answer', replyText: 'پیام هنوز ارسال نشده. برای ارسال بگو «تأیید» و برای انصراف بگو «لغو کن».'};
   }
   if (ctx.pendingIntent?.type === 'awaiting_call_confirmation') {
-    if (/^(تایید|تأیید|بله|آره|اره|درسته|درست است|تماس بگیر|زنگ بزن|اوکی|باشه)$/.test(norm)) return {action: 'make_call', targetName: ctx.pendingIntent.targetName, targetPhone: ctx.pendingIntent.targetPhone, replyText: 'تأیید شد؛ شماره‌گیر را باز می‌کنم.'};
+    if (/^(تایید|تأیید|بله|آره|اره|درسته|درست است|تماس بگیر|زنگ بزن|اوکی|باشه|تایید تماس|تأیید تماس|تایید و برقراری تماس|تأیید و برقراری تماس)$/.test(norm)) {
+      return {action: 'make_call', targetName: ctx.pendingIntent.targetName, targetPhone: ctx.pendingIntent.targetPhone, replyText: 'تأیید شد؛ شماره‌گیر را باز می‌کنم.'};
+    }
     return {action: 'answer', replyText: 'تماس هنوز برقرار نشده. برای تماس بگو «تأیید» و برای انصراف بگو «لغو کن».'};
   }
 
@@ -276,6 +279,10 @@ export function parseOfflineAssistantCommand(
         replyText: `متن پیامک برای ${matched.name} چی باشه؟`,
       };
     }
+    return {
+      action: 'ask_sms_body',
+      replyText: `مخاطبی با نام «${commandRaw}» در دفترچه همگام‌شده پیدا نشد. لطفاً نام کامل مخاطب را بگویید یا برای انصراف بگویید «لغو کن».`,
+    };
   }
 
   // 1. Time & Date
@@ -782,20 +789,28 @@ export async function processAssistantUtterance(
 
   const {timeStr, dateStr} = getCurrentPersianTimeAndDate();
   try {
-    const res = await fetch(apiUrl('/api/assistant-command'), {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        utterance: cleanedUtterance || rawTranscript.trim(),
-        assistantName,
-        deviceOwner: ctx.deviceOwner,
-        myName: ctx.settings.myName,
-        partnerName: ctx.settings.partnerName,
-        localTimeText: timeStr,
-        jalaliDate: dateStr,
-        contacts: ctx.syncedContacts.slice(0, 80),
-      }),
-    });
+    const commandController = new AbortController();
+    const commandTimer = setTimeout(() => commandController.abort(), 35000);
+    let res: Response;
+    try {
+      res = await fetch(apiUrl('/api/assistant-command'), {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        signal: commandController.signal,
+        body: JSON.stringify({
+          utterance: cleanedUtterance || rawTranscript.trim(),
+          assistantName,
+          deviceOwner: ctx.deviceOwner,
+          myName: ctx.settings.myName,
+          partnerName: ctx.settings.partnerName,
+          localTimeText: timeStr,
+          jalaliDate: dateStr,
+          contacts: ctx.syncedContacts.slice(0, 80),
+        }),
+      });
+    } finally {
+      clearTimeout(commandTimer);
+    }
 
     const parsed = await safeReadJsonResponse<AssistantCommandResult & {error?: string}>(res);
     if (parsed.isHtml || !parsed.data || !res.ok) {
@@ -839,10 +854,13 @@ export async function processAssistantUtterance(
     }
 
     if (result.action === 'answer') {
+      const chatController = new AbortController();
+      const chatTimer = setTimeout(() => chatController.abort(), 18000);
       try {
         const chatRes = await fetch(apiUrl('/api/assistant-chat'), {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
+          signal: chatController.signal,
           body: JSON.stringify({
             assistantName,
             selfName,
@@ -856,14 +874,31 @@ export async function processAssistantUtterance(
         if (chatRes.ok && conversationalReply) result.replyText = conversationalReply;
       } catch (chatError) {
         console.warn('Conversation engine unavailable; keeping command-router reply.', chatError);
+      } finally {
+        clearTimeout(chatTimer);
       }
     }
 
     return result;
-  } catch {
+  } catch (err) {
+    const fallbackText = cleanedUtterance || rawTranscript.trim();
+    const isLiveWebQuery =
+      /(جستجو|سرچ|تو اینترنت|در اینترنت|تو وب|وب گردی|آب و هوا|اب و هوا|هواشناسی|دمای هوا|قیمت دلار|قیمت طلا|قیمت سکه|قیمت ارز|نرخ ارز|اخبار|خبر امروز|نتیجه بازی|جست و جو|دستور پخت|طرز تهیه|مواد لازم)/.test(
+        normalizedRequest
+      );
+    if (isLiveWebQuery) {
+      const reason = err instanceof Error && err.message && !err.message.includes('Failed to fetch')
+        ? ` (${err.message})`
+        : '';
+      return {
+        action: 'web_search',
+        query: fallbackText,
+        replyText: `در حال حاضر امکان جستجوی زنده اینترنتی برقرار نشد${reason}. لطفاً اتصال اینترنت یا دسترسی به سرور را بررسی کنید و دوباره امتحان کنید.`,
+      };
+    }
     return {
       action: 'answer',
-      replyText: buildOfflineConversationReply(cleanedUtterance || rawTranscript.trim(), ctx),
+      replyText: buildOfflineConversationReply(fallbackText, ctx),
     };
   }
 }

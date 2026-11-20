@@ -5,17 +5,19 @@ import {
   Clock,
   Copy,
   Disc3,
-  Gamepad2,
   ExternalLink,
   Film,
+  Gamepad2,
   Globe,
+  LayoutGrid,
+  List,
   Loader2,
   MessageSquareHeart,
   Moon,
   Music2,
   Pause,
-  Podcast,
   Play,
+  Podcast,
   Radio,
   Search,
   SkipBack,
@@ -36,8 +38,9 @@ import type {
   VoiceName,
 } from '../types/app';
 import {getPartnerNameForDevice, getSelfName} from '../utils/deviceIdentity';
-import {PodcastLibraryView} from './PodcastLibraryView';
 import {GTA6StreamsView} from './GTA6StreamsView';
+import {PodcastLibraryView} from './PodcastLibraryView';
+import {SearchArtworkGrid, type SearchArtworkItem} from './SearchArtworkGrid';
 
 interface NightAndMessagesViewProps {
   settings: AppSettings;
@@ -194,12 +197,14 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
     }
   }, [deviceOwner, partnerOtherName, selfName, occasion]);
 
-  // Completely Separated Online Music Playlist & Live Iran/World Radio state
+  // Completely Separated Online Music Playlist, Live Iran/World Radio, Podcasts & GTA 6 Streams
   const [mediaTab, setMediaTab] = useState<'tracks' | 'radio' | 'podcasts' | 'gta6'>('tracks');
+  const [mediaViewMode, setMediaViewMode] = useState<'grid' | 'list'>('grid');
   const [musicMood, setMusicMood] = useState('سنتی آرام و شجریان');
   const [musicBusy, setMusicBusy] = useState(false);
   const [radioCategory, setRadioCategory] = useState<RadioCategory>('iran');
   const [radioQuery, setRadioQuery] = useState('');
+  const [radioNotice, setRadioNotice] = useState('');
   const [radioBusy, setRadioBusy] = useState(false);
   const [radioStations, setRadioStations] = useState<MusicTrack[]>(() => {
     try {
@@ -569,6 +574,7 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
     }
     setRadioCategory(category);
     setRadioBusy(true);
+    setRadioNotice('');
     try {
       const res = await fetch(apiUrl('/api/radio-stations'), {
         method: 'POST',
@@ -578,7 +584,7 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
           query: customQueryText ?? radioQuery.trim(),
         }),
       });
-      const parsed = await safeReadJsonResponse<{stations?: MusicTrack[]; error?: string}>(res);
+      const parsed = await safeReadJsonResponse<{stations?: MusicTrack[]; notice?: string; error?: string}>(res);
       if (parsed.isHtml || !parsed.data) {
         throw new Error('سرور رادیو موقتاً پاسخ نامعتبر داد؛ لطفاً دوباره امتحان کنید.');
       }
@@ -588,7 +594,10 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
       stopRadioPlayback();
       setCurrentRadioIndex(-1);
       setRadioStations(list);
-      if (list.length > 0) {
+      setRadioNotice(data.notice || '');
+      if (data.notice) {
+        onStatusToast(data.notice);
+      } else if (list.length > 0) {
         onStatusToast(`${toPersianDigits(list.length)} ایستگاه رادیویی زنده آماده پخش شد.`);
       } else {
         onStatusToast('ایستگاهی با این عبارت پیدا نشد؛ دسته‌بندی دیگری را امتحان کنید.');
@@ -721,7 +730,7 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
     if (!assistantMediaTrigger || assistantMediaTrigger.nonce === lastAssistantTriggerRef.current) return;
     if (Date.now() - assistantMediaTrigger.nonce > 10000) return;
     lastAssistantTriggerRef.current = assistantMediaTrigger.nonce;
-    if (assistantMediaTrigger.tab !== 'podcasts' && assistantMediaTrigger.tab !== 'stop') setMediaTab(assistantMediaTrigger.tab);
+    if (assistantMediaTrigger.tab !== 'stop') setMediaTab(assistantMediaTrigger.tab);
     if (assistantMediaTrigger.tab === 'stop') {
       stopMusicPlayback();
       stopRadioPlayback();
@@ -757,6 +766,62 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
   const currentTabActiveItem = mediaTab === 'radio' ? activeRadioStation : activeMusicTrack;
   const currentTabIsPlaying = mediaTab === 'radio' ? isRadioPlaying : isMusicPlaying;
   const currentTabIsLoading = mediaTab === 'radio' ? isRadioLoading : isMusicLoading;
+
+  // Sync MediaSession metadata & lockscreen/notification transport controls for Music & Live Radio
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
+    const ms = navigator.mediaSession;
+    const activeItem = isRadioPlaying
+      ? activeRadioStation
+      : isMusicPlaying
+        ? activeMusicTrack
+        : currentTabActiveItem;
+    if (!activeItem) {
+      try {
+        ms.playbackState = 'none';
+      } catch {
+        // ignore
+      }
+      return;
+    }
+    const mode = activeItem === activeRadioStation && (isRadioPlaying || mediaTab === 'radio') ? 'radio' : 'tracks';
+    try {
+      if (typeof MediaMetadata !== 'undefined') {
+        ms.metadata = new MediaMetadata({
+          title: activeItem.title,
+          artist: activeItem.artist || (mode === 'radio' ? 'رادیو زنده هم‌صدا' : 'موزیک شبانه هم‌صدا'),
+          album: mode === 'radio' ? 'رادیوهای ایران و جهان' : 'پلی‌لیست هم‌صدا',
+          artwork: activeItem.artworkUrl ? [{src: activeItem.artworkUrl, sizes: '256x256', type: 'image/png'}] : undefined,
+        });
+      }
+      ms.playbackState = (mode === 'radio' ? isRadioPlaying : isMusicPlaying) ? 'playing' : 'paused';
+      ms.setActionHandler('play', () => {
+        if (mode === 'radio') {
+          if (currentRadioIndex >= 0 && !isRadioPlaying) togglePlayItem(currentRadioIndex, 'radio');
+        } else if (currentMusicIndex >= 0 && !isMusicPlaying) {
+          togglePlayItem(currentMusicIndex, 'tracks');
+        }
+      });
+      ms.setActionHandler('pause', () => {
+        if (mode === 'radio') pauseRadioOnly();
+        else pauseMusicOnly();
+      });
+      ms.setActionHandler('stop', () => {
+        if (mode === 'radio') stopRadioPlayback();
+        else stopMusicPlayback();
+      });
+      ms.setActionHandler('previoustrack', () => {
+        if (mode === 'radio') handlePrevRadio();
+        else handlePrevMusic();
+      });
+      ms.setActionHandler('nexttrack', () => {
+        if (mode === 'radio') handleNextRadio();
+        else handleNextMusic();
+      });
+    } catch {
+      // MediaSession not supported in this WebView/browser
+    }
+  });
 
   return (
     <div className="space-y-8">
@@ -986,13 +1051,64 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
         </div>
       </section>
 
-      {/* Section 2 & 3: Real Playable Online Music Playlist + High-Rated Dubbed Movies/Series */}
-      <div className="grid grid-cols-5 gap-1 p-1 rounded-xl bg-slate-100 dark:bg-emerald-950/60">
-        <button type="button" onClick={() => setMediaTab('tracks')} className={`min-h-[42px] rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 ${mediaTab === 'tracks' ? 'bg-white dark:bg-[#172724] text-slate-900 dark:text-white shadow-xs' : 'text-slate-600 dark:text-slate-300'}`}><Music2 className="w-4 h-4" /><span>موسیقی</span></button>
-        <button type="button" onClick={() => { setMediaTab('radio'); if (radioStations.length === 0 && !radioBusy && isOnline) handleFetchRadio('iran'); }} className={`min-h-[42px] rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 ${mediaTab === 'radio' ? 'bg-white dark:bg-[#172724] text-emerald-800 dark:text-emerald-300 shadow-xs' : 'text-slate-600 dark:text-slate-300'}`}><Radio className="w-4 h-4" /><span>رادیو</span></button>
-        <button type="button" onClick={() => setMediaTab('podcasts')} className={`min-h-[42px] rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 ${mediaTab === 'podcasts' ? 'bg-white dark:bg-[#172724] text-emerald-800 dark:text-emerald-300 shadow-xs' : 'text-slate-600 dark:text-slate-300'}`}><Podcast className="w-4 h-4" /><span>پادکست</span></button>
-        <button type="button" onClick={() => setMediaTab('gta6')} className={`min-h-[42px] rounded-lg text-[10px] sm:text-xs font-semibold flex items-center justify-center gap-1 ${mediaTab === 'gta6' ? 'bg-white dark:bg-[#172724] text-violet-800 dark:text-violet-300 shadow-xs' : 'text-slate-600 dark:text-slate-300'}`}><Gamepad2 className="w-4 h-4" /><span>GTA 6</span></button>
+      {/* Top-Level Media Switcher: Music | Radio | Podcasts & Audiobooks | GTA 6 */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-emerald-950/60">
+        <button
+          type="button"
+          onClick={() => setMediaTab('tracks')}
+          className={`min-h-[42px] rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+            mediaTab === 'tracks'
+              ? 'bg-white dark:bg-[#172724] text-slate-900 dark:text-white shadow-xs'
+              : 'text-slate-600 dark:text-slate-300'
+          }`}
+        >
+          <Music2 className="w-4 h-4" />
+          <span>موسیقی</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setMediaTab('radio');
+            if (radioStations.length === 0 && !radioBusy && isOnline) {
+              handleFetchRadio('iran');
+            }
+          }}
+          className={`min-h-[42px] rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+            mediaTab === 'radio'
+              ? 'bg-white dark:bg-[#172724] text-emerald-800 dark:text-emerald-300 shadow-xs'
+              : 'text-slate-600 dark:text-slate-300'
+          }`}
+        >
+          <Radio className="w-4 h-4" />
+          <span>رادیو</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMediaTab('podcasts')}
+          className={`min-h-[42px] rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+            mediaTab === 'podcasts'
+              ? 'bg-white dark:bg-[#172724] text-emerald-800 dark:text-emerald-300 shadow-xs'
+              : 'text-slate-600 dark:text-slate-300'
+          }`}
+        >
+          <Podcast className="w-4 h-4" />
+          <span>پادکست و کتاب صوتی</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMediaTab('gta6')}
+          className={`min-h-[42px] rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+            mediaTab === 'gta6'
+              ? 'bg-white dark:bg-[#172724] text-violet-800 dark:text-violet-300 shadow-xs'
+              : 'text-slate-600 dark:text-slate-300'
+          }`}
+        >
+          <Gamepad2 className="w-4 h-4" />
+          <span>GTA 6</span>
+        </button>
       </div>
+
+      {/* Section 2 & 3: Real Playable Online Music Playlist + Live Radio + High-Rated Dubbed Movies/Series */}
       <section className={mediaTab === 'podcasts' || mediaTab === 'gta6' ? 'hidden' : 'grid grid-cols-1 lg:grid-cols-12 gap-6'}>
         {/* Real Online Music Playlist + Live Iran & World Radio */}
         <div className="lg:col-span-5 rounded-2xl bg-white dark:bg-[#121E1C] border border-slate-200/80 dark:border-emerald-950/70 p-6 space-y-5">
@@ -1040,6 +1156,39 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
                 </span>
               )}
             </div>
+          </div>
+
+          {/* Sub-Tabs: Full Songs vs Live Radio Iran & World */}
+          <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-emerald-950/60">
+            <button
+              type="button"
+              onClick={() => setMediaTab('tracks')}
+              className={`min-h-[40px] rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                mediaTab === 'tracks'
+                  ? 'bg-white dark:bg-[#172724] text-slate-900 dark:text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-300'
+              }`}
+            >
+              <Music2 className="w-3.5 h-3.5" />
+              <span>آهنگ‌های کامل</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMediaTab('radio');
+                if (radioStations.length === 0 && !radioBusy && isOnline) {
+                  handleFetchRadio('iran');
+                }
+              }}
+              className={`min-h-[40px] rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                mediaTab === 'radio'
+                  ? 'bg-white dark:bg-[#172724] text-emerald-800 dark:text-emerald-300 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-300'
+              }`}
+            >
+              <Radio className="w-3.5 h-3.5" />
+              <span>رادیوهای ایران و جهان</span>
+            </button>
           </div>
 
           {mediaTab === 'tracks' ? (
@@ -1136,6 +1285,11 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
                   </button>
                 ))}
               </div>
+              {radioNotice && (
+                <div className="rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
+                  {radioNotice}
+                </div>
+              )}
             </>
           )}
 
@@ -1148,6 +1302,7 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
                     <img
                       src={currentTabActiveItem.artworkUrl}
                       alt={currentTabActiveItem.title}
+                      referrerPolicy="no-referrer"
                       onError={() => setFailedArtIds((p) => ({...p, [currentTabActiveItem.id]: true}))}
                       className="w-full h-full object-cover"
                     />
@@ -1201,7 +1356,10 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
                 <button
                   type="button"
                   onClick={() =>
-                    togglePlayItem(mediaTab === 'radio' ? currentRadioIndex : currentMusicIndex, mediaTab)
+                    togglePlayItem(
+                      mediaTab === 'radio' ? currentRadioIndex : currentMusicIndex,
+                      mediaTab === 'radio' ? 'radio' : 'tracks'
+                    )
                   }
                   aria-label={currentTabIsPlaying ? 'توقف موقت' : 'پخش'}
                   className="min-w-[52px] min-h-[44px] px-5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold flex items-center justify-center gap-1.5 cursor-pointer"
@@ -1234,10 +1392,86 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
             </div>
           )}
 
-          {/* Playable Tracklist or Radio Stations */}
+          {/* Playable Tracklist or Radio Stations (Visual Cover Grid or Compact List) */}
           {(mediaTab === 'radio' ? radioStations : tracks).length > 0 ? (
-            <div className="space-y-2 max-h-[430px] overflow-y-auto pr-0.5">
-              {(mediaTab === 'radio' ? radioStations : tracks).map((track, idx) => {
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
+                  {toPersianDigits((mediaTab === 'radio' ? radioStations : tracks).length)}{' '}
+                  {mediaTab === 'radio' ? 'ایستگاه آماده پخش' : 'قطعه پیدا شد'}
+                </span>
+                <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-slate-100 dark:bg-[#0B1312]">
+                  <button
+                    type="button"
+                    onClick={() => setMediaViewMode('grid')}
+                    className={`px-2.5 py-1.5 rounded-md text-xs font-medium flex items-center gap-1 cursor-pointer whitespace-nowrap ${
+                      mediaViewMode === 'grid'
+                        ? 'bg-white dark:bg-[#172724] text-slate-900 dark:text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    <LayoutGrid className="w-3.5 h-3.5" />
+                    <span>شبکه کاور</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMediaViewMode('list')}
+                    className={`px-2.5 py-1.5 rounded-md text-xs font-medium flex items-center gap-1 cursor-pointer whitespace-nowrap ${
+                      mediaViewMode === 'list'
+                        ? 'bg-white dark:bg-[#172724] text-slate-900 dark:text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    <List className="w-3.5 h-3.5" />
+                    <span>لیست</span>
+                  </button>
+                </div>
+              </div>
+
+              {mediaViewMode === 'grid' ? (
+                <div className="max-h-[460px] overflow-y-auto pr-0.5">
+                  <SearchArtworkGrid
+                    columnsClassName="grid-cols-2 sm:grid-cols-3"
+                    items={(mediaTab === 'radio' ? radioStations : tracks).map(
+                      (track, idx): SearchArtworkItem => {
+                        const isSelected =
+                          mediaTab === 'radio' ? currentRadioIndex === idx : currentMusicIndex === idx;
+                        const playingNow =
+                          isSelected && (mediaTab === 'radio' ? isRadioPlaying : isMusicPlaying);
+                        const loadingNow =
+                          isSelected && (mediaTab === 'radio' ? isRadioLoading : isMusicLoading);
+                        const metaParts = [
+                          sourceLabel(track),
+                          mediaTab === 'tracks' && track.durationSec
+                            ? formatTrackClock(track.durationSec)
+                            : '',
+                        ].filter(Boolean);
+                        return {
+                          id: `${mediaTab}-${track.id}-${idx}`,
+                          title: track.title,
+                          subtitle: track.artist,
+                          metaText: metaParts.join(' · '),
+                          artworkUrl: track.artworkUrl,
+                          externalUrl: track.externalUrl,
+                          kind: mediaTab === 'radio' ? 'radio' : 'music',
+                          isActive: isSelected,
+                          isPlaying: playingNow,
+                          isLoading: loadingNow,
+                        };
+                      }
+                    )}
+                    onSelect={(item) => {
+                      const list = mediaTab === 'radio' ? radioStations : tracks;
+                      const idx = list.findIndex(
+                        (t, i) => `${mediaTab}-${t.id}-${i}` === item.id
+                      );
+                      if (idx >= 0) togglePlayItem(idx, mediaTab === 'radio' ? 'radio' : 'tracks');
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[430px] overflow-y-auto pr-0.5">
+                  {(mediaTab === 'radio' ? radioStations : tracks).map((track, idx) => {
                 const isSelected =
                   mediaTab === 'radio' ? currentRadioIndex === idx : currentMusicIndex === idx;
                 const playingNow = isSelected && (mediaTab === 'radio' ? isRadioPlaying : isMusicPlaying);
@@ -1253,7 +1487,7 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
                   >
                     <button
                       type="button"
-                      onClick={() => togglePlayItem(idx, mediaTab)}
+                      onClick={() => togglePlayItem(idx, mediaTab === 'radio' ? 'radio' : 'tracks')}
                       className="flex-1 min-w-0 flex items-center gap-3 text-right cursor-pointer min-h-[44px]"
                     >
                       <div className="w-11 h-11 rounded-lg bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center overflow-hidden shrink-0">
@@ -1261,6 +1495,7 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
                           <img
                             src={track.artworkUrl}
                             alt={track.title}
+                            referrerPolicy="no-referrer"
                             onError={() => setFailedArtIds((p) => ({...p, [track.id]: true}))}
                             className="w-full h-full object-cover"
                           />
@@ -1324,6 +1559,8 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
                   </div>
                 );
               })}
+                </div>
+              )}
             </div>
           ) : (
             <div className="rounded-xl border border-dashed border-slate-200 dark:border-emerald-900/70 py-10 px-4 text-center text-xs sm:text-sm text-slate-500 dark:text-slate-400">
@@ -1489,7 +1726,18 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
       </section>
 
       {mediaTab === 'gta6' && <GTA6StreamsView />}
-      {mediaTab === 'podcasts' && <PodcastLibraryView isOnline={isOnline} onStatusToast={onStatusToast} searchTrigger={assistantMediaTrigger?.tab === 'podcasts' ? {query: assistantMediaTrigger.query, nonce: assistantMediaTrigger.nonce} : null} stopTrigger={assistantMediaTrigger?.tab === 'stop' ? assistantMediaTrigger.nonce : null} />}
+      <div className={mediaTab === 'podcasts' ? '' : 'hidden'}>
+        <PodcastLibraryView
+          isOnline={isOnline}
+          onStatusToast={onStatusToast}
+          searchTrigger={
+            assistantMediaTrigger?.tab === 'podcasts'
+              ? {query: assistantMediaTrigger.query, nonce: assistantMediaTrigger.nonce}
+              : null
+          }
+          stopTrigger={assistantMediaTrigger?.tab === 'stop' ? assistantMediaTrigger.nonce : null}
+        />
+      </div>
     </div>
   );
 };

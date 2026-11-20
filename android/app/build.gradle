@@ -133,6 +133,9 @@ tasks.register("provisionOfflineTtsAssets") {
         File tmpWork = file("${layout.buildDirectory.get().asFile}/tmp_offline_tts")
 
         if (!modelDest.isFile() || modelDest.length() < 1000000L || !tokensDest.isFile() || tokensDest.length() == 0L) {
+            if (gradle.startParameter.isOffline()) {
+                throw new GradleException("Offline TTS gyro model assets missing while Gradle is in --offline mode")
+            }
             tmpWork.mkdirs()
             File gyroArchive = new File(tmpWork, "gyro.tar.bz2")
             downloadFileWithRedirects(
@@ -163,6 +166,9 @@ tasks.register("provisionOfflineTtsAssets") {
         }
 
         if (!espeakDest.isDirectory() || (espeakDest.list()?.length ?: 0) == 0) {
+            if (gradle.startParameter.isOffline()) {
+                throw new GradleException("Offline TTS espeak-ng-data assets missing while Gradle is in --offline mode")
+            }
             tmpWork.mkdirs()
             File espeakArchive = new File(tmpWork, "espeak-ng-data.tar.bz2")
             downloadFileWithRedirects(
@@ -181,7 +187,24 @@ tasks.register("provisionOfflineTtsAssets") {
     }
 }
 
-preBuild.dependsOn(provisionOfflineTtsAssets)
+tasks.register("provisionOfflineWakeAssets") {
+    doLast {
+        File wakeDir = file("src/main/assets/wake")
+        File wakeZipDest = new File(wakeDir, "vosk-model-small-fa-0.42.zip")
+        if (!wakeZipDest.isFile() || wakeZipDest.length() < 10000000L) {
+            if (gradle.startParameter.isOffline()) {
+                throw new GradleException("Offline wake Vosk archive missing while Gradle is in --offline mode")
+            }
+            wakeDir.mkdirs()
+            downloadFileWithRedirects(
+                "https://alphacephei.com/vosk/models/vosk-model-small-fa-0.42.zip",
+                wakeZipDest
+            )
+        }
+    }
+}
+
+preBuild.dependsOn(provisionOfflineTtsAssets, provisionOfflineWakeAssets)
 
 repositories {
     flatDir{

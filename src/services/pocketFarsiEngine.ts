@@ -67,6 +67,10 @@ function getWorker(): Worker {
       return;
     }
 
+    if (msgType === 'statusReport' || msgType === 'installed') {
+      customVoiceReady = Boolean(msg.customVoiceLoaded);
+    }
+
     if (msgType === 'voiceReady') {
       customVoiceReady = true;
     }
@@ -136,7 +140,7 @@ export async function getPocketFarsiStatus(): Promise<PocketFarsiStatus> {
       highPrecisionInstalled: Boolean(res.highPrecisionInstalled),
       sizeBytes: Number(res.sizeBytes || 0),
       voiceCloneReady: Boolean(res.voiceCloneReady),
-      customVoiceLoaded: customVoiceReady,
+      customVoiceLoaded: Boolean(res.customVoiceLoaded ?? customVoiceReady),
       device: res.device === 'webgpu' ? 'webgpu' : 'wasm',
     };
   } catch {
@@ -161,7 +165,7 @@ export async function installPocketFarsi(
     highPrecisionInstalled: Boolean(res.highPrecisionInstalled),
     sizeBytes: Number(res.sizeBytes || 0),
     voiceCloneReady: Boolean(res.voiceCloneReady),
-    customVoiceLoaded: customVoiceReady,
+    customVoiceLoaded: Boolean(res.customVoiceLoaded ?? customVoiceReady),
     device: res.device === 'webgpu' ? 'webgpu' : 'wasm',
   };
 }
@@ -201,7 +205,10 @@ export async function resampleAudioBlobTo24kMono(blob: Blob): Promise<Float32Arr
   }
 }
 
-export async function setPocketCustomVoiceFromBlob(blob: Blob): Promise<void> {
+export async function setPocketCustomVoiceFromBlob(
+  blob: Blob,
+  precision: PocketPrecisionMode = 'q4'
+): Promise<void> {
   const pcm24k = await resampleAudioBlobTo24kMono(blob);
   const w = getWorker();
   await new Promise<void>((resolve, reject) => {
@@ -210,7 +217,7 @@ export async function setPocketCustomVoiceFromBlob(blob: Blob): Promise<void> {
       resolve: () => resolve(),
       reject,
     });
-    w.postMessage({type: 'voice', audio: pcm24k}, [pcm24k.buffer]);
+    w.postMessage({type: 'voice', audio: pcm24k, precision}, [pcm24k.buffer]);
   });
 }
 

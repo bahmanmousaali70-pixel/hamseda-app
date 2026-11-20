@@ -26,7 +26,6 @@ public final class SmsAnnouncementPolicy {
         return true;
     }
 
-
     private static boolean isOperatorPromotion(String sender, String body) {
         String senderText = normalize(sender);
         String bodyText = normalize(body);

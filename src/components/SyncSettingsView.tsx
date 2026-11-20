@@ -167,7 +167,9 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
   const [smsImportantSenders, setSmsImportantSenders] = useState(() => localStorage.getItem('rmz_sms_important_senders') ?? '');
   const [smsQuietHours, setSmsQuietHours] = useState(() => localStorage.getItem('rmz_sms_quiet_hours') ?? '0');
   const [smsSummarize, setSmsSummarize] = useState(() => localStorage.getItem('rmz_sms_summarize') !== 'false');
-  const [smsFilterOperatorPromotions, setSmsFilterOperatorPromotions] = useState(() => localStorage.getItem('rmz_sms_filter_operator_promotions') !== 'false');
+  const [smsFilterOperatorPromotions, setSmsFilterOperatorPromotions] = useState(
+    () => localStorage.getItem('rmz_sms_filter_operator_promotions') !== 'false'
+  );
   const [smsPolicySaving, setSmsPolicySaving] = useState(false);
 
   const [partnerEmailInput, setPartnerEmailInput] = useState(spaceInfo?.partnerEmail ?? '');
@@ -425,13 +427,13 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
             </label>
             <input
               type="text"
-              value={settings.assistantName || 'آوا'}
+              value={settings.assistantName || 'هم‌صدا'}
               onChange={(e) => onUpdateSettings({assistantName: e.target.value})}
-              placeholder="مثلاً: آوا، نگار، یاس، همدم..."
+              placeholder="مثلاً: هم‌صدا، نگار، یاس، همدم..."
               className="w-full min-h-[44px] px-3.5 rounded-xl border border-slate-200 dark:border-emerald-900 bg-white dark:bg-[#121E1C] text-sm font-semibold text-slate-900 dark:text-white"
             />
             <p className="text-[11px] leading-5 text-slate-500 dark:text-slate-400">
-              در تب <strong>دستیار صوتی</strong> وقتی با همین نام صدایش بزنید (مثلاً «{settings.assistantName || 'آوا'} ساعت چنده؟») جواب می‌دهد و دستورها را اجرا می‌کند.
+              در تب <strong>دستیار صوتی</strong> وقتی با همین نام صدایش بزنید (مثلاً «{settings.assistantName || 'هم‌صدا'} ساعت چنده؟») جواب می‌دهد و دستورها را اجرا می‌کند.
             </p>
           </div>
         </div>
@@ -515,7 +517,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
             {
               key: 'autoAssistantSpeak' as const,
               title: 'خواندن خودکار پاسخ دستیار',
-              desc: `پاسخ صوتی خودکار دستیار ${settings.assistantName || 'آوا'} روی گوشی ${selfName}`,
+              desc: `پاسخ صوتی خودکار دستیار ${settings.assistantName || 'هم‌صدا'} روی گوشی ${selfName}`,
             },
           ].map((item) => {
             const active = localVoiceControls.masterSpeakerEnabled && localVoiceControls[item.key];
@@ -1229,8 +1231,18 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
           </div>
         </div>
         <label className="flex items-start gap-2 rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/70 dark:bg-emerald-950/25 p-3 text-xs text-slate-700 dark:text-slate-200">
-          <input type="checkbox" checked={smsFilterOperatorPromotions} onChange={(e) => setSmsFilterOperatorPromotions(e.target.checked)} className="mt-0.5 accent-emerald-700" />
-          <span><strong>پیامک‌های تبلیغاتی اپراتورها خوانده نشوند</strong><span className="block mt-1 leading-5 text-slate-500 dark:text-slate-400">تبلیغات قابل‌شناسایی ایرانسل، همراه اول و رایتل را بی‌صدا رد می‌کند؛ پیامک‌های خدماتی و رمز یک‌بارمصرف نباید صرفاً به‌خاطر نام اپراتور حذف شوند.</span></span>
+          <input
+            type="checkbox"
+            checked={smsFilterOperatorPromotions}
+            onChange={(e) => setSmsFilterOperatorPromotions(e.target.checked)}
+            className="mt-0.5 accent-emerald-700"
+          />
+          <span>
+            <strong>پیامک‌های تبلیغاتی اپراتورها خوانده نشوند</strong>
+            <span className="block mt-1 leading-5 text-slate-500 dark:text-slate-400">
+              تبلیغات قابل‌شناسایی ایرانسل، همراه اول و رایتل را بی‌صدا رد می‌کند؛ پیامک‌های خدماتی و رمز یک‌بارمصرف نباید صرفاً به‌خاطر نام اپراتور حذف شوند.
+            </span>
+          </span>
         </label>
         <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200">
           <input type="checkbox" checked={smsSummarize} onChange={(e) => setSmsSummarize(e.target.checked)} className="accent-emerald-700" />

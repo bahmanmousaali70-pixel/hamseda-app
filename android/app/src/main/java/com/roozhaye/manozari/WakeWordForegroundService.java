@@ -65,6 +65,137 @@ public class WakeWordForegroundService extends Service {
     private String lastHandledHypothesis = "";
     private long lastHandledHypothesisAt = 0L;
 
+    private static final Object MODEL_INSTALL_LOCK = new Object();
+    private volatile boolean terminatedByError = false;
+
+    public static File getOfflineModelDir(Context context) {
+        return new File(new File(context.getFilesDir(), "vosk-fa-0.42"), MODEL_NAME);
+    }
+
+    public static boolean isOfflineModelReady(Context context) {
+        File modelRoot = getOfflineModelDir(context);
+        return new File(modelRoot, "am").isDirectory() && new File(modelRoot, "conf").isDirectory();
+    }
+
+    public static File ensureBundledOrExistingModel(Context context) throws Exception {
+        synchronized (MODEL_INSTALL_LOCK) {
+            File modelRoot = getOfflineModelDir(context);
+            if (isOfflineModelReady(context)) {
+                return modelRoot;
+            }
+            File modelDir = modelRoot.getParentFile();
+            if (modelDir == null) throw new IllegalStateException("Invalid model directory");
+            File cacheZip = new File(context.getCacheDir(), MODEL_NAME + ".once.zip.part");
+            boolean copied = false;
+            try (InputStream in = new BufferedInputStream(context.getAssets().open("wake/" + MODEL_NAME + ".zip"));
+                 FileOutputStream out = new FileOutputStream(cacheZip)) {
+                byte[] buffer = new byte[32768];
+                long total = 0L;
+                int count;
+                while ((count = in.read(buffer)) != -1) {
+                    total += count;
+                    if (total > MAX_MODEL_BYTES) throw new IllegalStateException("Bundled model archive too large");
+                    out.write(buffer, 0, count);
+                }
+                out.getFD().sync();
+                copied = total > 0L;
+            } catch (Exception e) {
+                //noinspection ResultOfMethodCallIgnored
+                cacheZip.delete();
+                throw new IllegalStateException("مدل گفتار آفلاین فارسی در این نسخه آماده نیست.", e);
+            }
+            if (!copied) {
+                //noinspection ResultOfMethodCallIgnored
+                cacheZip.delete();
+                throw new IllegalStateException("فایل مدل آفلاین فارسی خالی است.");
+            }
+            try {
+                extractModelZip(context, cacheZip, modelDir);
+            } finally {
+                //noinspection ResultOfMethodCallIgnored
+                cacheZip.delete();
+            }
+            return modelRoot;
+        }
+    }
+
+    private static void extractModelZip(Context context, File zipFile, File modelDir) throws Exception {
+        File staging = new File(context.getFilesDir(), "vosk-fa-staging");
+        deleteRecursivelyStatic(staging);
+        if (!staging.mkdirs() && !staging.isDirectory()) {
+            throw new IllegalStateException("امکان ساخت پوشه موقت برای مدل فارسی وجود ندارد.");
+        }
+        String stagingCanonical = staging.getCanonicalPath() + File.separator;
+        try {
+            try (ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new java.io.FileInputStream(zipFile)))) {
+                ZipEntry entry;
+                byte[] buffer = new byte[32768];
+                while ((entry = zis.getNextEntry()) != null) {
+                    File target = new File(staging, entry.getName());
+                    String canonical = target.getCanonicalPath();
+                    if (!canonical.startsWith(stagingCanonical)) {
+                        throw new SecurityException("ساختار مسیر داخل فایل مدل نامعتبر است.");
+                    }
+                    if (entry.isDirectory()) {
+                        if (!target.mkdirs() && !target.isDirectory()) {
+                            throw new IllegalStateException("امکان ساخت پوشه‌های مدل فارسی نبود.");
+                        }
+                    } else {
+                        File parent = target.getParentFile();
+                        if (parent != null && !parent.mkdirs() && !parent.isDirectory()) {
+                            throw new IllegalStateException("امکان ساخت زیرپوشه مدل فارسی نبود.");
+                        }
+                        try (FileOutputStream out = new FileOutputStream(target)) {
+                            int n;
+                            while ((n = zis.read(buffer)) != -1) out.write(buffer, 0, n);
+                        }
+                    }
+                    zis.closeEntry();
+                }
+            }
+
+            File extractedNested = new File(staging, MODEL_NAME);
+            File sourceRoot;
+            if (new File(extractedNested, "am").isDirectory() && new File(extractedNested, "conf").isDirectory()) {
+                sourceRoot = extractedNested;
+            } else if (new File(staging, "am").isDirectory() && new File(staging, "conf").isDirectory()) {
+                sourceRoot = staging;
+            } else {
+                throw new IllegalStateException("ساختار مدل گفتار فارسی کامل نیست (پوشه‌های am/conf یافت نشدند).");
+            }
+
+            deleteRecursivelyStatic(modelDir);
+            if (!modelDir.mkdirs() && !modelDir.isDirectory()) {
+                throw new IllegalStateException("امکان ساخت پوشه نهایی مدل فارسی وجود ندارد.");
+            }
+            File finalRoot = new File(modelDir, MODEL_NAME);
+            if (!sourceRoot.renameTo(finalRoot)) {
+                throw new IllegalStateException("انتقال فایل‌های مدل گفتار فارسی به حافظه نهایی ناموفق بود.");
+            }
+        } finally {
+            deleteRecursivelyStatic(staging);
+        }
+    }
+
+    private static void deleteRecursivelyStatic(File file) {
+        if (file == null || !file.exists()) return;
+        File[] children = file.listFiles();
+        if (children != null) for (File child : children) deleteRecursivelyStatic(child);
+        //noinspection ResultOfMethodCallIgnored
+        file.delete();
+    }
+
+    private static void setWakeState(Context context, String state, @Nullable String error) {
+        SharedPreferences.Editor editor = context.getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putString("wake_service_state", state);
+        if (error != null && !error.trim().isEmpty()) {
+            editor.putString("wake_service_error", error.trim());
+        } else {
+            editor.remove("wake_service_error");
+        }
+        editor.apply();
+    }
+
     public static boolean start(Context context, String name) {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
                 != PackageManager.PERMISSION_GRANTED) return false;
@@ -84,6 +215,8 @@ public class WakeWordForegroundService extends Service {
         context.stopService(new Intent(context, WakeWordForegroundService.class));
         context.getSharedPreferences(PREFS, MODE_PRIVATE).edit()
                 .putBoolean("wake_word_enabled", false)
+                .putString("wake_service_state", "stopped")
+                .remove("wake_service_error")
                 .remove("pending_wake_command")
                 .apply();
     }
@@ -105,6 +238,8 @@ public class WakeWordForegroundService extends Service {
         getSharedPreferences(PREFS, MODE_PRIVATE).edit()
                 .putBoolean("wake_word_enabled", true)
                 .putString("assistant_name", assistantName)
+                .putString("wake_service_state", "preparing")
+                .remove("wake_service_error")
                 .apply();
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
@@ -121,6 +256,7 @@ public class WakeWordForegroundService extends Service {
         }
 
         stopping = false;
+        terminatedByError = false;
         if (speechService == null && !modelLoading) prepareModelAndStart();
         return START_STICKY;
     }
@@ -191,13 +327,17 @@ public class WakeWordForegroundService extends Service {
 
     private void prepareModelAndStart() {
         modelLoading = true;
+        setWakeState(this, "preparing", null);
         modelExecutor.execute(() -> {
+            File modelDir = new File(getFilesDir(), "vosk-fa-0.42");
+            File modelRoot = new File(modelDir, MODEL_NAME);
+            boolean modelAlreadyInstalled = isOfflineModelReady(this);
             try {
-                File modelDir = new File(getFilesDir(), "vosk-fa-0.42");
-                File modelRoot = new File(modelDir, MODEL_NAME);
-                if (!new File(modelRoot, "am").isDirectory() || !new File(modelRoot, "conf").isDirectory()) {
-                    updateNotification("دانلود موتور فارسی (حدود ۵۳ مگابایت)…");
-                    installModel(modelDir, modelRoot);
+                synchronized (MODEL_INSTALL_LOCK) {
+                    if (!isOfflineModelReady(this)) {
+                        installModel(modelDir, modelRoot);
+                    }
+                    modelAlreadyInstalled = isOfflineModelReady(this);
                 }
                 Model loaded = new Model(modelRoot.getAbsolutePath());
                 handler.post(() -> {
@@ -210,12 +350,37 @@ public class WakeWordForegroundService extends Service {
                     startContinuousRecognition();
                 });
             } catch (Exception e) {
+                if (modelAlreadyInstalled) {
+                    // Corrupt on-disk model prevented native Model() initialization; clear it cleanly for recovery.
+                    deleteRecursively(modelDir);
+                }
+                final String userError = classifyModelError(e, modelAlreadyInstalled);
                 handler.post(() -> {
                     modelLoading = false;
-                    if (!stopping) updateNotification("آماده‌سازی مدل ناموفق بود؛ اینترنت را بررسی و دوباره شنود را روشن کنید.");
+                    if (!stopping) {
+                        terminatedByError = true;
+                        setWakeState(this, "error", userError);
+                        updateNotification(userError);
+                    }
                 });
             }
         });
+    }
+
+    private String classifyModelError(Exception e, boolean wasOnDisk) {
+        String msg = e.getMessage() != null ? e.getMessage().trim() : "";
+        if (wasOnDisk) {
+            return "فایل‌های مدل گفتار فارسی خراب بودند و برای ترمیم پاک شدند؛ دوباره شنود را روشن کنید.";
+        }
+        if (msg.contains("اینترنت") || msg.contains("ساختار") || msg.contains("فایل‌های مدل") || msg.contains("HTTP")) {
+            return msg;
+        }
+        if (e instanceof java.io.IOException) {
+            return "دریافت یا خواندن فایل مدل فارسی انجام نشد؛ در صورت نبود مدل روی گوشی اینترنت را بررسی کنید.";
+        }
+        return msg.isEmpty()
+                ? "آماده‌سازی موتور شنود فارسی انجام نشد؛ لطفاً دوباره شنود را روشن کنید."
+                : "خطای موتور شنود فارسی: " + msg;
     }
 
     private void installModel(File modelDir, File expectedRoot) throws Exception {
@@ -235,7 +400,7 @@ public class WakeWordForegroundService extends Service {
                         throw new InterruptedException("stopped");
                     }
                     total += count;
-                    if (total > MAX_MODEL_BYTES) throw new IllegalStateException("Bundled model archive too large");
+                    if (total > MAX_MODEL_BYTES) throw new IllegalStateException("حجم فایل مدل داخلی غیرعادی است.");
                     out.write(buffer, 0, count);
                 }
                 out.getFD().sync();
@@ -246,11 +411,15 @@ public class WakeWordForegroundService extends Service {
         } catch (Exception missingOrInvalidBundledAsset) {
             // Backward-compatible fallback for builds that do not yet include the bundled model.
             // A model downloaded once is retained in app-private storage for future offline starts.
+            //noinspection ResultOfMethodCallIgnored
             zipFile.delete();
         }
 
         if (!loadedBundledModel) {
-            updateNotification("مدل فارسی روی گوشی نیست؛ برای دریافت اولیه به اینترنت وصل شوید…");
+            if (!CallAnnouncerService.isNetworkConnected(this)) {
+                throw new IllegalStateException("مدل گفتار فارسی روی گوشی نصب نیست و اینترنت هم قطع است؛ برای دریافت اولیه (~۵۳ مگابایت) یک بار به اینترنت وصل شوید.");
+            }
+            updateNotification("در حال دریافت اولیه مدل گفتار فارسی (حدود ۵۳ مگابایت)…");
             HttpURLConnection connection = null;
             try {
                 connection = (HttpURLConnection) new URL(MODEL_URL).openConnection();
@@ -259,9 +428,9 @@ public class WakeWordForegroundService extends Service {
                 connection.setInstanceFollowRedirects(true);
                 connection.connect();
                 int status = connection.getResponseCode();
-                if (status < 200 || status >= 300) throw new IllegalStateException("Model download HTTP " + status);
+                if (status < 200 || status >= 300) throw new IllegalStateException("خطای سرور دریافت مدل (HTTP " + status + ")");
                 long declared = connection.getContentLengthLong();
-                if (declared > MAX_MODEL_BYTES) throw new IllegalStateException("Model archive too large");
+                if (declared > MAX_MODEL_BYTES) throw new IllegalStateException("حجم فایل مدل دریافت‌شده غیرمعتبر است.");
                 try (InputStream in = new BufferedInputStream(connection.getInputStream());
                      FileOutputStream out = new FileOutputStream(zipFile)) {
                     byte[] buffer = new byte[32768];
@@ -271,7 +440,7 @@ public class WakeWordForegroundService extends Service {
                     while ((count = in.read(buffer)) != -1) {
                         if (stopping || Thread.currentThread().isInterrupted()) throw new InterruptedException("stopped");
                         total += count;
-                        if (total > MAX_MODEL_BYTES) throw new IllegalStateException("Model archive too large");
+                        if (total > MAX_MODEL_BYTES) throw new IllegalStateException("حجم فایل مدل دریافت‌شده غیرمعتبر است.");
                         out.write(buffer, 0, count);
                         long now = System.currentTimeMillis();
                         if (now - lastProgressUpdate >= 300L) {
@@ -287,41 +456,12 @@ public class WakeWordForegroundService extends Service {
             }
         }
 
-        File staging = new File(getFilesDir(), "vosk-fa-staging");
-        deleteRecursively(staging);
-        if (!staging.mkdirs() && !staging.isDirectory()) throw new IllegalStateException("Cannot create model folder");
-        String stagingCanonical = staging.getCanonicalPath() + File.separator;
-        try (ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new java.io.FileInputStream(zipFile)))) {
-            ZipEntry entry;
-            byte[] buffer = new byte[32768];
-            while ((entry = zis.getNextEntry()) != null) {
-                File target = new File(staging, entry.getName());
-                String canonical = target.getCanonicalPath();
-                if (!canonical.startsWith(stagingCanonical)) throw new SecurityException("Invalid model archive path");
-                if (entry.isDirectory()) {
-                    if (!target.mkdirs() && !target.isDirectory()) throw new IllegalStateException("Cannot create model directory");
-                } else {
-                    File parent = target.getParentFile();
-                    if (parent != null && !parent.mkdirs() && !parent.isDirectory()) throw new IllegalStateException("Cannot create model folder");
-                    try (FileOutputStream out = new FileOutputStream(target)) {
-                        int n;
-                        while ((n = zis.read(buffer)) != -1) out.write(buffer, 0, n);
-                    }
-                }
-                zis.closeEntry();
-            }
+        try {
+            extractModelZip(this, zipFile, modelDir);
+        } finally {
+            //noinspection ResultOfMethodCallIgnored
+            zipFile.delete();
         }
-        File extracted = new File(staging, MODEL_NAME);
-        if (!new File(extracted, "am").isDirectory() || !new File(extracted, "conf").isDirectory()) {
-            throw new IllegalStateException("Persian model archive structure is invalid");
-        }
-        deleteRecursively(modelDir);
-        if (!modelDir.mkdirs() && !modelDir.isDirectory()) throw new IllegalStateException("Cannot create final model folder");
-        File finalRoot = new File(modelDir, MODEL_NAME);
-        if (!extracted.renameTo(finalRoot)) throw new IllegalStateException("Cannot install Persian model");
-        deleteRecursively(staging);
-        //noinspection ResultOfMethodCallIgnored
-        zipFile.delete();
     }
 
     private void startContinuousRecognition() {
@@ -342,9 +482,11 @@ public class WakeWordForegroundService extends Service {
                 }
                 @Override public void onTimeout() {}
             });
-            if (!started) throw new IllegalStateException("Vosk listener did not start");
-            updateNotification("گوش‌به‌زنگ فعال است؛ فرمان‌های واضح را مستقیم بگو.");
+            if (!started) throw new IllegalStateException("میکروفون شنود پیوسته توسط سیستم آزاد نشد.");
+            setWakeState(this, "listening", null);
+            updateNotification("گوش‌به‌زنگ فعال است؛ با نام «" + assistantName + "» صدا بزن یا فرمان بده.");
         } catch (Exception e) {
+            setWakeState(this, "error", "شروع شنود پیوسته ناموفق بود؛ دوباره تلاش می‌کنم.");
             updateNotification("شروع شنود پیوسته ناموفق بود؛ دوباره تلاش می‌کنم.");
             handler.postDelayed(() -> recoverContinuousRecognition(), 2500);
         }
@@ -566,7 +708,12 @@ public class WakeWordForegroundService extends Service {
                 model = null;
             }
         } catch (Exception ignored) {}
-        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean("wake_word_enabled", false).apply();
+        SharedPreferences.Editor destroyEdit = getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putBoolean("wake_word_enabled", false);
+        if (!terminatedByError) {
+            destroyEdit.putString("wake_service_state", "stopped");
+        }
+        destroyEdit.apply();
         super.onDestroy();
     }
 

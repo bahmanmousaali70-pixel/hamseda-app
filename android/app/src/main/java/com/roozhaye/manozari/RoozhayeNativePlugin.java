@@ -40,6 +40,9 @@ import android.webkit.URLUtil;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.vosk.Model;
+import org.vosk.Recognizer;
+import org.vosk.android.SpeechService;
 
 import androidx.activity.result.ActivityResult;
 import androidx.core.app.ActivityCompat;
@@ -72,6 +75,11 @@ public class RoozhayeNativePlugin extends Plugin {
     private static final int PERM_REQ_CODE = 8841;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private SpeechRecognizer activeRecognizer = null;
+    private volatile SpeechService activeVoskService = null;
+    private volatile Recognizer activeVoskRecognizer = null;
+    private volatile Model activeVoskModel = null;
+    private volatile Runnable pendingVoskTimeout = null;
+    private volatile boolean voskCancelRequested = false;
     private MediaRecorder activeRecorder = null;
     private File activeRecorderTempFile = null;
 
@@ -209,7 +217,7 @@ public class RoozhayeNativePlugin extends Plugin {
         String deviceOwner = call.getString("deviceOwner", "man");
         String selfName = call.getString("selfName", "بهمن");
         String partnerName = call.getString("partnerName", "زری");
-        String assistantName = call.getString("assistantName", "آوا");
+        String assistantName = call.getString("assistantName", "هم‌صدا");
 
         SharedPreferences prefs = getContext().getSharedPreferences("rmz_native_prefs", Context.MODE_PRIVATE);
         prefs.edit()
@@ -239,17 +247,26 @@ public class RoozhayeNativePlugin extends Plugin {
             return;
         }
 
+        final AtomicBoolean settled = new AtomicBoolean(false);
         mainHandler.post(() -> {
             destroyActiveRecognizer();
-            if (!SpeechRecognizer.isRecognitionAvailable(ctx)) {
-                JSObject ret = new JSObject();
-                ret.put("ok", false);
-                ret.put("error", "سرویس تشخیص گفتار گوگل روی این گوشی فعال نیست.");
-                call.resolve(ret);
+
+            boolean hasNetwork = CallAnnouncerService.isNetworkConnected(ctx);
+            boolean hasOfflineVosk = WakeWordForegroundService.isOfflineModelReady(ctx);
+            boolean speechRecAvailable = SpeechRecognizer.isRecognitionAvailable(ctx);
+
+            // Fast-path: when offline and the Vosk Persian model is ready on disk,
+            // use genuine offline Vosk recognition directly instead of failing on Google network ASR.
+            if (!hasNetwork && hasOfflineVosk) {
+                startVoskOnceRecognition(ctx, call, settled, 0);
                 return;
             }
 
-            final AtomicBoolean settled = new AtomicBoolean(false);
+            if (!speechRecAvailable) {
+                startVoskOnceRecognition(ctx, call, settled, -1);
+                return;
+            }
+
             try {
                 SpeechRecognizer recognizer = SpeechRecognizer.createSpeechRecognizer(ctx);
                 activeRecognizer = recognizer;
@@ -265,8 +282,17 @@ public class RoozhayeNativePlugin extends Plugin {
 
                     @Override
                     public void onError(int error) {
-                        if (!settled.compareAndSet(false, true)) return;
                         destroyRecognizerIfCurrent(recognizer);
+                        boolean shouldTryVoskFallback =
+                                error == SpeechRecognizer.ERROR_NETWORK
+                                        || error == SpeechRecognizer.ERROR_NETWORK_TIMEOUT
+                                        || error == SpeechRecognizer.ERROR_SERVER
+                                        || error == SpeechRecognizer.ERROR_CLIENT;
+                        if (shouldTryVoskFallback && !settled.get()) {
+                            startVoskOnceRecognition(ctx, call, settled, error);
+                            return;
+                        }
+                        if (!settled.compareAndSet(false, true)) return;
                         JSObject ret = new JSObject();
                         ret.put("ok", false);
                         ret.put("errorCode", error);
@@ -312,19 +338,189 @@ public class RoozhayeNativePlugin extends Plugin {
                 intent.putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, ctx.getPackageName());
                 recognizer.startListening(intent);
             } catch (Exception e) {
-                if (settled.compareAndSet(false, true)) {
-                    destroyActiveRecognizer();
-                    JSObject ret = new JSObject();
-                    ret.put("ok", false);
-                    ret.put("error", "امکان شروع میکروفون نبود.");
-                    call.resolve(ret);
+                destroyActiveRecognizer();
+                if (!settled.get()) {
+                    startVoskOnceRecognition(ctx, call, settled, -1);
                 }
             }
         });
     }
 
+    private void startVoskOnceRecognition(
+            Context ctx,
+            PluginCall call,
+            AtomicBoolean settled,
+            int priorSpeechErrorCode
+    ) {
+        voskCancelRequested = false;
+        new Thread(() -> {
+            Model voskModel = null;
+            Recognizer voskRec = null;
+            SpeechService voskService = null;
+            try {
+                File modelRoot = WakeWordForegroundService.ensureBundledOrExistingModel(ctx);
+                if (voskCancelRequested || settled.get()) return;
+                voskModel = new Model(modelRoot.getAbsolutePath());
+                if (voskCancelRequested || settled.get()) {
+                    voskModel.close();
+                    return;
+                }
+                voskRec = new Recognizer(voskModel, 16000.0f);
+                voskService = new SpeechService(voskRec, 16000.0f);
+
+                final Model boundModel = voskModel;
+                final Recognizer boundRec = voskRec;
+                final SpeechService boundService = voskService;
+                final String[] lastPartial = new String[]{""};
+
+                Runnable cleanupTimeout = () -> {
+                    if (settled.compareAndSet(false, true)) {
+                        clearVoskReferencesIfCurrent(boundService, boundRec, boundModel);
+                        asyncCleanupVosk(boundService, boundRec, boundModel);
+                        String text = lastPartial[0].trim();
+                        JSObject ret = new JSObject();
+                        ret.put("ok", !text.isEmpty());
+                        ret.put("offlineEngine", "vosk");
+                        ret.put("transcript", text);
+                        ArrayList<String> list = new ArrayList<>();
+                        if (!text.isEmpty()) list.add(text);
+                        ret.put("transcripts", new JSONArray(list));
+                        if (text.isEmpty()) {
+                            ret.put("error", "صدایی با تشخیص گفتار آفلاین دریافت نشد.");
+                        }
+                        mainHandler.post(() -> call.resolve(ret));
+                    }
+                };
+
+                activeVoskModel = boundModel;
+                activeVoskRecognizer = boundRec;
+                activeVoskService = boundService;
+                pendingVoskTimeout = cleanupTimeout;
+
+                boolean started = boundService.startListening(new org.vosk.android.RecognitionListener() {
+                    @Override public void onPartialResult(String hypothesis) {
+                        String p = extractVoskField(hypothesis, "partial");
+                        if (!p.isEmpty()) lastPartial[0] = p;
+                    }
+
+                    @Override public void onResult(String hypothesis) {
+                        String text = extractVoskField(hypothesis, "text");
+                        if (text.isEmpty()) return;
+                        finishWithTranscript(text);
+                    }
+
+                    @Override public void onFinalResult(String hypothesis) {
+                        String text = extractVoskField(hypothesis, "text");
+                        if (text.isEmpty()) text = lastPartial[0].trim();
+                        if (!text.isEmpty()) {
+                            finishWithTranscript(text);
+                        } else if (settled.compareAndSet(false, true)) {
+                            mainHandler.removeCallbacks(cleanupTimeout);
+                            clearVoskReferencesIfCurrent(boundService, boundRec, boundModel);
+                            asyncCleanupVosk(boundService, boundRec, boundModel);
+                            JSObject ret = new JSObject();
+                            ret.put("ok", false);
+                            ret.put("offlineEngine", "vosk");
+                            ret.put("error", "صدایی شنیده نشد.");
+                            mainHandler.post(() -> call.resolve(ret));
+                        }
+                    }
+
+                    @Override public void onError(Exception e) {
+                        if (settled.compareAndSet(false, true)) {
+                            mainHandler.removeCallbacks(cleanupTimeout);
+                            clearVoskReferencesIfCurrent(boundService, boundRec, boundModel);
+                            asyncCleanupVosk(boundService, boundRec, boundModel);
+                            JSObject ret = new JSObject();
+                            ret.put("ok", false);
+                            ret.put("offlineEngine", "vosk");
+                            ret.put("error", "خطای میکروفون در تشخیص گفتار آفلاین فارسی.");
+                            mainHandler.post(() -> call.resolve(ret));
+                        }
+                    }
+
+                    @Override public void onTimeout() {
+                        cleanupTimeout.run();
+                    }
+
+                    private void finishWithTranscript(String transcript) {
+                        if (!settled.compareAndSet(false, true)) return;
+                        mainHandler.removeCallbacks(cleanupTimeout);
+                        clearVoskReferencesIfCurrent(boundService, boundRec, boundModel);
+                        asyncCleanupVosk(boundService, boundRec, boundModel);
+                        JSObject ret = new JSObject();
+                        ret.put("ok", true);
+                        ret.put("offlineEngine", "vosk");
+                        ret.put("transcript", transcript);
+                        ArrayList<String> list = new ArrayList<>();
+                        list.add(transcript);
+                        ret.put("transcripts", new JSONArray(list));
+                        mainHandler.post(() -> call.resolve(ret));
+                    }
+                });
+
+                if (!started) {
+                    throw new IllegalStateException("میکروفون در دسترس نیست.");
+                }
+                mainHandler.postDelayed(cleanupTimeout, 11000L);
+            } catch (Exception e) {
+                clearVoskReferencesIfCurrent(voskService, voskRec, voskModel);
+                asyncCleanupVosk(voskService, voskRec, voskModel);
+                if (settled.compareAndSet(false, true)) {
+                    JSObject ret = new JSObject();
+                    ret.put("ok", false);
+                    if (priorSpeechErrorCode > 0) ret.put("errorCode", priorSpeechErrorCode);
+                    String msg = priorSpeechErrorCode > 0
+                            ? mapSpeechError(priorSpeechErrorCode) + "؛ و مدل آفلاین فارسی نیز آماده نبود."
+                            : (e.getMessage() != null && !e.getMessage().isEmpty()
+                                    ? e.getMessage()
+                                    : "سرویس تشخیص گفتار گوگل و مدل آفلاین هیچ‌کدام آماده نیستند.");
+                    ret.put("error", msg);
+                    mainHandler.post(() -> call.resolve(ret));
+                }
+            }
+        }, "HamsedaVoskListenOnce").start();
+    }
+
+    private String extractVoskField(String json, String key) {
+        try {
+            return new JSONObject(json == null ? "{}" : json).optString(key, "").trim();
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    private void clearVoskReferencesIfCurrent(SpeechService svc, Recognizer rec, Model mdl) {
+        if (pendingVoskTimeout != null) {
+            mainHandler.removeCallbacks(pendingVoskTimeout);
+            pendingVoskTimeout = null;
+        }
+        if (activeVoskService == svc) activeVoskService = null;
+        if (activeVoskRecognizer == rec) activeVoskRecognizer = null;
+        if (activeVoskModel == mdl) activeVoskModel = null;
+    }
+
+    private void asyncCleanupVosk(SpeechService svc, Recognizer rec, Model mdl) {
+        if (svc == null && rec == null && mdl == null) return;
+        new Thread(() -> {
+            try {
+                if (svc != null) {
+                    svc.stop();
+                    svc.shutdown();
+                }
+            } catch (Exception ignored) {}
+            try {
+                if (rec != null) rec.close();
+            } catch (Exception ignored) {}
+            try {
+                if (mdl != null) mdl.close();
+            } catch (Exception ignored) {}
+        }, "HamsedaVoskCleanup").start();
+    }
+
     @PluginMethod
     public void stopListening(PluginCall call) {
+        voskCancelRequested = true;
         mainHandler.post(this::destroyActiveRecognizer);
         JSObject ret = new JSObject();
         ret.put("ok", true);
@@ -339,11 +535,18 @@ public class RoozhayeNativePlugin extends Plugin {
     }
 
     private void destroyActiveRecognizer() {
+        voskCancelRequested = true;
         SpeechRecognizer recognizer = activeRecognizer;
         activeRecognizer = null;
-        if (recognizer == null) return;
-        try { recognizer.cancel(); } catch (Exception ignored) {}
-        try { recognizer.destroy(); } catch (Exception ignored) {}
+        if (recognizer != null) {
+            try { recognizer.cancel(); } catch (Exception ignored) {}
+            try { recognizer.destroy(); } catch (Exception ignored) {}
+        }
+        SpeechService voskSvc = activeVoskService;
+        Recognizer voskRec = activeVoskRecognizer;
+        Model voskMdl = activeVoskModel;
+        clearVoskReferencesIfCurrent(voskSvc, voskRec, voskMdl);
+        asyncCleanupVosk(voskSvc, voskRec, voskMdl);
     }
 
     private String mapSpeechError(int error) {
@@ -351,7 +554,7 @@ public class RoozhayeNativePlugin extends Plugin {
             case SpeechRecognizer.ERROR_AUDIO: return "خطای دریافت صدا از میکروفون";
             case SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS: return "اجازه میکروفون داده نشده است";
             case SpeechRecognizer.ERROR_NETWORK:
-            case SpeechRecognizer.ERROR_NETWORK_TIMEOUT: return "سرویس گفتار به اینترنت یا سرویس گوگل دسترسی ندارد";
+            case SpeechRecognizer.ERROR_NETWORK_TIMEOUT: return "سرویس گفتار گوگل به اینترنت دسترسی ندارد";
             case SpeechRecognizer.ERROR_NO_MATCH:
             case SpeechRecognizer.ERROR_SPEECH_TIMEOUT: return "صدایی تشخیص داده نشد";
             case SpeechRecognizer.ERROR_RECOGNIZER_BUSY: return "میکروفون در حال استفاده است";
@@ -1217,6 +1420,22 @@ public class RoozhayeNativePlugin extends Plugin {
         WakeWordForegroundService.stop(getContext());
         JSObject ret = new JSObject();
         ret.put("ok", true);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void getWakeWordStatus(PluginCall call) {
+        Context ctx = getContext();
+        SharedPreferences prefs = ctx.getSharedPreferences("rmz_native_prefs", Context.MODE_PRIVATE);
+        boolean enabled = prefs.getBoolean("wake_word_enabled", false);
+        String state = prefs.getString("wake_service_state", enabled ? "preparing" : "stopped");
+        String error = prefs.getString("wake_service_error", "");
+        boolean modelReady = WakeWordForegroundService.isOfflineModelReady(ctx);
+        JSObject ret = new JSObject();
+        ret.put("enabled", enabled);
+        ret.put("state", state != null ? state : "stopped");
+        ret.put("error", error != null ? error : "");
+        ret.put("modelReady", modelReady);
         call.resolve(ret);
     }
 
