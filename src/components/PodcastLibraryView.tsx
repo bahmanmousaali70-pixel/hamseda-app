@@ -50,11 +50,17 @@ export const PodcastLibraryView: React.FC<{
     if (!isOnline) { onStatusToast('برای جستجوی پادکست‌های تازه اتصال اینترنت لازم است.'); return; }
     setBusy(true);
     try {
-      const response = await fetch(apiUrl('/api/podcast-search'), {
+      const requestOptions: RequestInit = {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({query: term}),
-      });
+      };
+      let response = await fetch(apiUrl('/api/podcast-search'), requestOptions);
+      // Some installed builds still point at the older AI Studio API host.
+      // Retry the known project Cloud Run host when that host has no podcast route.
+      if (response.status === 404) {
+        response = await fetch('https://ais-dev-5dqrp6vmbjkluesjlbth6l-737153117526.europe-west2.run.app/api/podcast-search', requestOptions);
+      }
       const parsed = await safeReadJsonResponse<PodcastSearchResponse>(response);
       if (!response.ok || parsed.isHtml || !parsed.data) {
         throw new Error(parsed.data?.error || 'پاسخ نامعتبر از سرویس پادکست دریافت شد.');
