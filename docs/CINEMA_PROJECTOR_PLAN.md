@@ -68,3 +68,19 @@ Important boundaries:
 - Google Cast SDK sender support is separate from DLNA and is not included in this implementation. Chromecast discovery and playback still need a dedicated integration and a compatible Cast receiver.
 - The projector's exact model/firmware is unknown, so compatibility must be verified on the user's actual device.
 - No build or physical-device test has been completed for this feature branch yet.
+
+
+## Owlenz SD500 — phone VPN / wireless display path
+
+The user confirmed that the Owlenz SD500 has previously received a phone screen wirelessly, although the receiver menu label is currently unknown. The preferred path for services that require the phone's VPN is therefore:
+
+1. Keep the VPN active on the Android phone.
+2. Open the phone's Android Cast / wireless display settings from Hamseda.
+3. Select the projector's screen-mirroring receiver and start playback on the phone.
+4. The projector acts as a display; it does not need a VPN app or a VPN subscription.
+
+The native shortcut opens Android's Cast settings only. Android/OEM firmware controls actual pairing and mirroring; Hamseda cannot guarantee or silently initiate Miracast on every phone. The user may need to enable Screen Mirroring / Miracast / WiFi Display in the projector's own menu. Wireless display may use Wi-Fi Direct and may not require both devices to share the same router Wi-Fi; follow the device's pairing prompt.
+
+DLNA remains a separate option for direct public HTTP(S) media URLs. In that mode the projector/renderer fetches the media itself, so the phone's VPN is not automatically shared with it. YouTube page URLs are not direct media URLs and remain unsupported by the DLNA sender. No VPN proxy/relay or DRM circumvention is included. Some subscription apps may block mirrored playback or show a black screen because of DRM.
+
+Validation status: source changes are committed to this feature branch only. No Android build, phone test, or physical Owlenz SD500 pairing test has been completed yet. Do not describe the projector as fully verified until those tests pass.
