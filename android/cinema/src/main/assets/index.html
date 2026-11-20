@@ -50,7 +50,7 @@ function escapeHtml(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;',
 function isPermissiveLicense(meta){
  const raw=[meta.licenseurl,meta.license,meta.rights].filter(Boolean).join(' ').toLowerCase();
  if(/by-nc|by-nd|non.?commercial|no derivatives|all rights reserved/.test(raw))return false;
- return /public.?domain|creativecommons\.org\/publicdomain|creativecommons\.org\/licenses\/(by|by-sa)\/|cc0|(^|\\W)cc[- ]by(?:[- ]sa)?(\\W|$)/i.test(raw);
+ return /public.?domain|creativecommons\.org\/publicdomain|creativecommons\.org\/licenses\/(by|by-sa)\/|cc0|(^|[^a-z])cc[- ]by(?:[- ]sa)?([^a-z]|$)/i.test(raw);
 }
 function licenseLabel(meta){const raw=[meta.licenseurl,meta.license,meta.rights].filter(Boolean).join(' ');return raw||'مجوز در فراداده روشن نیست'}
 async function searchArchive(query){
