@@ -23,8 +23,8 @@ h2{font-size:21px;margin:24px 0 12px}.sources,.results{display:grid;grid-templat
 </style></head>
 <body><main>
 <header><div class="logo">▶</div><div><h1>هم‌صدا سینما</h1><p>جست‌وجو و تماشای منابع رایگان و مجاز</p></div></header>
-<p>نام فیلم یا سریال را بنویس. آرشیو اینترنت به‌صورت مستقیم جست‌وجو می‌شود؛ منابع ایرانی نیز با جست‌وجوی اختصاصی باز می‌شوند.</p>
-<div class="search"><input id="q" type="search" placeholder="مثلاً سرخ و سیاه، فیلم کلاسیک..." autocomplete="off"><button id="search">جست‌وجو</button></div>
+<p>منبع را انتخاب کن. جست‌وجو در همان سرویس و داخل خود برنامه باز می‌شود؛ اگر سرویس پخش مجاز ارائه کند، ویدئو در همین صفحه پخش خواهد شد.</p>
+<div class="search"><select id="source" style="background:#151e2d;border:2px solid #34445c;color:white;border-radius:14px;padding:14px;font-size:17px"><option value="archive">آرشیو عمومی و مجاز</option><option value="aparat">آپارات</option><option value="namasha">نماشا</option><option value="telewebion">تلوبیون</option></select><input id="q" type="search" placeholder="نام فیلم یا سریال..." autocomplete="off"><button id="search">جست‌وجو</button></div>
 <div id="status" class="status" aria-live="polite">برای شروع، نام یک عنوان را وارد کن.</div>
 <div class="note" id="phonePairing">برای کنترل با گوشی، اطلاعات اتصال نمایش داده می‌شود…</div>
 <h2>نتایج آرشیو عمومی Internet Archive</h2>
@@ -38,14 +38,11 @@ h2{font-size:21px;margin:24px 0 12px}.sources,.results{display:grid;grid-templat
 <script>
 const $=id=>document.getElementById(id);
 const providers=[
-{name:'آپارات',desc:'ویدئوهای عمومی و کانال‌های رسمی',url:q=>'https://www.google.com/search?q='+encodeURIComponent('site:aparat.com '+q+' (فیلم کامل OR دوبله فارسی)')},
-{name:'نماشا',desc:'ویدئوهای عمومی و منتشرکنندگان',url:q=>'https://www.google.com/search?q='+encodeURIComponent('site:namasha.com '+q)},
-{name:'تلوبیون',desc:'آرشیو و پخش رسمی برنامه‌ها',url:q=>'https://www.google.com/search?q='+encodeURIComponent('site:telewebion.com '+q)},
-{name:'سپهر',desc:'آرشیو و پخش رسانه‌ای رسمی',url:q=>'https://www.google.com/search?q='+encodeURIComponent('site:sepehrtv.ir '+q)},
-{name:'تماشاخونه',desc:'رایگان‌بودن هر عنوان را جداگانه بررسی کن',url:q=>'https://www.google.com/search?q='+encodeURIComponent('site:tmk.ir '+q+' رایگان')},
-{name:'فیلم‌های عمومی و کلاسیک',desc:'جست‌وجوی مستقل در آرشیو اینترنت',url:q=>'https://archive.org/search?query='+encodeURIComponent('title:'+q+' AND mediatype:movies')}
+{name:'آپارات',desc:'جست‌وجو در خود آپارات؛ پخش در WebView برنامه',value:'aparat',url:q=>'https://www.aparat.com/search?q='+encodeURIComponent(q)},
+{name:'نماشا',desc:'جست‌وجو در خود نماشا؛ پخش در WebView برنامه',value:'namasha',url:q=>'https://www.namasha.com/search?query='+encodeURIComponent(q)},
+{name:'تلوبیون',desc:'صفحه رسمی تلوبیون؛ دسترسی به محتوای مجاز',value:'telewebion',url:q=>'https://www.telewebion.com/search?query='+encodeURIComponent(q)}
 ];
-providers.forEach(p=>{const a=document.createElement('a');a.className='source';a.href='#';const b=document.createElement('b');b.textContent=p.name;const s=document.createElement('small');s.textContent=p.desc;a.append(b,s);a.addEventListener('click',e=>{e.preventDefault();const q=$('q').value.trim();if(!q){$('q').focus();return}location.href=p.url(q)});$('sources').appendChild(a)});
+providers.forEach(p=>{const a=document.createElement('a');a.className='source';a.href='#';const b=document.createElement('b');b.textContent=p.name;const s=document.createElement('small');s.textContent=p.desc;a.append(b,s);a.addEventListener('click',e=>{e.preventDefault();$('source').value=p.value;const q=$('q').value.trim();if(q)browseProvider(p.value,q);else location.href='https://www.'+(p.value==='aparat'?'aparat.com':p.value==='namasha'?'namasha.com':'telewebion.com')});$('sources').appendChild(a)});
 function setStatus(s){$('status').textContent=s}
 function escapeHtml(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function isPermissiveLicense(meta){
@@ -104,12 +101,12 @@ function playPlayable(id){
  $('player').scrollIntoView({behavior:'smooth',block:'start'});
  $('video').play().then(()=>setStatus('در حال پخش: '+item.title)).catch(()=>setStatus('فایل پیدا شد، اما پخش خودکار انجام نشد؛ دکمه پخش را بزن.'));
 }
-window.cinemaRemoteSearch=query=>{$('q').value=query;searchAll()};
+function browseProvider(source,query){const p=providers.find(x=>x.value===source);if(!p){setStatus('منبع انتخاب‌شده معتبر نیست.');return}setStatus('در حال بازکردن جست‌وجوی '+p.name+' داخل هم‌صدا…');location.href=p.url(query)}\nwindow.cinemaRemoteSearch=(query,source)=>{$('q').value=query;if(source&&source!=='archive')browseProvider(source,query);else{$('source').value='archive';searchAll()}};
 window.cinemaRemotePlay=id=>playPlayable(id);
 async function searchAll(){
  const q=$('q').value.trim();if(!q){$('q').focus();return}
  $('search').disabled=true;
- try{await searchArchive(q)}catch(e){$('results').innerHTML='<div class="empty">اتصال مستقیم به API آرشیو ممکن نشد. از کارت‌های جست‌وجوی منابع ایرانی پایین صفحه استفاده کن.</div>';setStatus(e.message||'خطای شبکه')}
+ try{const source=$('source').value;if(source!=='archive'){browseProvider(source,q);return}await searchArchive(q)}catch(e){$('results').innerHTML='<div class="empty">اتصال مستقیم به API آرشیو ممکن نشد. اتصال مستقیم به آرشیو ممکن نشد؛ منبع دیگری را انتخاب کن.</div>';setStatus(e.message||'خطای شبکه')}
  finally{$('search').disabled=false}
 }
 $('search').addEventListener('click',searchAll);
