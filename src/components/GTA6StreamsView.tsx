@@ -94,8 +94,15 @@ export const GTA6StreamsView: React.FC = () => {
           <button type="button" onClick={startVideo} disabled={!cleanVideoId(videoInput)} className="px-4 rounded-lg bg-violet-700 disabled:opacity-40 text-white text-xs font-semibold flex items-center gap-1.5"><Play className="w-4 h-4" /> پخش</button>
         </div>
         {activeVideoId ? (
-          <div className="aspect-video overflow-hidden rounded-xl bg-black">
-            <iframe title="پخش استریم GTA 6 از یوتیوب" src={`https://www.youtube.com/embed/${activeVideoId}?autoplay=1&playsinline=1&rel=0`} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerPolicy="strict-origin-when-cross-origin" allowFullScreen />
+          <div className="space-y-2">
+            <div className="aspect-video overflow-hidden rounded-xl bg-black">
+              <iframe title="پخش استریم GTA 6 از یوتیوب" src={`https://www.youtube.com/embed/${activeVideoId}?autoplay=1&playsinline=1&rel=0`} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerPolicy="strict-origin-when-cross-origin" allowFullScreen />
+            </div>
+            <button type="button" onClick={() => window.open(`https://www.youtube.com/watch?v=${activeVideoId}`, '_blank', 'noopener,noreferrer')} className="w-full min-h-[42px] rounded-lg border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 text-xs font-semibold flex items-center justify-center gap-2">
+              <Youtube className="w-4 h-4" /> اگر یوتیوب ورود یا تأیید ربات خواست، پخش در یوتیوب رسمی
+              <ExternalLink className="w-3.5 h-3.5" />
+            </button>
+            <p className="text-[11px] leading-5 text-slate-500 dark:text-slate-400">بعضی ویدئوها به‌دلیل محدودیت صاحب کانال یا تأیید امنیتی یوتیوب در پخش‌کننده داخلی باز نمی‌شوند؛ این محدودیت از طرف یوتیوب است.</p>
           </div>
         ) : (
           <p className="text-[11px] leading-6 text-slate-500 dark:text-slate-400">برای پیدا کردن استریم، جستجوی یوتیوب را باز کن؛ بعد از انتخاب ویدئو، لینک آن را کپی و اینجا وارد کن تا داخل هم‌صدا پخش شود. ورود حساب گوگل فقط در برنامه رسمی یوتیوب یا مرورگر انجام می‌شود.</p>
