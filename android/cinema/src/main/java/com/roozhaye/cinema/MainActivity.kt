@@ -9,10 +9,18 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.webkit.WebSettings
+import android.webkit.JavascriptInterface
+import org.json.JSONObject
 import android.widget.FrameLayout
 
 class MainActivity : Activity() {
     private lateinit var web: WebView
+    private lateinit var remoteServer: ProjectorRemoteServer
+
+    inner class CinemaBridge {
+        @JavascriptInterface fun getPairingInfo(): String = remoteServer.pairingInfo()
+        @JavascriptInterface fun publishResults(json: String) = remoteServer.publishResults(json)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -28,6 +36,9 @@ class MainActivity : Activity() {
         web.settings.loadsImagesAutomatically = true
         web.settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
         web.webChromeClient = WebChromeClient()
+        remoteServer = ProjectorRemoteServer(this, web)
+        web.addJavascriptInterface(CinemaBridge(), "CinemaBridge")
+        remoteServer.start()
         web.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val scheme = request.url.scheme ?: return true
@@ -60,6 +71,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        remoteServer.stop()
         web.destroy()
         super.onDestroy()
     }
