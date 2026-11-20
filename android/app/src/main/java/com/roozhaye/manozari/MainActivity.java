@@ -8,6 +8,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(RoozhayeNativePlugin.class);
         registerPlugin(CinemaCastPlugin.class);
+        registerPlugin(CinemaRemotePlugin.class);
         super.onCreate(savedInstanceState);
     }
 }
