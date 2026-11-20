@@ -70,7 +70,7 @@ async function inspectPlayable(doc){
  return {id:doc.identifier,title:doc.title||doc.identifier,year:doc.year||'',url:'https://archive.org/download/'+encodeURIComponent(doc.identifier)+'/'+path,license:licenseLabel(m)};
 }
 async function searchArchive(query){
- $('results').replaceChildren();if(window.CinemaBridge)CinemaBridge.publishResults('[]');setStatus('در حال جست‌وجو و بررسی مجوز و فایل‌های قابل پخش…');
+ $('results').innerHTML='';if(window.CinemaBridge)CinemaBridge.publishResults('[]');setStatus('در حال جست‌وجو و بررسی مجوز و فایل‌های قابل پخش…');
  const params=new URLSearchParams();
  params.set('q','mediatype:movies AND (title:('+query+') OR description:('+query+'))');
  ['identifier','title','year','licenseurl','description'].forEach(f=>params.append('fl[]',f));
@@ -85,7 +85,7 @@ async function searchArchive(query){
  await Promise.all(workers);
  playable.sort((a,b)=>a.title.localeCompare(b.title));
  window.playableItems=playable;
- $('results').replaceChildren();
+ $('results').innerHTML='';
  if(!playable.length){$('results').innerHTML='<div class="empty">در این جست‌وجو عنوانی با مجوز روشن و فایل ویدئویی مستقیمِ قابل پخش پیدا نشد. نتیجه غیرقابل‌پخش نمایش داده نمی‌شود.</div>'}
  playable.forEach(item=>{
   const card=document.createElement('article');card.className='item';
