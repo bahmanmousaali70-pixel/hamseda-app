@@ -92,13 +92,13 @@ export const CinemaProjectorView: React.FC = () => {
     if (!term) { setPlayerError('اول نام فیلم یا سریال را بنوی.'); return; }
     setPlayerError('');
     const domains = cinemaSources.map((source) => `site:${source.domain}`).join(' OR ');
-    const search = `"${term}" (دوبله فارسی OR دوبله OR فارسی OR فیلم کامل OR تماشای آنلاین) (${domains})`;
+    const search = `"${term}" (رایگان OR رایگان قانونی OR انتشار رسمی OR دوبله فارسی OR دوبله OR فارسی OR فیلم کامل OR تماشای آنلاین) (${domains})`;
     window.open(`https://www.google.com/search?q=${encodeURIComponent(search)}`, '_blank', 'noopener,noreferrer');
   };
   const searchOneSource = (domain: string) => {
     const term = query.trim();
     if (!term) { setPlayerError('اول نام فیلم یا سریال را بنوی.'); return; }
-    const search = `"${term}" (دوبله فارسی OR دوبله OR تماشای آنلاین OR فیلم کامل) site:${domain}`;
+    const search = `"${term}" (رایگان OR رایگان قانونی OR انتشار رسمی OR دوبله فارسی OR دوبله OR تماشای آنلاین OR فیلم کامل) site:${domain}`;
     window.open(`https://www.google.com/search?q=${encodeURIComponent(search)}`, '_blank', 'noopener,noreferrer');
   };
 
