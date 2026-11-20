@@ -5,42 +5,100 @@
 <meta name="theme-color" content="#080d18"><title>هم‌صدا سینما</title>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#080d18;color:#f5f7fb;font-family:Tahoma,Arial,sans-serif;font-size:18px}
-main{max-width:1100px;margin:auto;padding:28px}header{display:flex;align-items:center;gap:16px;margin-bottom:24px}
+main{max-width:1120px;margin:auto;padding:26px}header{display:flex;align-items:center;gap:16px;margin-bottom:20px}
 .logo{width:58px;height:58px;border-radius:18px;background:#13a078;display:grid;place-items:center;font-size:28px}
-h1{font-size:30px;margin:0}p{color:#aeb9c9;line-height:1.8;margin:8px 0}
-.search{display:flex;gap:12px;margin:24px 0}.search input{flex:1;min-width:0;background:#151e2d;border:2px solid #34445c;color:white;border-radius:14px;padding:18px;font-size:20px}
-button,a{font:inherit}button{border:0;border-radius:14px;background:#10a078;color:white;padding:16px 24px;font-weight:bold;cursor:pointer}
+h1{font-size:29px;margin:0}p{color:#aeb9c9;line-height:1.8;margin:8px 0}
+.search{display:flex;gap:10px;margin:20px 0}.search input{flex:1;min-width:0;background:#151e2d;border:2px solid #34445c;color:white;border-radius:14px;padding:17px;font-size:19px}
+button,a{font:inherit}button{border:0;border-radius:14px;background:#10a078;color:white;padding:15px 22px;font-weight:bold;cursor:pointer}
 button:focus,a:focus,input:focus{outline:3px solid #f4c95d;outline-offset:3px}
-h2{font-size:22px;margin:26px 0 12px}.sources{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
-.source{display:block;text-decoration:none;color:white;background:#151e2d;border:1px solid #293950;border-radius:16px;padding:18px;min-height:94px}
-.source b{display:block;margin-bottom:8px}.source small{color:#aeb9c9;line-height:1.6}
-.note{background:#182638;border-right:4px solid #10a078;border-radius:12px;padding:16px;margin-top:22px;color:#cbd5e1;line-height:1.8}
+h2{font-size:21px;margin:24px 0 12px}.sources,.results{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.source,.item{display:block;text-decoration:none;color:white;background:#151e2d;border:1px solid #293950;border-radius:16px;padding:17px;min-height:92px}
+.source b,.item b{display:block;margin-bottom:8px}.source small,.item small{color:#aeb9c9;line-height:1.7}
+.item{min-height:0}.item .meta{font-size:13px;color:#aeb9c9;margin:7px 0}.item button{margin-top:10px;padding:11px 15px;font-size:15px}
+.note{background:#182638;border-right:4px solid #10a078;border-radius:12px;padding:15px;margin-top:20px;color:#cbd5e1;line-height:1.8}
 #player{display:none;margin-top:20px}video{width:100%;max-height:60vh;background:#000;border-radius:14px}
-.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}.muted{font-size:14px;color:#9aa9bb}
-@media(max-width:600px){main{padding:16px}.search{flex-direction:column}h1{font-size:24px}}
+.status{min-height:28px;color:#f4c95d;font-size:15px;margin:8px 0}.muted{font-size:13px;color:#91a1b5}
+.row{display:flex;gap:10px;flex-wrap:wrap}.secondary{background:#34445c}.empty{color:#aeb9c9;padding:16px}
+@media(max-width:600px){main{padding:15px}.search{flex-direction:column}h1{font-size:24px}}
 </style></head>
 <body><main>
-<header><div class="logo">▶</div><div><h1>هم‌صدا سینما</h1><p>جست‌وجوی فیلم و سریال در منابع قابل‌دسترسی ایران</p></div></header>
-<p>نام فیلم یا سریال را وارد کن. هر منبع در صفحه جست‌وجوی خودش باز می‌شود؛ نتیجه‌ها را از نظر رایگان‌بودن، دوبله و امکان پخش بررسی کن.</p>
-<div class="search"><input id="q" type="search" placeholder="مثلاً سرخ و سیاه، دوبله فارسی..." autofocus><button id="search">جست‌وجو در همه منابع</button></div>
-<h2>منابع رایگان و عمومی</h2><div class="sources" id="sources"></div>
-<div class="note">هم‌صدا سینما فقط محتوای رایگانِ منتشرشده با اجازه صاحب اثر یا پخش رسمی را برای تماشا پیشنهاد می‌کند. بعضی منابع رایگان‌اند اما همه فیلم‌هایشان رایگان نیست. محتوای اشتراکی، محدودیت منطقه‌ای یا DRM دور زده نمی‌شود.</div>
-<section id="player"><h2>پخش لینک مستقیم مجاز</h2><div class="search"><input id="mediaUrl" type="url" placeholder="https://example.com/video.mp4"><button id="play">پخش</button></div><video id="video" controls playsinline></video><div class="actions"><button id="close">بستن پخش‌کننده</button></div></section>
-<p class="muted">نسخه سبک آزمایشی برای Android 9 و کنترل با ریموت. جست‌وجوی تجمیعی واقعی و API رسمی منابع در مراحل بعدی به اتصال مجاز هر سرویس نیاز دارد.</p>
+<header><div class="logo">▶</div><div><h1>هم‌صدا سینما</h1><p>جست‌وجو و تماشای منابع رایگان و مجاز</p></div></header>
+<p>نام فیلم یا سریال را بنویس. آرشیو اینترنت به‌صورت مستقیم جست‌وجو می‌شود؛ منابع ایرانی نیز با جست‌وجوی اختصاصی باز می‌شوند.</p>
+<div class="search"><input id="q" type="search" placeholder="مثلاً سرخ و سیاه، فیلم کلاسیک..." autocomplete="off"><button id="search">جست‌وجو</button></div>
+<div id="status" class="status" aria-live="polite">برای شروع، نام یک عنوان را وارد کن.</div>
+<h2>نتایج آرشیو عمومی Internet Archive</h2>
+<div id="results" class="results"><div class="empty">نتایج جست‌وجو اینجا نمایش داده می‌شوند.</div></div>
+<h2>جست‌وجو در منابع ایرانی</h2>
+<div class="sources" id="sources"></div>
+<div class="note">فقط آثاری پخش مستقیم می‌شوند که اطلاعات مجوزشان در آرشیو به‌صورت عمومی و مناسب (مانند Public Domain یا مجوزهای مجاز Creative Commons) ثبت شده باشد. برای سایر نتیجه‌ها فقط صفحه منبع باز می‌شود. رایگان‌بودن یک سرویس به معنی رایگان‌بودن همه عنوان‌های آن نیست. اشتراک، DRM و محدودیت جغرافیایی دور زده نمی‌شود.</div>
+<section id="player"><h2 id="playingTitle">پخش</h2><video id="video" controls playsinline></video><div class="row" style="margin-top:10px"><button id="close" class="secondary">بستن پخش‌کننده</button></div></section>
+<p class="muted">نسخه سبک آزمایشی مخصوص Android 9 و معماری ۳۲بیتی armeabi-v7a. اتصال شبکه از اینترنت عادی پروژکتور استفاده می‌کند و VPN داخلی ندارد؛ دسترسی هر سایت به اپراتور اینترنت بستگی دارد.</p>
 </main>
 <script>
+const $=id=>document.getElementById(id);
 const providers=[
-{name:'آپارات',desc:'ویدئوهای عمومی، کانال‌های رسمی و پخش زنده',url:q=>'https://www.google.com/search?q='+encodeURIComponent('site:aparat.com '+q+' (فیلم کامل OR دوبله فارسی)')},
-{name:'نماشا',desc:'ویدئوهای عمومی و کانال‌های منتشرکننده',url:q=>'https://www.google.com/search?q='+encodeURIComponent('site:namasha.com '+q)},
-{name:'تلوبیون',desc:'آرشیو و پخش رسمی برنامه‌ها و آثار تلویزیونی',url:q=>'https://www.google.com/search?q='+encodeURIComponent('site:telewebion.com '+q)},
-{name:'سپهر',desc:'پخش و آرشیو رسانه‌ای رسمی',url:q=>'https://www.google.com/search?q='+encodeURIComponent('site:sepehrtv.ir '+q)},
-{name:'تماشاخونه',desc:'کاتالوگ فیلم و سریال؛ رایگان‌بودن هر عنوان را بررسی کن',url:q=>'https://www.google.com/search?q='+encodeURIComponent('site:tmk.ir '+q+' رایگان')},
-{name:'آرشیو اینترنت',desc:'آثار عمومی، کلاسیک و دارای مجوز آزاد',url:q=>'https://archive.org/search?query='+encodeURIComponent(q+' feature films')}
+{name:'آپارات',desc:'ویدئوهای عمومی و کانال‌های رسمی',url:q=>'https://www.google.com/search?q='+encodeURIComponent('site:aparat.com '+q+' (فیلم کامل OR دوبله فارسی)')},
+{name:'نماشا',desc:'ویدئوهای عمومی و منتشرکنندگان',url:q=>'https://www.google.com/search?q='+encodeURIComponent('site:namasha.com '+q)},
+{name:'تلوبیون',desc:'آرشیو و پخش رسمی برنامه‌ها',url:q=>'https://www.google.com/search?q='+encodeURIComponent('site:telewebion.com '+q)},
+{name:'سپهر',desc:'آرشیو و پخش رسانه‌ای رسمی',url:q=>'https://www.google.com/search?q='+encodeURIComponent('site:sepehrtv.ir '+q)},
+{name:'تماشاخونه',desc:'رایگان‌بودن هر عنوان را جداگانه بررسی کن',url:q=>'https://www.google.com/search?q='+encodeURIComponent('site:tmk.ir '+q+' رایگان')},
+{name:'فیلم‌های عمومی و کلاسیک',desc:'جست‌وجوی مستقل در آرشیو اینترنت',url:q=>'https://archive.org/search?query='+encodeURIComponent('title:'+q+' AND mediatype:movies')}
 ];
-const container=document.getElementById('sources');
-providers.forEach(p=>{const a=document.createElement('a');a.className='source';a.href='#';a.innerHTML='<b>'+p.name+'</b><small>'+p.desc+'</small>';a.addEventListener('click',e=>{e.preventDefault();const q=document.getElementById('q').value.trim();if(!q){document.getElementById('q').focus();return}location.href=p.url(q)});container.appendChild(a)});
-function searchAll(){const q=document.getElementById('q').value.trim();if(!q){document.getElementById('q').focus();return}const domains='(site:aparat.com OR site:namasha.com OR site:telewebion.com OR site:sepehrtv.ir OR site:tmk.ir OR site:archive.org)';location.href='https://www.google.com/search?q='+encodeURIComponent(domains+' '+q+' (دوبله فارسی OR فیلم کامل OR سریال)');}
-document.getElementById('search').addEventListener('click',()=>searchAll());
-document.getElementById('q').addEventListener('keydown',e=>{if(e.key==='Enter')searchAll()});
-document.getElementById('play').addEventListener('click',()=>{const u=document.getElementById('mediaUrl').value.trim();if(!/^https?:\\/\\//i.test(u)||!(/\\.(mp4|m3u8|webm)(\\?|$)/i.test(u))){alert('فقط لینک مستقیم و مجاز MP4، M3U8 یا WebM قابل پخش است.');return}const v=document.getElementById('video');v.src=u;document.getElementById('player').style.display='block';v.play().catch(()=>{});});\ndocument.getElementById('close').addEventListener('click',()=>{const v=document.getElementById('video');v.pause();v.removeAttribute('src');v.load();document.getElementById('player').style.display='none'});
+providers.forEach(p=>{const a=document.createElement('a');a.className='source';a.href='#';const b=document.createElement('b');b.textContent=p.name;const s=document.createElement('small');s.textContent=p.desc;a.append(b,s);a.addEventListener('click',e=>{e.preventDefault();const q=$('q').value.trim();if(!q){$('q').focus();return}location.href=p.url(q)});$('sources').appendChild(a)});
+function setStatus(s){$('status').textContent=s}
+function escapeHtml(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function isPermissiveLicense(meta){
+ const raw=[meta.licenseurl,meta.license,meta.rights,meta.description].filter(Boolean).join(' ').toLowerCase();
+ return /public.?domain|creativecommons\.org\/publicdomain|creativecommons\.org\/licenses\/(by|by-sa)\/|cc0|cc-by(?:-sa)?/i.test(raw);
+}
+function licenseLabel(meta){const raw=[meta.licenseurl,meta.license,meta.rights].filter(Boolean).join(' ');return raw||'مجوز در فراداده روشن نیست'}
+async function searchArchive(query){
+ $('results').replaceChildren();setStatus('در حال جست‌وجو در آرشیو عمومی…');
+ const params=new URLSearchParams();
+ params.set('q','mediatype:movies AND (title:('+query+') OR description:('+query+'))');
+ ['identifier','title','year','licenseurl','description'].forEach(f=>params.append('fl[]',f));
+ params.set('rows','24');params.set('page','1');params.set('output','json');
+ const response=await fetch('https://archive.org/advancedsearch.php?'+params.toString(),{headers:{'Accept':'application/json'}});
+ if(!response.ok)throw new Error('پاسخ آرشیو دریافت نشد: '+response.status);
+ const data=await response.json();const docs=data.response&&data.response.docs?data.response.docs:[];
+ if(!docs.length){$('results').innerHTML='<div class="empty">نتیجه‌ای پیدا نشد. عبارت دیگری را امتحان کن.</div>';setStatus('جست‌وجو تمام شد؛ نتیجه‌ای پیدا نشد.');return}
+ setStatus(docs.length+' نتیجه پیدا شد؛ مجوز و امکان پخش هر عنوان بررسی می‌شود.');
+ docs.forEach(doc=>{
+  const card=document.createElement('article');card.className='item';
+  const title=document.createElement('b');title.textContent=doc.title||doc.identifier;
+  const meta=document.createElement('div');meta.className='meta';meta.textContent=(doc.year||'سال نامشخص')+' · '+(doc.licenseurl?'مجوز ثبت‌شده':'مجوز نامشخص');
+  const desc=document.createElement('small');desc.textContent=(doc.description||'توضیحی ثبت نشده').toString().replace(/<[^>]*>/g,'').slice(0,180);
+  const actions=document.createElement('div');actions.className='row';
+  const inspect=document.createElement('button');inspect.textContent='بررسی و پخش';inspect.addEventListener('click',()=>loadArchiveItem(doc.identifier,doc.title||doc.identifier,inspect));
+  const open=document.createElement('button');open.className='secondary';open.textContent='صفحه منبع';open.addEventListener('click',()=>location.href='https://archive.org/details/'+encodeURIComponent(doc.identifier));
+  actions.append(inspect,open);card.append(title,meta,desc,actions);$('results').appendChild(card);
+ });
+}
+async function loadArchiveItem(id,title,button){
+ button.disabled=true;button.textContent='بررسی…';setStatus('در حال بررسی مجوز و فایل‌های '+title+'…');
+ try{
+  const r=await fetch('https://archive.org/metadata/'+encodeURIComponent(id),{headers:{'Accept':'application/json'}});
+  if(!r.ok)throw new Error('فراداده دریافت نشد');
+  const item=await r.json();const m=item.metadata||{};
+  if(!isPermissiveLicense(m))throw new Error('مجوز این عنوان برای پخش مستقیم در برنامه به‌طور روشن تأیید نشد. صفحه منبع را برای شرایط استفاده ببین.');
+  const files=(item.files||[]).filter(f=>!f.private&&/\.(mp4|webm)$/i.test(f.name||'')&&Number(f.size||0)>0);
+  if(!files.length)throw new Error('فایل MP4 یا WebM قابل پخش در این عنوان پیدا نشد.');
+  files.sort((a,b)=>Number(b.size||0)-Number(a.size||0));
+  const file=files[0];const path=file.name.split('/').map(encodeURIComponent).join('/');
+  const url='https://archive.org/download/'+encodeURIComponent(id)+'/'+path;
+  $('video').pause();$('video').src=url;$('playingTitle').textContent=title;$('player').style.display='block';
+  $('player').scrollIntoView({behavior:'smooth',block:'start'});
+  await $('video').play();setStatus('مجوز ثبت‌شده و فایل قابل پخش پیدا شد. اگر پخش آغاز نشد، صفحه منبع را باز کن.');
+ }catch(e){setStatus(e.message||'خطا در بررسی این عنوان');}
+ finally{button.disabled=false;button.textContent='بررسی و پخش'}
+}
+async function searchAll(){
+ const q=$('q').value.trim();if(!q){$('q').focus();return}
+ $('search').disabled=true;
+ try{await searchArchive(q)}catch(e){$('results').innerHTML='<div class="empty">اتصال مستقیم به API آرشیو ممکن نشد. از کارت‌های جست‌وجوی منابع ایرانی پایین صفحه استفاده کن.</div>';setStatus(e.message||'خطای شبکه')}
+ finally{$('search').disabled=false}
+}
+$('search').addEventListener('click',searchAll);
+$('q').addEventListener('keydown',e=>{if(e.key==='Enter')searchAll()});
+$('close').addEventListener('click',()=>{$('video').pause();$('video').removeAttribute('src');$('video').load();$('player').style.display='none'});
 </script></body></html>
