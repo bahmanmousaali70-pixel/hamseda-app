@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useRef, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {Capacitor, registerPlugin} from '@capacitor/core';
 import {ExternalLink, Film, Maximize, Play, Search, Tv} from 'lucide-react';
 
@@ -128,7 +128,6 @@ export const CinemaProjectorView: React.FC = () => {
 
   const castCurrentVideo = async () => {
     if (!isNativeAndroid || !selectedCastDevice || !activeUrl) return;
-    if (youtubeId) {
     setIsCasting(true);
     setCastStatus('در حال ارسال ویدئو به پروژکتور…');
     try {
