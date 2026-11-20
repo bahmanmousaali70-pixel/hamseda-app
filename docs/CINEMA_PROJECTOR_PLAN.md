@@ -84,3 +84,20 @@ The native shortcut opens Android's Cast settings only. Android/OEM firmware con
 DLNA remains a separate option for direct public HTTP(S) media URLs. In that mode the projector/renderer fetches the media itself, so the phone's VPN is not automatically shared with it. YouTube page URLs are not direct media URLs and remain unsupported by the DLNA sender. No VPN proxy/relay or DRM circumvention is included. Some subscription apps may block mirrored playback or show a black screen because of DRM.
 
 Validation status: source changes are committed to this feature branch only. No Android build, phone test, or physical Owlenz SD500 pairing test has been completed yet. Do not describe the projector as fully verified until those tests pass.
+
+
+## Implementation update — multi-source cinema discovery
+
+Updated on `feature/cinema-projector-cast`:
+
+- Replaced the Cinema tab's YouTube-first search with a multi-source catalogue search covering Aparat, Namasha, Telewebion, Tamashakhoneh, Gapfilm, Filimo, Namava, Filmnet, Sheyda, Lenz, Digitoon, and Afrinak.
+- Search-all creates one combined domain-scoped web search for the requested title and Persian-dubbed / online-viewing terms; each provider can also be searched individually.
+- Provider cards distinguish public/free-oriented sources, mixed availability, and subscription services. Actual free availability is title-specific and must be confirmed at the provider.
+- Removed YouTube from the Cinema search and embedded-player path. The Cinema player now accepts direct HTTP(S) media URLs only; a provider's search/page URL is not treated as a playable stream.
+- Existing GTA 6 component and tab were not changed.
+
+Important current limitation:
+- This is a discovery layer using domain-scoped web search, not yet native API integrations or a verified playable catalogue. It cannot guarantee a free copy exists, and it does not scrape protected streams or bypass subscription, login, DRM, or rights restrictions.
+- To play a provider-hosted title inside Hamseda, the provider must expose an officially permitted embed/player/API or a public direct media URL. Otherwise the user must watch in the provider's official app/site.
+- A real subscription product for Hamseda requires licensed content rights or a provider partnership, user accounts, payment/billing, entitlement checks, and secure playback. Merely listing other services does not grant redistribution rights.
+- Projector installation should be treated as a separate Android TV / projector compatibility target: verify OS/CPU ABI, remote/D-pad navigation, fullscreen and video decoder support on the actual Owlenz SD500 before promising installation or playback.
