@@ -48,11 +48,14 @@ class ProjectorRemoteServer(
         executor.shutdownNow()
     }
 
-    fun pairingInfo(): String = JSONObject()
-        .put("ip", localAddress)
-        .put("port", 8765)
-        .put("pin", pin)
-        .toString()
+    fun pairingInfo(): String {
+        localAddress = getWifiAddress()
+        return JSONObject()
+            .put("ip", localAddress)
+            .put("port", 8765)
+            .put("pin", pin)
+            .toString()
+    }
 
     fun publishResults(json: String) {
         results = try { JSONObject().put("items", org.json.JSONArray(json)).getJSONArray("items").toString() } catch (_: Exception) { "[]" }
