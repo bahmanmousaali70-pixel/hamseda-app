@@ -25,7 +25,6 @@ export const GTA6StreamsView: React.FC = () => {
   const [query, setQuery] = useState('');
   const [videoInput, setVideoInput] = useState('');
   const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
-  const [embedError, setEmbedError] = useState(false);
 
   const searchTerms = useMemo(() => {
     const base = query.trim() || 'GTA 6';
@@ -42,7 +41,6 @@ export const GTA6StreamsView: React.FC = () => {
   const startVideo = () => {
     const id = cleanVideoId(videoInput);
     if (id) {
-      setEmbedError(false);
       setActiveVideoId(id);
     }
   };
@@ -97,7 +95,7 @@ export const GTA6StreamsView: React.FC = () => {
         </div>
         {activeVideoId ? (
           <div className="aspect-video overflow-hidden rounded-xl bg-black">
-            <iframe title="پخش استریم GTA 6 از یوتیوب" src={`https://www.youtube.com/embed/${activeVideoId}?autoplay=1&playsinline=1&rel=0`} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerPolicy="strict-origin-when-cross-origin" allowFullScreen onError={() => setEmbedError(true)} />
+            <iframe title="پخش استریم GTA 6 از یوتیوب" src={`https://www.youtube.com/embed/${activeVideoId}?autoplay=1&playsinline=1&rel=0`} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerPolicy="strict-origin-when-cross-origin" allowFullScreen />
           </div>
         ) : (
           <p className="text-[11px] leading-6 text-slate-500 dark:text-slate-400">برای پیدا کردن استریم، جستجوی یوتیوب را باز کن؛ بعد از انتخاب ویدئو، لینک آن را کپی و اینجا وارد کن تا داخل هم‌صدا پخش شود. ورود حساب گوگل فقط در برنامه رسمی یوتیوب یا مرورگر انجام می‌شود.</p>
