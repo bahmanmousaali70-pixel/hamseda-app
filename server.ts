@@ -1671,7 +1671,7 @@ app.post('/api/night-discover', async (req, res) => {
 
 
 app.post('/api/podcast-search', async (req, res) => {
-  const query = typeof req.body?.query === 'string' ? req.body.query.trim() : '';
+  const query = typeof req.body?.query === 'string' ? req.body.query.trim().slice(0, 180) : '';
   if (!query) {
     res.status(400).json({error: 'نام یا موضوع پادکست را وارد کنید.'});
     return;
@@ -1684,46 +1684,101 @@ app.post('/api/podcast-search', async (req, res) => {
     .replace(/&gt;/g, '>').replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
     .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 
-  try {
-    const searchUrl = new URL('https://itunes.apple.com/search');
-    searchUrl.searchParams.set('term', query);
-    searchUrl.searchParams.set('entity', 'podcast');
-    searchUrl.searchParams.set('limit', '12');
-    searchUrl.searchParams.set('country', 'us');
-    const searchRes = await fetch(searchUrl, {headers: {'User-Agent': 'Hamseda/1.0'}});
-    if (!searchRes.ok) throw new Error('Podcast directory search failed');
-    const searchData = await searchRes.json() as {results?: Array<{
-      collectionId?: number; collectionName?: string; artistName?: string;
-      feedUrl?: string; artworkUrl600?: string; artworkUrl100?: string;
-      trackViewUrl?: string; primaryGenreName?: string;
-    }>};
-    const podcasts = (searchData.results ?? []).filter((p) =>
-      typeof p.feedUrl === 'string' && /^https:\/\/[^ ]+$/i.test(p.feedUrl)
-    ).slice(0, 8);
+  const normalize = (value: string) => value
+    .toLocaleLowerCase('fa')
+    .replace(/[يى]/g, 'ی').replace(/ك/g, 'ک')
+    .replace(/[\u064B-\u065F\u0670]/g, '')
+    .replace(/[۰-۹]/g, (digit) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(digit).toString())
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ').trim();
 
-    const results = await Promise.all(podcasts.map(async (podcast) => {
-      let episodes: Array<{title: string; audioUrl: string; publishedAt?: string; description?: string}> = [];
+  const stopWords = new Set([
+    'کتاب', 'کتابها', 'کتابهای', 'صوتی', 'صوت', 'فارسی', 'پادکست', 'پادکستها',
+    'قسمت', 'قسمتهای', 'همه', 'تمام', 'جستجو', 'پیدا', 'کن', 'برای', 'از', 'در',
+    'و', 'با', 'the', 'a', 'an', 'podcast', 'audio', 'book', 'books'
+  ]);
+  const queryTokens = normalize(query).split(' ').filter((token) => token.length > 1 && !stopWords.has(token));
+  const coreQuery = queryTokens.join(' ');
+  const searchTerms = [...new Set([query, coreQuery].filter(Boolean))];
+
+  try {
+    const directoryResults = await Promise.all(searchTerms.map(async (term) => {
+      const url = new URL('https://itunes.apple.com/search');
+      url.searchParams.set('term', term);
+      url.searchParams.set('entity', 'podcast');
+      url.searchParams.set('limit', '25');
+      url.searchParams.set('country', 'ir');
+      const response = await fetch(url, {headers: {'User-Agent': 'Hamseda/1.0'}});
+      if (!response.ok) return [];
+      const data = await response.json() as {results?: Array<{
+        collectionId?: number; collectionName?: string; artistName?: string;
+        feedUrl?: string; artworkUrl600?: string; artworkUrl100?: string;
+        trackViewUrl?: string; primaryGenreName?: string;
+      }>};
+      return data.results ?? [];
+    }));
+
+    const unique = new Map<string, NonNullable<(typeof directoryResults)[number][number]>>();
+    for (const item of directoryResults.flat()) {
+      if (typeof item.feedUrl === 'string' && /^https?:\/\/[^ ]+$/i.test(item.feedUrl)) {
+        unique.set(item.feedUrl, item);
+      }
+    }
+
+    const podcasts = await Promise.all([...unique.values()].slice(0, 18).map(async (podcast) => {
+      const allEpisodes: Array<{title: string; audioUrl: string; publishedAt?: string; description?: string}> = [];
       try {
-        const feedRes = await fetch(podcast.feedUrl!, {headers: {'User-Agent': 'Hamseda/1.0'}});
-        if (feedRes.ok) {
-          const xml = await feedRes.text();
+        const feedResponse = await fetch(podcast.feedUrl!, {headers: {'User-Agent': 'Hamseda/1.0'}});
+        if (feedResponse.ok) {
+          const xml = await feedResponse.text();
           const items = xml.match(/<item\b[\s\S]*?<\/item>/gi) ?? [];
-          episodes = items.slice(0, 8).map((item) => {
+          for (const item of items.slice(0, 1500)) {
             const titleMatch = item.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
             const enclosureMatch = item.match(/<enclosure\b[^>]*\burl=["']([^"']+)["']/i);
+            const mediaMatch = item.match(/<media:content\b[^>]*\burl=["']([^"']+)["']/i);
             const dateMatch = item.match(/<pubDate[^>]*>([\s\S]*?)<\/pubDate>/i);
             const descriptionMatch = item.match(/<(?:description|itunes:summary)[^>]*>([\s\S]*?)<\/(?:description|itunes:summary)>/i);
-            return {
+            const audioUrl = decodeXml(enclosureMatch?.[1] ?? mediaMatch?.[1] ?? '');
+            if (!/^https?:\/\//i.test(audioUrl)) continue;
+            allEpisodes.push({
               title: decodeXml(titleMatch?.[1] ?? 'قسمت بدون عنوان'),
-              audioUrl: enclosureMatch?.[1] ?? '',
+              audioUrl,
               publishedAt: dateMatch ? decodeXml(dateMatch[1]) : undefined,
-              description: descriptionMatch ? decodeXml(descriptionMatch[1]).slice(0, 320) : undefined,
-            };
-          }).filter((episode) => /^https?:\/\//i.test(episode.audioUrl));
+              description: descriptionMatch ? decodeXml(descriptionMatch[1]).slice(0, 600) : undefined,
+            });
+          }
         }
       } catch {
-        // Keep the podcast result even if its RSS feed is temporarily unavailable.
+        // A temporarily unavailable RSS feed should not fail the entire search.
       }
+
+      const podcastTitle = (podcast.collectionName ?? '') + ' ' + (podcast.artistName ?? '');
+      const podcastText = normalize(podcastTitle);
+      const podcastMatches = queryTokens.length > 0 && queryTokens.some((token) => podcastText.includes(token));
+      const matched = allEpisodes.filter((episode) => {
+        if (queryTokens.length === 0) return true;
+        const haystack = normalize(episode.title + ' ' + (episode.description ?? '') + ' ' + podcastTitle);
+        const score = queryTokens.filter((token) => haystack.includes(token)).length;
+        const threshold = queryTokens.length > 1 ? Math.ceil(queryTokens.length / 2) : 1;
+        return score >= threshold;
+      });
+      const relevantEpisodes = queryTokens.length === 0
+        ? allEpisodes.slice(0, 60)
+        : matched.length > 0
+          ? matched.slice(0, 150)
+          : podcastMatches ? allEpisodes.slice(0, 40) : [];
+
+      const genre = podcast.primaryGenreName ?? '';
+      const categoryText = normalize(genre + ' ' + podcastTitle + ' ' + relevantEpisodes.slice(0, 12).map((episode) => episode.title).join(' '));
+      let category = 'عمومی';
+      if (/book|کتاب|audio book|کتاب صوتی/.test(categoryText)) category = 'کتاب و کتاب صوتی';
+      else if (/fiction|story|novel|داستان|رمان/.test(categoryText)) category = 'داستان و رمان';
+      else if (/history|تاریخ|ایران باستان/.test(categoryText)) category = 'تاریخ';
+      else if (/technology|tech|فناوری|برنامه نویسی|هوش مصنوعی/.test(categoryText)) category = 'فناوری';
+      else if (/art|literature|ادبیات|شعر|هنر/.test(categoryText)) category = 'هنر و ادبیات';
+      else if (/comedy|humor|طنز|سرگرمی/.test(categoryText)) category = 'طنز و سرگرمی';
+      else if (/education|آموزش|یادگیری/.test(categoryText)) category = 'آموزش';
+
       return {
         id: String(podcast.collectionId ?? podcast.feedUrl),
         title: podcast.collectionName ?? 'پادکست بدون نام',
@@ -1731,18 +1786,25 @@ app.post('/api/podcast-search', async (req, res) => {
         artworkUrl: podcast.artworkUrl600 ?? podcast.artworkUrl100 ?? '',
         feedUrl: podcast.feedUrl,
         externalUrl: podcast.trackViewUrl ?? podcast.feedUrl,
-        category: podcast.primaryGenreName ?? '',
-        episodes,
+        category,
+        episodes: relevantEpisodes,
+        otherEpisodes: queryTokens.length > 0 && relevantEpisodes.length > 0
+          ? allEpisodes.filter((episode) => !relevantEpisodes.some((match) => match.audioUrl === episode.audioUrl)).slice(0, 40)
+          : [],
+        totalFeedEpisodes: allEpisodes.length,
       };
     }));
 
-    res.json({query, podcasts: results, fetchedAt: Date.now()});
+    const results = podcasts
+      .filter((podcast) => podcast.episodes.length > 0)
+      .sort((a, b) => b.episodes.length - a.episodes.length);
+
+    res.json({query, coreQuery, podcasts: results, fetchedAt: Date.now()});
   } catch (err) {
     console.error('Podcast search failed:', err);
     res.status(502).json({error: 'جستجوی پادکست موقتاً در دسترس نیست؛ اتصال اینترنت را بررسی کنید.'});
   }
 });
-
 app.post('/api/assistant-chat', async (req, res) => {
   const ai = getAiClient();
   if (!ai) {
