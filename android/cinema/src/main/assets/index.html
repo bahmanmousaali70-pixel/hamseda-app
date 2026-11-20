@@ -25,7 +25,8 @@ h2{font-size:21px;margin:24px 0 12px}.sources,.results{display:grid;grid-templat
 <header><div class="logo">▶</div><div><h1>هم‌صدا سینما</h1><p>جست‌وجو و تماشای منابع رایگان و مجاز</p></div></header>
 <p>نام فیلم یا سریال را بنویس. آرشیو اینترنت به‌صورت مستقیم جست‌وجو می‌شود؛ منابع ایرانی نیز با جست‌وجوی اختصاصی باز می‌شوند.</p>
 <div class="search"><input id="q" type="search" placeholder="مثلاً سرخ و سیاه، فیلم کلاسیک..." autocomplete="off"><button id="search">جست‌وجو</button></div>
-<div id="status" class="status" aria-live="polite">برای شروع، نام یک عنوان را وارد کن.</div>\n<div class="note" id="phonePairing">برای کنترل با گوشی، اطلاعات اتصال نمایش داده می‌شود…</div>
+<div id="status" class="status" aria-live="polite">برای شروع، نام یک عنوان را وارد کن.</div>
+<div class="note" id="phonePairing">برای کنترل با گوشی، اطلاعات اتصال نمایش داده می‌شود…</div>
 <h2>نتایج آرشیو عمومی Internet Archive</h2>
 <div id="results" class="results"><div class="empty">نتایج جست‌وجو اینجا نمایش داده می‌شوند.</div></div>
 <h2>جست‌وجو در منابع ایرانی</h2>
@@ -113,5 +114,6 @@ async function searchAll(){
 }
 $('search').addEventListener('click',searchAll);
 $('q').addEventListener('keydown',e=>{if(e.key==='Enter')searchAll()});
-try{if(window.CinemaBridge){const info=JSON.parse(CinemaBridge.getPairingInfo());$('phonePairing').innerHTML='کنترل با گوشی: <b dir="ltr">http://'+info.ip+':'+info.port+'</b><br>کد اتصال: <b style="font-size:24px;letter-spacing:5px">'+info.pin+'</b><br>گوشی و پروژکتور را به یک Wi‑Fi وصل کن و این آدرس و کد را در بخش سینمای هم‌صدا در گوشی وارد کن.'}}catch(_){}\n$('close').addEventListener('click',()=>{$('video').pause();$('video').removeAttribute('src');$('video').load();$('player').style.display='none'});
+try{if(window.CinemaBridge){const info=JSON.parse(CinemaBridge.getPairingInfo());$('phonePairing').innerHTML='کنترل با گوشی: <b dir="ltr">http://'+info.ip+':'+info.port+'</b><br>کد اتصال: <b style="font-size:24px;letter-spacing:5px">'+info.pin+'</b><br>گوشی و پروژکتور را به یک Wi‑Fi وصل کن و این آدرس و کد را در بخش سینمای هم‌صدا در گوشی وارد کن.'}}catch(_){}
+$('close').addEventListener('click',()=>{$('video').pause();$('video').removeAttribute('src');$('video').load();$('player').style.display='none'});
 </script></body></html>
