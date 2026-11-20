@@ -48,3 +48,23 @@ Add a first-class Cinema area to Hamseda for finding and playing legally availab
 - No paid-service DRM/subscription circumvention.
 - Keyboard/D-pad and touch navigation both work.
 - Build/typecheck pass; then test on a real phone and projector. A successful build is not a device compatibility test.
+
+
+## Implementation update — DLNA phone-to-projector casting
+
+Implemented on `feature/cinema-projector-cast`:
+
+- Native Android Capacitor bridge: `CinemaCastPlugin.kt`.
+- DLNA/UPnP discovery and remote media playback using the MIT-licensed `yinnho/UPnPCast` library (JitPack `v1.3.0`).
+- Device discovery on the same Wi-Fi network, device selection, direct HTTP(S) media URL casting, and remote play/pause/stop/state controls.
+- Android system Cast settings shortcut for screen-mirroring/output-picker options where the device firmware exposes them.
+- Added the required Wi-Fi multicast permission and registered the native plugin in `MainActivity`.
+
+Important boundaries:
+
+- DLNA casting requires the phone and receiver to share a local network and the receiver to expose a compatible DLNA renderer.
+- A remote renderer must be able to fetch the supplied media URL itself. A YouTube page/embed URL is not a direct media URL and is intentionally rejected for DLNA.
+- The system Cast settings shortcut only opens Android's system settings; it does not guarantee Miracast support or start screen mirroring programmatically.
+- Google Cast SDK sender support is separate from DLNA and is not included in this implementation. Chromecast discovery and playback still need a dedicated integration and a compatible Cast receiver.
+- The projector's exact model/firmware is unknown, so compatibility must be verified on the user's actual device.
+- No build or physical-device test has been completed for this feature branch yet.
