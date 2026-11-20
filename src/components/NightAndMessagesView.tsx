@@ -39,6 +39,7 @@ import type {
 } from '../types/app';
 import {getPartnerNameForDevice, getSelfName} from '../utils/deviceIdentity';
 import {GTA6StreamsView} from './GTA6StreamsView';
+import {CinemaProjectorView} from './CinemaProjectorView';
 import {PodcastLibraryView} from './PodcastLibraryView';
 import {SearchArtworkGrid, type SearchArtworkItem} from './SearchArtworkGrid';
 
@@ -198,7 +199,7 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
   }, [deviceOwner, partnerOtherName, selfName, occasion]);
 
   // Completely Separated Online Music Playlist, Live Iran/World Radio, Podcasts & GTA 6 Streams
-  const [mediaTab, setMediaTab] = useState<'tracks' | 'radio' | 'podcasts' | 'gta6'>('tracks');
+  const [mediaTab, setMediaTab] = useState<'tracks' | 'radio' | 'podcasts' | 'gta6' | 'cinema'>('tracks');
   const [mediaViewMode, setMediaViewMode] = useState<'grid' | 'list'>('grid');
   const [musicMood, setMusicMood] = useState('سنتی آرام و شجریان');
   const [musicBusy, setMusicBusy] = useState(false);
@@ -1051,8 +1052,8 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
         </div>
       </section>
 
-      {/* Top-Level Media Switcher: Music | Radio | Podcasts & Audiobooks | GTA 6 */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-emerald-950/60">
+      {/* Top-Level Media Switcher: Music | Radio | Podcasts | GTA 6 | Cinema */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-emerald-950/60">
         <button
           type="button"
           onClick={() => setMediaTab('tracks')}
@@ -1096,6 +1097,18 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
         </button>
         <button
           type="button"
+          onClick={() => setMediaTab('cinema')}
+          className={`min-h-[42px] rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+            mediaTab === 'cinema'
+              ? 'bg-white dark:bg-[#172724] text-emerald-800 dark:text-emerald-300 shadow-xs'
+              : 'text-slate-600 dark:text-slate-300'
+          }`}
+        >
+          <Film className="w-4 h-4" />
+          <span>سینما</span>
+        </button>
+        <button
+          type="button"
           onClick={() => setMediaTab('gta6')}
           className={`min-h-[42px] rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
             mediaTab === 'gta6'
@@ -1109,7 +1122,7 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
       </div>
 
       {/* Section 2 & 3: Real Playable Online Music Playlist + Live Radio + High-Rated Dubbed Movies/Series */}
-      <section className={mediaTab === 'podcasts' || mediaTab === 'gta6' ? 'hidden' : 'grid grid-cols-1 lg:grid-cols-12 gap-6'}>
+      <section className={mediaTab === 'podcasts' || mediaTab === 'gta6' || mediaTab === 'cinema' ? 'hidden' : 'grid grid-cols-1 lg:grid-cols-12 gap-6'}>
         {/* Real Online Music Playlist + Live Iran & World Radio */}
         <div className="lg:col-span-5 rounded-2xl bg-white dark:bg-[#121E1C] border border-slate-200/80 dark:border-emerald-950/70 p-6 space-y-5">
           <div className="flex items-start justify-between gap-2">
@@ -1726,6 +1739,7 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
       </section>
 
       {mediaTab === 'gta6' && <GTA6StreamsView />}
+      {mediaTab === 'cinema' && <CinemaProjectorView />}
       <div className={mediaTab === 'podcasts' ? '' : 'hidden'}>
         <PodcastLibraryView
           isOnline={isOnline}
