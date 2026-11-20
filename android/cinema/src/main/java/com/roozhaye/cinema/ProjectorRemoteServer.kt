@@ -161,8 +161,8 @@ class ProjectorRemoteServer(
                                         "(()=>{const e=document.elementFromPoint($x,$y)||document;e.dispatchEvent(new MouseEvent('mousemove',{clientX:$x,clientY:$y,bubbles:true}));})();"
                                     }
                                     "click" -> {
-                                        val x = (body.optDouble("x", 0.5).coerceIn(0.0, 1.0) * webView.width.coerceAtLeast(1)).toInt()
-                                        val y = (body.optDouble("y", 0.5).coerceIn(0.0, 1.0) * webView.height.coerceAtLeast(1)).toInt()
+                                        val x = (body.optDouble("x", 0.5).coerceIn(0.0, 1.0) * (webView.width / activity.resources.displayMetrics.density).toInt().coerceAtLeast(1)).toInt()
+                                        val y = (body.optDouble("y", 0.5).coerceIn(0.0, 1.0) * (webView.height / activity.resources.displayMetrics.density).toInt().coerceAtLeast(1)).toInt()
                                         "(()=>{const x=$x,y=$y,e=document.elementFromPoint(x,y);if(e){e.dispatchEvent(new MouseEvent('mousedown',{clientX:x,clientY:y,bubbles:true}));e.dispatchEvent(new MouseEvent('mouseup',{clientX:x,clientY:y,bubbles:true}));e.click();}})();"
                                     }
                                     "scroll" -> {
