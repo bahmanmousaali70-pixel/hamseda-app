@@ -114,7 +114,7 @@ class ProjectorRemoteServer(
                         respond(client, 200, "text/html; charset=utf-8", html)
                     }
                     method == "GET" && path == "/api/info" -> {
-                        respond(client, 200, "application/json", JSONObject().put("name", "هم‌صدا سینما").put("pairingRequired", true).toString())
+                        respond(client, 200, "application/json", JSONObject().put("name", "هم‌صدا سینما").put("pairingRequired", true).put("width", webView.width).put("height", webView.height).toString())
                     }
                     method == "POST" && path == "/api/pair" -> {
                         if (body.optString("pin") != pin) respond(client, 401, "application/json", JSONObject().put("error", "کد اتصال اشتباه است").toString())
@@ -155,10 +155,15 @@ class ProjectorRemoteServer(
                                         if (key !in setOf("ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Enter","Escape","Backspace","Tab"," ")) null
                                         else "document.dispatchEvent(new KeyboardEvent('keydown',{key:'$key',bubbles:true}));"
                                     }
-                                    "tap" -> {
-                                        val x = body.optDouble("x", -1.0).toInt().coerceIn(0, webView.width.coerceAtLeast(1))
-                                        val y = body.optDouble("y", -1.0).toInt().coerceIn(0, webView.height.coerceAtLeast(1))
-                                        "(()=>{const e=document.elementFromPoint($x,$y);if(e)e.click();})();"
+                                    "move" -> {
+                                        val x = (body.optDouble("x", 0.5).coerceIn(0.0, 1.0) * webView.width.coerceAtLeast(1)).toInt()
+                                        val y = (body.optDouble("y", 0.5).coerceIn(0.0, 1.0) * webView.height.coerceAtLeast(1)).toInt()
+                                        "document.dispatchEvent(new MouseEvent('mousemove',{clientX:$x,clientY:$y,bubbles:true}));"
+                                    }
+                                    "click" -> {
+                                        val x = (body.optDouble("x", 0.5).coerceIn(0.0, 1.0) * webView.width.coerceAtLeast(1)).toInt()
+                                        val y = (body.optDouble("y", 0.5).coerceIn(0.0, 1.0) * webView.height.coerceAtLeast(1)).toInt()
+                                        "(()=>{const x=$x,y=$y,e=document.elementFromPoint(x,y);if(e){e.dispatchEvent(new MouseEvent('mousedown',{clientX:x,clientY:y,bubbles:true}));e.dispatchEvent(new MouseEvent('mouseup',{clientX:x,clientY:y,bubbles:true}));e.click();}})();"
                                     }
                                     "scroll" -> {
                                         val delta = body.optInt("delta", 0).coerceIn(-800, 800)
