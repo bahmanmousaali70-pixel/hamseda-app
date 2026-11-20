@@ -239,7 +239,6 @@ export const CinemaProjectorView: React.FC = () => {
         </div>
       )}
 
-      {recent.length > 0 && (
       <div className="rounded-xl border border-sky-200 dark:border-sky-900 bg-sky-50/70 dark:bg-sky-950/20 p-3 space-y-3">
         <div className="flex items-center gap-2">
           <Tv className="w-5 h-5 text-sky-700 dark:text-sky-300" />
@@ -280,6 +279,7 @@ export const CinemaProjectorView: React.FC = () => {
         <p className="text-[10px] leading-5 text-slate-500 dark:text-slate-400">DLNA به اتصال یکسان گوشی و پروژکتور به Wi-Fi نیاز دارد. گزینه «نمایش بی‌سیم» فقط تنظیمات Cast اندروید را باز می‌کند و به قابلیت Miracast خودکار دسترسی تضمین‌شده نمی‌دهد.</p>
       </div>
 
+        {recent.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-sm font-bold text-slate-900 dark:text-white">آخرین ویدئوها</h3>
           <div className="grid gap-2">
@@ -292,7 +292,7 @@ export const CinemaProjectorView: React.FC = () => {
         </div>
       )}
 
-      <p className="text-[11px] leading-6 text-slate-500 dark:text-slate-400">فیلیمو و سرویس‌های اشتراکی فقط از مسیر رسمی و با اشتراک معتبر قابل تماشا هستند. هم‌صدا دسترسی پولی، DRM یا محدودیت پخش را دور نمی‌زند. پشتیبانی Miracast / Chromecast / DLNA و کنترل موبایل-پروژکتور نیازمند پیاده‌سازی و آزمایش جداگانه روی مدل پروژکتور است؛ هنوز در این نسخه فعال نیست.</p>
+      <p className="text-[11px] leading-6 text-slate-500 dark:text-slate-400">فیلیمو و سرویس‌های اشتراکی فقط از مسیر رسمی و با اشتراک معتبر قابل تماشا هستند. هم‌صدا دسترسی پولی، DRM یا محدودیت پخش را دور نمی‌زند. ارسال و کنترل پخش از طریق DLNA در نسخه اندرویدی اضافه شده است. نمایش بی‌سیم صفحه از تنظیمات Cast خود اندروید باز می‌شود؛ پشتیبانی واقعی Miracast و Google Chromecast به مدل دستگاه و یکپارچه‌سازی جداگانه وابسته است و هنوز تأیید نشده است.</p>
     </section>
   );
 };
