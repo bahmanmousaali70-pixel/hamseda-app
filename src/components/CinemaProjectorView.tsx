@@ -14,6 +14,11 @@ type CinemaCastPlugin = {
   openSystemCastSettings: () => Promise<{ok: boolean; error?: string}>;
 };
 const CinemaCast = registerPlugin<CinemaCastPlugin>('CinemaCast');
+type CinemaRemotePlugin = {
+  pair: (options: {host:string; pin:string}) => Promise<{token:string}>;
+  request: (options: {host:string; path:string; token:string; body?:Record<string,unknown>}) => Promise<{items?:Array<{id:string;title:string;year?:string}>; ok?:boolean}>;
+};
+const CinemaRemote = registerPlugin<CinemaRemotePlugin>('CinemaRemote');
 
 function isWebVideoUrl(input: string): boolean {
   try {
@@ -188,6 +193,9 @@ export const CinemaProjectorView: React.FC = () => {
 
   const projectorApi = async (path: string, body?: Record<string, unknown>) => {
     const host = projectorHost.trim().replace(/^https?:\/\//, '').replace(/\/$/, '');
+    if (isNativeAndroid) {
+      return CinemaRemote.request({host, path, token:projectorToken, body});
+    }
     const response = await fetch(`http://${host}:8765${path}`, {
       method: body ? 'POST' : 'GET',
       headers: {'Content-Type':'application/json', ...(projectorToken ? {Authorization:`Bearer ${projectorToken}`} : {})},
@@ -205,12 +213,18 @@ export const CinemaProjectorView: React.FC = () => {
       return;
     }
     try {
-      const response = await fetch(`http://${host}:8765/api/pair`, {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({pin:projectorPin.trim()}),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || 'کد اتصال اشتباه است.');
+      let data: {token:string};
+      if (isNativeAndroid) {
+        data = await CinemaRemote.pair({host, pin:projectorPin.trim()});
+      } else {
+        const response = await fetch(`http://${host}:8765/api/pair`, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({pin:projectorPin.trim()}),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || 'کد اتصال اشتباه است.');
+        data = result;
+      }
       setProjectorToken(data.token);
       setProjectorRemoteStatus('گوشی با پروژکتور جفت شد؛ حالا جست‌وجو کن.');
     } catch (error) {
@@ -241,7 +255,8 @@ export const CinemaProjectorView: React.FC = () => {
     let active = true;
     const refreshResults = async () => {
       try {
-        const items = await projectorApi('/api/results');
+        const response = await projectorApi('/api/results');
+        const items = Array.isArray(response) ? response : response.items;
         if (active && Array.isArray(items)) setProjectorResults(items);
       } catch {
         if (active) setProjectorRemoteStatus('ارتباط با پروژکتور قطع شده؛ اتصال را دوباره برقرار کن.');
