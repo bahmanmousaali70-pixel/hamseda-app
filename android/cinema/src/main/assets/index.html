@@ -58,10 +58,10 @@ async function inspectPlayable(doc){
  if(!r.ok)return null;
  const item=await r.json();const m=item.metadata||{};
  if(!isPermissiveLicense(m))return null;
- const files=(item.files||[]).filter(f=>String(f.private).toLowerCase()!=='true'&&/\\.(mp4|webm)$/i.test(f.name||'')&&Number(f.size||0)>1000000);
+ const files=(item.files||[]).filter(f=>String(f.private).toLowerCase()!=='true'&&/\.(mp4|webm)$/i.test(f.name||'')&&Number(f.size||0)>1000000);
  if(!files.length)return null;
  files.sort((a,b)=>{
-  const aMp4=/\\.mp4$/i.test(a.name)?1:0,bMp4=/\\.mp4$/i.test(b.name)?1:0;
+  const aMp4=/\.mp4$/i.test(a.name)?1:0,bMp4=/\.mp4$/i.test(b.name)?1:0;
   if(aMp4!==bMp4)return bMp4-aMp4;
   return Number(a.size||0)-Number(b.size||0);
  });
