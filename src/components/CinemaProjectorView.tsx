@@ -200,7 +200,7 @@ export const CinemaProjectorView: React.FC = () => {
       </header>
 
       <div className="rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/70 dark:bg-emerald-950/20 p-3 text-xs leading-6 text-emerald-950 dark:text-emerald-100">
-        بهترین روش برای پروژکتور اندرویدی شما نصب APK هم‌صدا روی خود پروژکتور و پخش مستقیم فیلم است؛ در این حالت گوشی لازم نیست روشن بماند. این نسخه اولیه پخش مستقیم لینک‌های عمومی و ویدئوهای مجازِ قابل‌جاسازی را فراهم می‌کند.
+        برای تماشای فیلم با فیلترشکن، روش اول اتصال بی‌سیم صفحه گوشی به پروژکتور است: فیلترشکن روی گوشی روشن می‌ماند و پروژکتور فقط تصویر را می‌گیرد؛ نصب VPN روی پروژکتور لازم نیست. روش دوم DLNA برای لینک‌های مستقیم و عمومی است.
       </div>
 
       <form onSubmit={(event) => {event.preventDefault(); openYouTubeSearch();}} className="flex gap-2">
@@ -243,8 +243,8 @@ export const CinemaProjectorView: React.FC = () => {
         <div className="flex items-center gap-2">
           <Tv className="w-5 h-5 text-sky-700 dark:text-sky-300" />
           <div className="flex-1">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white">اتصال به پروژکتور و کنترل از گوشی</h3>
-            <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1">کشف DLNA، ارسال لینک مستقیم و کنترل پخش روی شبکه محلی</p>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">اتصال گوشی به پروژکتور بدون نصب VPN روی پروژکتور</h3>
+            <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1">دو راه مستقل: آینه‌کردن صفحه گوشی (اولویت برای اینترنتِ عبوری از VPN گوشی) و DLNA برای لینک مستقیم</p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -252,10 +252,10 @@ export const CinemaProjectorView: React.FC = () => {
             {isDiscoveringCast ? 'در حال جستجو…' : 'جستجوی پروژکتورها'}
           </button>
           <button type="button" onClick={openSystemCast} disabled={!isNativeAndroid} className="min-h-[42px] px-3 rounded-lg border border-sky-300 dark:border-sky-800 text-xs disabled:opacity-50">
-            نمایش بی‌سیم صفحه گوشی
+            بازکردن تنظیمات اتصال بی‌سیم گوشی
           </button>
         </div>
-        {castDevices.length > 0 && (
+        <div className="rounded-lg bg-white/70 dark:bg-slate-900/40 border border-sky-100 dark:border-sky-900 p-3 text-[11px] leading-6 text-slate-700 dark:text-slate-200 space-y-1">\n          <p><strong>مراحل اتصال:</strong> دکمه Cast را بزن، در فهرست گوشی نام پروژکتور Owlenz را انتخاب کن و اتصال را تأیید کن. سپس فیلم را روی گوشی پخش کن.</p>\n          <p>فیلترشکن باید روی گوشی روشن باشد؛ ترافیک اینترنت گوشی از VPN عبور می‌کند و برای آینه‌کردن تصویر، نصب VPN روی پروژکتور لازم نیست. اگر پروژکتور دیده نشد، حالت Screen Mirroring / Miracast / WiFi Display را از منوی خود پروژکتور فعال کن.</p>\n          <p>برخی سرویس‌های اشتراکی به‌دلیل DRM ممکن است هنگام آینه‌کردن تصویر سیاه نشان دهند؛ این محدودیت را نمی‌توان با هم‌صدا دور زد.</p>\n        </div>\n        {castDevices.length > 0 && (
           <div className="space-y-2">
             <label className="block text-xs font-semibold text-slate-800 dark:text-slate-100">دستگاه پیدا‌شده</label>
             <select value={selectedCastDevice} onChange={(event) => setSelectedCastDevice(event.target.value)} className="w-full min-h-[42px] px-3 rounded-lg border border-slate-200 dark:border-sky-900 bg-white dark:bg-[#0B1312] text-sm">
@@ -276,7 +276,7 @@ export const CinemaProjectorView: React.FC = () => {
         )}
         {castStatus && <p role="status" className="text-xs leading-6 text-sky-900 dark:text-sky-100">{castStatus}</p>}
         {!isNativeAndroid && <p className="text-[11px] leading-5 text-slate-500">برای کشف و کنترل DLNA باید همین نسخه روی گوشی اندرویدی نصب باشد.</p>}
-        <p className="text-[10px] leading-5 text-slate-500 dark:text-slate-400">DLNA به اتصال یکسان گوشی و پروژکتور به Wi-Fi نیاز دارد. گزینه «نمایش بی‌سیم» فقط تنظیمات Cast اندروید را باز می‌کند و به قابلیت Miracast خودکار دسترسی تضمین‌شده نمی‌دهد.</p>
+        <p className="text-[10px] leading-5 text-slate-500 dark:text-slate-400">DLNA با آینه‌کردن صفحه فرق دارد: در DLNA خود پروژکتور لینک رسانه را از اینترنت دریافت می‌کند؛ بنابراین VPN گوشی خودبه‌خود به پروژکتور منتقل نمی‌شود. برای پخش از مسیر VPN گوشی، از اتصال بی‌سیم صفحه استفاده کن. بازشدن تنظیمات Cast به‌تنهایی تضمین نمی‌کند که هر مدل Miracast را پشتیبانی کند.</p>
       </div>
 
         {recent.length > 0 && (
@@ -292,7 +292,7 @@ export const CinemaProjectorView: React.FC = () => {
         </div>
       )}
 
-      <p className="text-[11px] leading-6 text-slate-500 dark:text-slate-400">فیلیمو و سرویس‌های اشتراکی فقط از مسیر رسمی و با اشتراک معتبر قابل تماشا هستند. هم‌صدا دسترسی پولی، DRM یا محدودیت پخش را دور نمی‌زند. ارسال و کنترل پخش از طریق DLNA در نسخه اندرویدی اضافه شده است. نمایش بی‌سیم صفحه از تنظیمات Cast خود اندروید باز می‌شود؛ پشتیبانی واقعی Miracast و Google Chromecast به مدل دستگاه و یکپارچه‌سازی جداگانه وابسته است و هنوز تأیید نشده است.</p>
+      <p className="text-[11px] leading-6 text-slate-500 dark:text-slate-400">فیلیمو و سرویس‌های اشتراکی فقط از مسیر رسمی و با اشتراک معتبر قابل تماشا هستند. هم‌صدا دسترسی پولی، DRM یا محدودیت پخش را دور نمی‌زند. در این نسخه، DLNA برای لینک مستقیم و کنترل پایه پخش در دسترس است و دکمه Cast تنظیمات بی‌سیم اندروید را باز می‌کند. سازگاری نهایی با Owlenz SD500 باید روی دستگاه واقعی آزمایش شود. Miracast، Google Cast و DLNA سه روش متفاوت‌اند؛ موفقیت یکی، پشتیبانی از دو روش دیگر را ثابت نمی‌کند.</p>
     </section>
   );
 };
