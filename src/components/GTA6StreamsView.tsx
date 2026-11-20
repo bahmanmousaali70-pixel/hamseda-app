@@ -22,7 +22,6 @@ const cleanVideoId = (value: string): string | null => {
 
 export const GTA6StreamsView: React.FC = () => {
   const [language, setLanguage] = useState<LanguageMode>('fa');
-  const [platform, setPlatform] = useState<'youtube' | 'twitch'>('youtube');
   const [query, setQuery] = useState('');
   const [videoInput, setVideoInput] = useState('');
   const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
@@ -62,9 +61,9 @@ export const GTA6StreamsView: React.FC = () => {
         <button type="button" onClick={() => setLanguage('global')} className={`min-h-[42px] rounded-lg text-sm font-semibold ${language === 'global' ? 'bg-white dark:bg-[#172724] text-emerald-800 dark:text-emerald-300 shadow-sm' : 'text-slate-600 dark:text-slate-300'}`}>بین‌المللی</button>
       </div>
 
-      <form onSubmit={(event) => {event.preventDefault();}} className="flex gap-2">
+      <form onSubmit={(event) => {event.preventDefault(); window.open(youtubeUrl, '_blank', 'noopener,noreferrer');}} className="flex gap-2">
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="جستجوی GTA 6، گیم‌پلی، مأموریت و..." className="min-w-0 flex-1 min-h-[44px] px-3 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50 dark:bg-[#0B1312] text-sm text-slate-900 dark:text-white" />
-        <button type="submit" className="min-h-[44px] px-3 rounded-xl bg-emerald-700 text-white flex items-center gap-1.5"><Search className="w-4 h-4" /><span className="text-xs">جستجو</span></button>
+        <button type="submit" className="min-h-[44px] px-3 rounded-xl bg-emerald-700 text-white flex items-center gap-1.5"><Search className="w-4 h-4" /><span className="text-xs">جستجوی زنده</span></button>
       </form>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
