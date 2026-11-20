@@ -1,6 +1,6 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {Capacitor, registerPlugin} from '@capacitor/core';
-import {ExternalLink, Film, Maximize, Play, Search, Tv, Youtube} from 'lucide-react';
+import {ExternalLink, Film, Maximize, Play, Search, Tv} from 'lucide-react';
 
 type RecentItem = {url: string; title: string; playedAt: number};
 const STORAGE_KEY = 'hamseda_cinema_recent_v1';
@@ -14,23 +14,6 @@ type CinemaCastPlugin = {
   openSystemCastSettings: () => Promise<{ok: boolean; error?: string}>;
 };
 const CinemaCast = registerPlugin<CinemaCastPlugin>('CinemaCast');
-
-function getYouTubeId(input: string): string | null {
-  const value = input.trim();
-  if (/^[\w-]{11}$/.test(value)) return value;
-  try {
-    const url = new URL(value);
-    if (url.hostname.endsWith('youtu.be')) return url.pathname.split('/').filter(Boolean)[0] || null;
-    if (/(^|\.)youtube\.com$|(^|\.)youtube-nocookie\.com$/.test(url.hostname)) {
-      if (url.pathname === '/watch') return url.searchParams.get('v');
-      const parts = url.pathname.split('/').filter(Boolean);
-      if (['embed', 'live', 'shorts'].includes(parts[0])) return parts[1] || null;
-    }
-  } catch {
-    return null;
-  }
-  return null;
-}
 
 function isWebVideoUrl(input: string): boolean {
   try {
@@ -57,7 +40,6 @@ export const CinemaProjectorView: React.FC = () => {
   const playerShellRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  const youtubeId = useMemo(() => getYouTubeId(activeUrl), [activeUrl]);
 
   useEffect(() => {
     try {
@@ -78,23 +60,46 @@ export const CinemaProjectorView: React.FC = () => {
 
   const playUrl = (value: string) => {
     const clean = value.trim();
-    if (!isWebVideoUrl(clean) && !getYouTubeId(clean)) {
-      setPlayerError('لینک معتبر http یا https، یا لینک یوتیوب وارد کن.');
+    if (!isWebVideoUrl(clean)) {
+      setPlayerError('برای پخش مستقیم، لینک معتبر http یا https وارد کن. لینک صفحه سایت‌ها لزوماً لینک ویدئو نیست.');
       return;
     }
     setPlayerError('');
     setSourceUrl(clean);
     setActiveUrl(clean);
     setRecent((items) => [
-      {url: clean, title: getYouTubeId(clean) ? 'ویدئوی یوتیوب' : new URL(clean).hostname, playedAt: Date.now()},
+      {url: clean, title: new URL(clean).hostname, playedAt: Date.now()},
       ...items.filter((item) => item.url !== clean),
     ].slice(0, 12));
   };
 
-  const openYouTubeSearch = () => {
-    const term = query.trim() || 'فیلم سینمایی رایگان دوبله فارسی کانال رسمی';
-    const search = `${term} فیلم کامل منتشر شده توسط کانال رسمی`;
-    window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(search)}`, '_blank', 'noopener,noreferrer');
+  const cinemaSources = [
+    {name:'آپارات', domain:'aparat.com', kind:'ویدئوهای عمومی و رایگان', mode:'free'},
+    {name:'نماشا', domain:'namasha.com', kind:'ویدئوهای عمومی و رایگان', mode:'free'},
+    {name:'تلوبیون', domain:'telewebion.com', kind:'پخش زنده و آرشیو برنامه‌ها', mode:'free'},
+    {name:'تماشاخونه', domain:'tmk.ir', kind:'گزینه‌های رایگان و اشتراکی؛ بررسی عنوان', mode:'mixed'},
+    {name:'گپ‌فیلم', domain:'gapfilm.ir', kind:'فیلم و سریال؛ وضعیت دسترسی متغیر', mode:'mixed'},
+    {name:'فیلیمو', domain:'filimo.com', kind:'فیلم و سریال با اشتراک رسمی', mode:'paid'},
+    {name:'نماوا', domain:'namava.ir', kind:'فیلم و سریال دوبله و زیرنویس؛ اشتراک', mode:'paid'},
+    {name:'فیلم‌نت', domain:'filmnet.ir', kind:'فیلم و سریال؛ اشتراک', mode:'paid'},
+    {name:'شیدا', domain:'sheyda.com', kind:'فیلم و سریال؛ بررسی دسترسی عنوان', mode:'mixed'},
+    {name:'لنز', domain:'lenz.ir', kind:'تلویزیون اینترنتی و محتوای ویدئویی', mode:'mixed'},
+    {name:'دیجیتون', domain:'digitoon.tv', kind:'انیمیشن و محتوای کودک', mode:'mixed'},
+    {name:'آفرینک', domain:'afarinak.com', kind:'محتوای کودک و انیمیشن', mode:'mixed'},
+  ];
+  const searchAllSources = () => {
+    const term = query.trim();
+    if (!term) { setPlayerError('اول نام فیلم یا سریال را بنوی.'); return; }
+    setPlayerError('');
+    const domains = cinemaSources.map((source) => `site:${source.domain}`).join(' OR ');
+    const search = `"${term}" (دوبله فارسی OR دوبله OR فارسی OR فیلم کامل OR تماشای آنلاین) (${domains})`;
+    window.open(`https://www.google.com/search?q=${encodeURIComponent(search)}`, '_blank', 'noopener,noreferrer');
+  };
+  const searchOneSource = (domain: string) => {
+    const term = query.trim();
+    if (!term) { setPlayerError('اول نام فیلم یا سریال را بنوی.'); return; }
+    const search = `"${term}" (دوبله فارسی OR دوبله OR تماشای آنلاین OR فیلم کامل) site:${domain}`;
+    window.open(`https://www.google.com/search?q=${encodeURIComponent(search)}`, '_blank', 'noopener,noreferrer');
   };
 
   const discoverCastDevices = async () => {
@@ -124,9 +129,6 @@ export const CinemaProjectorView: React.FC = () => {
   const castCurrentVideo = async () => {
     if (!isNativeAndroid || !selectedCastDevice || !activeUrl) return;
     if (youtubeId) {
-      setCastStatus('برای DLNA لینک مستقیم MP4 یا HLS لازم است؛ لینک صفحه یوتیوب قابل ارسال نیست.');
-      return;
-    }
     setIsCasting(true);
     setCastStatus('در حال ارسال ویدئو به پروژکتور…');
     try {
@@ -200,23 +202,32 @@ export const CinemaProjectorView: React.FC = () => {
       </header>
 
       <div className="rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/70 dark:bg-emerald-950/20 p-3 text-xs leading-6 text-emerald-950 dark:text-emerald-100">
-        برای تماشای فیلم با فیلترشکن، روش اول اتصال بی‌سیم صفحه گوشی به پروژکتور است: فیلترشکن روی گوشی روشن می‌ماند و پروژکتور فقط تصویر را می‌گیرد؛ نصب VPN روی پروژکتور لازم نیست. روش دوم DLNA برای لینک‌های مستقیم و عمومی است.
+        نام فیلم یا سریال را جستجو کن تا منابع ویدئویی شناخته‌شده را یکجا بررسی کنی. نتیجه جستجو لینک همان منبع است؛ فقط عنوان‌هایی که پخش عمومی یا مجاز دارند داخل پخش‌کننده هم‌صدا اجرا می‌شوند.
       </div>
 
-      <form onSubmit={(event) => {event.preventDefault(); openYouTubeSearch();}} className="flex gap-2">
+      <form onSubmit={(event) => {event.preventDefault(); searchAllSources();}} className="flex gap-2">
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="نام فیلم یا سریال، دوبله فارسی، زیرنویس..." className="min-w-0 flex-1 min-h-[44px] px-3 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50 dark:bg-[#0B1312] text-sm text-slate-900 dark:text-white" />
         <button type="submit" className="min-h-[44px] px-3 rounded-xl bg-red-600 text-white flex items-center gap-1.5"><Search className="w-4 h-4" /><span className="text-xs">جستجو</span></button>
       </form>
-      <button type="button" onClick={openYouTubeSearch} className="w-full text-right rounded-xl border border-red-200 dark:border-red-950 bg-red-50 dark:bg-red-950/20 p-3 flex items-center gap-3">
-        <Youtube className="w-6 h-6 text-red-600 shrink-0" />
-        <span className="flex-1"><span className="block text-sm font-bold text-slate-900 dark:text-white">جستجو در یوتیوب</span><span className="block text-[11px] text-slate-500 dark:text-slate-400 mt-1">آثار رایگان منتشرشده از کانال‌های رسمی و صاحبان محتوا را انتخاب کن</span></span>
-        <ExternalLink className="w-4 h-4 text-slate-500" />
-      </button>
+      <div className="rounded-xl border border-slate-200 dark:border-emerald-900 p-3 space-y-3">
+        <div className="flex items-center justify-between gap-2"><h3 className="text-sm font-bold text-slate-900 dark:text-white">منابع جستجوی سینما</h3><span className="text-[10px] text-slate-500">۱۲ منبع</span></div>
+        <p className="text-[11px] leading-5 text-slate-500 dark:text-slate-400">جستجوی یکپارچه، عنوان را در دامنه منابع زیر پیدا می‌کند. برای نتیجه دقیق‌تر، نام فارسی یا اصلی اثر را وارد کن.</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {cinemaSources.map((source) => (
+            <button key={source.domain} type="button" onClick={() => searchOneSource(source.domain)} className="text-right rounded-lg border border-slate-200 dark:border-emerald-900 p-2.5 hover:border-emerald-500">
+              <span className="block text-xs font-bold text-slate-900 dark:text-white">{source.name}</span>
+              <span className="block mt-1 text-[10px] leading-4 text-slate-500 dark:text-slate-400">{source.kind}</span>
+              <span className={`inline-block mt-1.5 text-[9px] rounded px-1.5 py-0.5 ${source.mode === 'paid' ? 'bg-amber-100 text-amber-800' : source.mode === 'free' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'}`}>{source.mode === 'paid' ? 'اشتراکی' : source.mode === 'free' ? 'عمومی/رایگان' : 'ترکیبی'}</span>
+            </button>
+          ))}
+        </div>
+        <p className="text-[10px] leading-5 text-slate-500">رایگان‌بودن برای هر عنوان جداگانه بررسی می‌شود؛ اشتراک یا محدودیت پخش سرویس‌ها قابل دورزدن نیست.</p>
+      </div>
 
       <form onSubmit={(event) => {event.preventDefault(); playUrl(sourceUrl);}} className="space-y-2">
         <label className="block text-sm font-semibold text-slate-900 dark:text-white">پخش لینک مستقیم یا ویدئوی قابل‌جاسازی</label>
         <div className="flex gap-2">
-          <input value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} dir="ltr" placeholder="https://… (MP4 / WebM / HLS / YouTube)" className="min-w-0 flex-1 min-h-[44px] px-3 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50 dark:bg-[#0B1312] text-xs text-slate-900 dark:text-white" />
+          <input value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} dir="ltr" placeholder="https://… (لینک مستقیم MP4 / WebM / HLS)" className="min-w-0 flex-1 min-h-[44px] px-3 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50 dark:bg-[#0B1312] text-xs text-slate-900 dark:text-white" />
           <button type="submit" className="min-h-[44px] px-4 rounded-xl bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5"><Play className="w-4 h-4" /> پخش</button>
         </div>
       </form>
@@ -226,11 +237,7 @@ export const CinemaProjectorView: React.FC = () => {
       {activeUrl && (
         <div className="space-y-2">
           <div ref={playerShellRef} className="relative aspect-video overflow-hidden rounded-xl bg-black">
-            {youtubeId ? (
-              <iframe title="پخش ویدئو در سینمای هم‌صدا" src={`https://www.youtube-nocookie.com/embed/${youtubeId}?playsinline=1&rel=0`} className="w-full h-full" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" />
-            ) : (
-              <video ref={videoRef} key={activeUrl} src={activeUrl} controls playsInline preload="metadata" className="w-full h-full" onError={() => setPlayerError('این لینک در پخش‌کننده داخلی باز نشد؛ ممکن است لینک مستقیم نباشد یا سرور اجازه پخش از برنامه‌های دیگر را ندهد.')} />
-            )}
+            <video ref={videoRef} key={activeUrl} src={activeUrl} controls playsInline preload="metadata" className="w-full h-full" onError={() => setPlayerError('این لینک در پخش‌کننده داخلی باز نشد؛ ممکن است لینک مستقیم نباشد یا سرور اجازه پخش از برنامه‌های دیگر را ندهد.')} />
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={openFullscreen} className="min-h-[40px] px-3 rounded-lg border border-slate-200 dark:border-emerald-900 text-xs flex items-center gap-2"><Maximize className="w-4 h-4" /> تمام‌صفحه</button>
@@ -244,7 +251,7 @@ export const CinemaProjectorView: React.FC = () => {
           <Tv className="w-5 h-5 text-sky-700 dark:text-sky-300" />
           <div className="flex-1">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">اتصال گوشی به پروژکتور بدون نصب VPN روی پروژکتور</h3>
-            <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1">دو راه مستقل: آینه‌کردن صفحه گوشی (اولویت برای اینترنتِ عبوری از VPN گوشی) و DLNA برای لینک مستقیم</p>
+            <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1">راه‌های انتقال محتوا بسته به پشتیبانی پروژکتور: پخش مستقیم روی خود پروژکتور، DLNA برای لینک عمومی مستقیم، یا نمایش بی‌سیم صفحه</p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -257,7 +264,7 @@ export const CinemaProjectorView: React.FC = () => {
         </div>
         <div className="rounded-lg bg-white/70 dark:bg-slate-900/40 border border-sky-100 dark:border-sky-900 p-3 text-[11px] leading-6 text-slate-700 dark:text-slate-200 space-y-1">
           <p><strong>مراحل اتصال:</strong> دکمه Cast را بزن، در فهرست گوشی نام پروژکتور Owlenz را انتخاب کن و اتصال را تأیید کن. سپس فیلم را روی گوشی پخش کن.</p>
-          <p>فیلترشکن باید روی گوشی روشن باشد؛ ترافیک اینترنت گوشی از VPN عبور می‌کند و برای آینه‌کردن تصویر، نصب VPN روی پروژکتور لازم نیست. اگر پروژکتور دیده نشد، حالت Screen Mirroring / Miracast / WiFi Display را از منوی خود پروژکتور فعال کن.</p>
+          <p>اگر نمایش بی‌سیم قبلاً با گوشی تو کار کرده، می‌توانی از تنظیمات اندروید دوباره امتحان کنی؛ اما این روش با بعضی VPNها یا سرویس‌های دارای DRM ممکن است قطع شود یا تصویر سیاه بدهد.</p>
           <p>برخی سرویس‌های اشتراکی به‌دلیل DRM ممکن است هنگام آینه‌کردن تصویر سیاه نشان دهند؛ این محدودیت را نمی‌توان با هم‌صدا دور زد.</p>
         </div>
         {castDevices.length > 0 && (
@@ -266,7 +273,7 @@ export const CinemaProjectorView: React.FC = () => {
             <select value={selectedCastDevice} onChange={(event) => setSelectedCastDevice(event.target.value)} className="w-full min-h-[42px] px-3 rounded-lg border border-slate-200 dark:border-sky-900 bg-white dark:bg-[#0B1312] text-sm">
               {castDevices.map((device) => <option key={device.id} value={device.id}>{device.name} · {device.address}</option>)}
             </select>
-            <button type="button" onClick={castCurrentVideo} disabled={!activeUrl || !selectedCastDevice || isCasting || !!youtubeId} className="w-full min-h-[42px] rounded-lg bg-emerald-700 text-white text-xs font-semibold disabled:opacity-50">
+            <button type="button" onClick={castCurrentVideo} disabled={!activeUrl || !selectedCastDevice || isCasting} className="w-full min-h-[42px] rounded-lg bg-emerald-700 text-white text-xs font-semibold disabled:opacity-50">
               {isCasting ? 'در حال ارسال…' : 'ارسال ویدئوی فعلی به پروژکتور'}
             </button>
             {castPlaybackState && (
@@ -281,7 +288,7 @@ export const CinemaProjectorView: React.FC = () => {
         )}
         {castStatus && <p role="status" className="text-xs leading-6 text-sky-900 dark:text-sky-100">{castStatus}</p>}
         {!isNativeAndroid && <p className="text-[11px] leading-5 text-slate-500">برای کشف و کنترل DLNA باید همین نسخه روی گوشی اندرویدی نصب باشد.</p>}
-        <p className="text-[10px] leading-5 text-slate-500 dark:text-slate-400">DLNA با آینه‌کردن صفحه فرق دارد: در DLNA خود پروژکتور لینک رسانه را از اینترنت دریافت می‌کند؛ بنابراین VPN گوشی خودبه‌خود به پروژکتور منتقل نمی‌شود. برای پخش از مسیر VPN گوشی، از اتصال بی‌سیم صفحه استفاده کن. بازشدن تنظیمات Cast به‌تنهایی تضمین نمی‌کند که هر مدل Miracast را پشتیبانی کند.</p>
+        <p className="text-[10px] leading-5 text-slate-500 dark:text-slate-400">DLNA با آینه‌کردن صفحه فرق دارد: در DLNA خود پروژکتور لینک رسانه را از اینترنت دریافت می‌کند؛ بنابراین تنظیمات شبکه گوشی به پروژکتور منتقل نمی‌شود. بازشدن تنظیمات Cast به‌تنهایی تضمین نمی‌کند که هر مدل Miracast را پشتیبانی کند.</p>
       </div>
 
         {recent.length > 0 && (
