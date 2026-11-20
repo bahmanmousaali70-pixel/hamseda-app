@@ -3,6 +3,7 @@ package com.roozhaye.cinema
 import android.app.Activity
 import android.os.Bundle
 import android.view.KeyEvent
+import android.view.View
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
