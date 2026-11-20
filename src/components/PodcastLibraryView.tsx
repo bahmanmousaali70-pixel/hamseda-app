@@ -55,11 +55,27 @@ export const PodcastLibraryView: React.FC<{
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({query: term}),
       };
-      let response = await fetch(apiUrl('/api/podcast-search'), requestOptions);
-      // Some installed builds still point at the older AI Studio API host.
-      // Retry the known project Cloud Run host when that host has no podcast route.
-      if (response.status === 404) {
-        response = await fetch('https://ais-dev-5dqrp6vmbjkluesjlbth6l-737153117526.europe-west2.run.app/api/podcast-search', requestOptions);
+      const endpoints = [...new Set([
+        apiUrl('/api/podcast-search'),
+        'https://ais-dev-5dqrp6vmbjkluesjlbth6l-737153117526.europe-west2.run.app/api/podcast-search',
+      ])];
+      let response: Response | null = null;
+      let lastNetworkError: unknown = null;
+      for (const endpoint of endpoints) {
+        try {
+          const candidate = await fetch(endpoint, requestOptions);
+          response = candidate;
+          // A 404 usually means this host has not received the podcast route yet.
+          if (candidate.status === 404) continue;
+          break;
+        } catch (networkError) {
+          lastNetworkError = networkError;
+        }
+      }
+      if (!response || response.status === 404) {
+        throw new Error(lastNetworkError
+          ? 'ارتباط با سرور پادکست برقرار نشد. ممکن است سرویس هنوز منتشر نشده باشد یا اتصال سرور قطع باشد.'
+          : 'مسیر جستجوی پادکست روی سرور پیدا نشد؛ سرور هم‌صدا باید به‌روزرسانی شود.');
       }
       const parsed = await safeReadJsonResponse<PodcastSearchResponse>(response);
       if (!response.ok || parsed.isHtml || !parsed.data) {
@@ -167,7 +183,7 @@ export const PodcastLibraryView: React.FC<{
           <div className="text-xs text-emerald-100/80">{selected.podcast.title}</div>
         </div>
       )}
-      <audio ref={audioRef} controls className="w-full" preload="none" />
+      {selected ? <audio ref={audioRef} controls className="w-full" preload="none" /> : null}
 
       {podcasts.length > 0 && (
         <div className="space-y-3">
