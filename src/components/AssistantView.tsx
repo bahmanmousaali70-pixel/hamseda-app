@@ -90,7 +90,7 @@ interface AssistantViewProps {
   onSpeakText: (text: string, title: string, category: 'custom' | 'morning' | 'energy' | 'gratitude') => void;
   onStopSpeech: () => void;
   onOpenTab: (tab: AppTab) => void;
-  onTriggerMedia: (tab: 'tracks' | 'radio', query?: string) => void;
+  onTriggerMedia: (tab: 'tracks' | 'radio' | 'podcasts' | 'stop', query?: string) => void;
   onAddGoalTitle: (title: string) => void;
   onStatusToast: (msg: string) => void;
 }
@@ -111,6 +111,10 @@ const ACTION_LABELS: Partial<Record<AssistantActionType, string>> = {
   download_url: 'دانلود فایل',
   open_url: 'باز کردن صفحه وب',
   open_app: 'باز کردن برنامه گوشی',
+  close_app: 'خروج از برنامه',
+  accessibility_click: 'لمس گزینه روی صفحه',
+  accessibility_type: 'نوشتن در کادر فعال',
+  accessibility_scroll: 'پیمایش صفحه',
   open_navigation: 'مسیریاب و نقشه',
   flashlight_on: 'روشن شدن چراغ قوه',
   flashlight_off: 'خاموش شدن چراغ قوه',
@@ -132,6 +136,7 @@ const ACTION_LABELS: Partial<Record<AssistantActionType, string>> = {
   volume_up: 'افزایش صدا',
   volume_down: 'کاهش صدا',
   volume_max: 'حداکثر صدا',
+  volume_min: 'حداقل صدا',
   volume_mute: 'قطع صدای رسانه',
   ringer_silent: 'حالت سکوت (سایلنت)',
   ringer_vibrate: 'حالت ویبره',
@@ -143,6 +148,7 @@ const ACTION_LABELS: Partial<Record<AssistantActionType, string>> = {
   open_tab: 'تغییر بخش برنامه',
   play_radio: 'رادیو زنده',
   play_music: 'موزیک شبانه',
+  play_podcast: 'جستجوی پادکست',
   stop_audio: 'توقف پخش',
   add_goal: 'افزودن هدف امروز',
 };
@@ -151,7 +157,10 @@ const NATIVE_DEVICE_ACTIONS = new Set<AssistantActionType>([
   'download_url',
   'open_url',
   'open_app',
-  'open_navigation',
+  'close_app',
+  'accessibility_click',
+  'accessibility_type',
+  'accessibility_scroll',  'open_navigation',
   'flashlight_on',
   'flashlight_off',
   'open_wifi_settings',
@@ -170,6 +179,7 @@ const NATIVE_DEVICE_ACTIONS = new Set<AssistantActionType>([
   'volume_up',
   'volume_down',
   'volume_max',
+  'volume_min',
   'volume_mute',
   'ringer_silent',
   'ringer_vibrate',
@@ -237,6 +247,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
   const webRecRef = useRef<WebSpeechRecognitionInstance | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const processingRef = useRef(false);
+  const utteranceQueueRef = useRef<{text: string; speak: boolean}[]>([]);
   // Prevent the wake-loop cleanup from cancelling a manually started recording.
   const manualListenRef = useRef(false);
 
@@ -326,7 +337,11 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
   const executeUtterance = useCallback(
     async (rawUtterance: string, speakReply = true) => {
       const cleaned = rawUtterance.trim();
-      if (!cleaned || processingRef.current) return;
+      if (!cleaned) return;
+      if (processingRef.current) {
+        utteranceQueueRef.current.push({text: cleaned, speak: speakReply});
+        return;
+      }
       processingRef.current = true;
       setIsBusy(true);
 
@@ -347,9 +362,11 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
           })),
         });
 
-        // Stage every SMS for review; do not execute it on the first pass.
+        // Stage SMS and calls for explicit review; neither executes on its first pass.
         if (result.action === 'send_sms' && pendingIntent?.type !== 'awaiting_sms_confirmation') {
           setPendingIntent({type: 'awaiting_sms_confirmation', targetName: result.targetName || result.targetPhone || 'مخاطب نامشخص', targetPhone: result.targetPhone, smsBody: result.smsBody || ''});
+        } else if (result.action === 'make_call' && pendingIntent?.type !== 'awaiting_call_confirmation') {
+          setPendingIntent({type: 'awaiting_call_confirmation', targetName: result.targetName || result.targetPhone || 'مخاطب نامشخص', targetPhone: result.targetPhone});
         } else if (result.action === 'ask_sms_body') {
           if (result.targetPhone) {
             setPendingIntent({
@@ -366,10 +383,11 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
 
         let finalReply = result.replyText;
 
-        if (result.action === 'send_sms' && pendingIntent?.type !== 'awaiting_sms_confirmation') finalReply = 'قبل از ارسال، نام مخاطب و متن پیام را بررسی و تأیید کن.';
+        if (result.action === 'send_sms' && pendingIntent?.type !== 'awaiting_sms_confirmation') finalReply = `پیامک برای ${result.targetName} به شماره ${result.targetPhone} با متن «${result.smsBody}» آماده است. اگر نام، شماره و متن درست است بگو تأیید؛ برای انصراف بگو لغو کن.`;
+        if (result.action === 'make_call' && pendingIntent?.type !== 'awaiting_call_confirmation') finalReply = `با ${result.targetName} به شماره ${result.targetPhone} تماس بگیرم؟ اگر درست است بگو تأیید؛ برای انصراف بگو لغو کن.`;
 
         // Execute Android Hardware/OS Action if applicable
-        if (NATIVE_DEVICE_ACTIONS.has(result.action) && !(result.action === 'send_sms' && pendingIntent?.type !== 'awaiting_sms_confirmation')) {
+        if (NATIVE_DEVICE_ACTIONS.has(result.action) && !(result.action === 'send_sms' && pendingIntent?.type !== 'awaiting_sms_confirmation') && !(result.action === 'make_call' && pendingIntent?.type !== 'awaiting_call_confirmation')) {
           const shouldSkipAutoDownloadIfSearch =
             result.action === 'download_url' && !result.downloadUrl?.trim();
 
@@ -381,6 +399,9 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
               action: result.action,
               phone: result.targetPhone,
               smsBody: result.smsBody,
+              confirmed:
+                (result.action === 'send_sms' && pendingIntent?.type === 'awaiting_sms_confirmation') ||
+                (result.action === 'make_call' && pendingIntent?.type === 'awaiting_call_confirmation'),
               name: result.downloadTitle || result.targetName || result.goalTitle,
               url: result.downloadUrl,
               query: result.query,
@@ -402,6 +423,8 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
                 onStatusToast('لطفاً در صفحه بازشده، دسترسی «مزاحم نشوید / سایلنت» را برای برنامه فعال کنید.');
               } else if (nativeRes.needsWriteSettings) {
                 onStatusToast('لطفاً در صفحه بازشده، اجازه «تغییر تنظیمات سیستم (نور صفحه)» را فعال کنید.');
+              } else if (nativeRes.needsAccessibility) {
+                onStatusToast('در تنظیمات بازشده، سرویس دسترس‌پذیری هم‌صدا را فعال کن و سپس دوباره فرمان بده.');
               } else if (nativeRes.permissionRequired) {
                 onStatusToast(nativeRes.message || 'لطفاً مجوز اندروید خواسته‌شده را تایید کنید.');
               }
@@ -417,8 +440,12 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
         } else if (result.action === 'play_music') {
           onOpenTab('night');
           onTriggerMedia('tracks', result.query);
+        } else if (result.action === 'play_podcast') {
+          onOpenTab('night');
+          onTriggerMedia('podcasts', result.query);
         } else if (result.action === 'stop_audio') {
           onStopSpeech();
+          onTriggerMedia('stop');
         } else if (result.action === 'add_goal' && result.goalTitle?.trim()) {
           onAddGoalTitle(result.goalTitle.trim());
         }
@@ -437,11 +464,15 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
           result.action !== 'record_audio_start' &&
           result.action !== 'stop_audio'
         ) {
+          // Replace unfinished speech so two replies are never played together.
+          onStopSpeech();
           onSpeakText(finalReply, `پاسخ ${assistantName}`, 'custom');
         }
       } finally {
         setIsBusy(false);
         processingRef.current = false;
+        const nextUtterance = utteranceQueueRef.current.shift();
+        if (nextUtterance) void Promise.resolve().then(() => executeUtterance(nextUtterance.text, nextUtterance.speak));
       }
     },
     [

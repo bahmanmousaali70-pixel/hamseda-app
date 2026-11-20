@@ -17,7 +17,7 @@ import {
 import {apiUrl, safeReadJsonResponse} from './apiConfig';
 
 export interface PendingAssistantIntent {
-  type: 'awaiting_sms_body' | 'awaiting_sms_recipient' | 'awaiting_sms_confirmation';
+  type: 'awaiting_sms_body' | 'awaiting_sms_recipient' | 'awaiting_sms_confirmation' | 'awaiting_call_confirmation';
   targetName?: string;
   targetPhone?: string;
   smsBody?: string;
@@ -45,7 +45,9 @@ function normalizePhoneDigits(raw: string): string {
 }
 
 function getPartnerKeywords(): string[] {
-  return ['همسر', 'همسرم', 'عشقم', 'عزیزم', 'خانم', 'خانوم', 'خانمم', 'خانومم', 'شوهرم', 'اقامون'];
+  // Relationship words map to the configured partner; ordinary names such as
+  // «خانومی» must still be matched against the actual phone-book entries.
+  return ['همسر', 'همسرم', 'عشقم', 'عزیزم', 'شوهرم', 'اقامون'];
 }
 
 export function findBestContactMatch(
@@ -64,16 +66,17 @@ export function findBestContactMatch(
     return {name: trimmed, phone: directDigits};
   }
 
-  let effectiveQuery = normalizeAssistantText(trimmed);
+  const rawQueryNorm = normalizeAssistantText(trimmed);
+  let effectiveQuery = rawQueryNorm;
   const partnerName = getPartnerNameForDevice(settings, deviceOwner);
   const partnerNorm = normalizeAssistantText(partnerName);
 
-  // 2. Partner shortcuts («همسر», «زری», «بهمن»)
-  if (getPartnerKeywords().some((kw) => effectiveQuery === kw || effectiveQuery.includes(kw))) {
-    effectiveQuery = partnerNorm;
-  }
+  // Keep the spoken alias as a candidate. A saved contact may literally be
+  // named «خانومی» even when the configured partner name is «زری».
+  const isPartnerShortcut = getPartnerKeywords().includes(effectiveQuery);
+  if (isPartnerShortcut) effectiveQuery = partnerNorm;
 
-  const candidateNames = [effectiveQuery];
+  const candidateNames = Array.from(new Set([rawQueryNorm, effectiveQuery].filter(Boolean)));
   if (effectiveQuery === 'زری' || effectiveQuery === 'زهرا') {
     candidateNames.push('zari', 'zahra', 'زری', 'زهرا');
   } else if (effectiveQuery === 'بهمن') {
@@ -216,11 +219,19 @@ export function parseOfflineAssistantCommand(
   const norm = normalizeAssistantText(commandRaw);
   if (!norm) return null;
 
-  // Never send until the exact recipient and body are explicitly confirmed.
+  // Cancellation always wins while a sensitive operation is pending.
+  if (ctx.pendingIntent && /^(لغو(ش)? کن|لغو|کنسل(ش)? کن|کنسل|بی ?خیال|بیخیال|ولش کن|نفرست|زنگ نزن|تماس نگیر|پشیمون شدم|انصراف|نه|خیر)$/.test(norm)) {
+    return {action: 'answer', replyText: ctx.pendingIntent.type === 'awaiting_call_confirmation'
+      ? 'باشه، تماس لغو شد و شماره‌گیری انجام نمی‌دم.'
+      : 'باشه، پیامک لغو شد و هیچ پیامی ارسال نمی‌شه.'};
+  }
   if (ctx.pendingIntent?.type === 'awaiting_sms_confirmation') {
-    if (/^(لغو|کنسل|بی ?خیال|بیخیال|نفرست|ولش کن|پشیمون شدم|انصراف|نه|خیر)/.test(norm)) return {action: 'answer', replyText: 'باشه، پیام ارسال نشد و لغو شد.'};
-    if (/^(تایید|تأیید|بله|آره|اره|درسته|درست است|ارسال کن|بفرست|اوکی|باشه)/.test(norm)) return {action: 'send_sms', targetName: ctx.pendingIntent.targetName, targetPhone: ctx.pendingIntent.targetPhone, smsBody: ctx.pendingIntent.smsBody, replyText: 'در حال ارسال پیام تأییدشده به ' + ctx.pendingIntent.targetName + ' هستم.'};
-    return {action: 'answer', replyText: 'برای جلوگیری از ارسال اشتباهی، فقط «تأیید» برای ارسال یا «لغو» برای انصراف بگو.'};
+    if (/^(تایید|تأیید|بله|آره|اره|درسته|درست است|ارسال کن|بفرست|اوکی|باشه)$/.test(norm)) return {action: 'send_sms', targetName: ctx.pendingIntent.targetName, targetPhone: ctx.pendingIntent.targetPhone, smsBody: ctx.pendingIntent.smsBody, replyText: 'تأیید شد؛ پیامک را ارسال می‌کنم.'};
+    return {action: 'answer', replyText: 'پیام هنوز ارسال نشده. برای ارسال بگو «تأیید» و برای انصراف بگو «لغو کن».'};
+  }
+  if (ctx.pendingIntent?.type === 'awaiting_call_confirmation') {
+    if (/^(تایید|تأیید|بله|آره|اره|درسته|درست است|تماس بگیر|زنگ بزن|اوکی|باشه)$/.test(norm)) return {action: 'make_call', targetName: ctx.pendingIntent.targetName, targetPhone: ctx.pendingIntent.targetPhone, replyText: 'تأیید شد؛ شماره‌گیر را باز می‌کنم.'};
+    return {action: 'answer', replyText: 'تماس هنوز برقرار نشده. برای تماس بگو «تأیید» و برای انصراف بگو «لغو کن».'};
   }
 
   // Handle pending SMS conversation turn first
@@ -307,14 +318,14 @@ export function parseOfflineAssistantCommand(
   }
 
   // 4. Camera Photo & Video & Audio Record Start
-  if (/(عکس بگیر|عکس بنداز|عکاسی کن|دوربین عکس)/.test(norm)) {
+  if (/(عکس بگیر|عکس بنداز|عکس بگیرم|یه عکس|یک عکس|ی عکس|عکسی بگیر|عکاسی کن|دوربین عکس|دکمه شاتر|شاتر( رو| را)? بزن|عکس( رو| را)? ثبت کن|تصویر بگیر|یه دونه عکس|ازم عکس بگیر)/.test(norm)) {
     return {
       action: 'take_photo',
       replyText: 'دوربین را برای گرفتن عکس باز می‌کنم.',
     };
   }
 
-  if (/(فیلم بگیر|فیلم برداری|فیلمبرداری|ویدیو بگیر|ویدئو بگیر)/.test(norm)) {
+  if (/(فیلم بگیر|فیلم برداری|فیلمبرداری|ویدیو بگیر|ویدئو بگیر|ضبط ویدیو|ضبط ویدئو|فیلم رو شروع کن|فیلم را شروع کن|فیلمبرداری رو شروع کن|فیلمبرداری را شروع کن)/.test(norm)) {
     return {
       action: 'record_video',
       replyText: 'دوربین فیلم‌برداری را باز می‌کنم.',
@@ -424,8 +435,9 @@ export function parseOfflineAssistantCommand(
     }
   }
 
-  // 4h. Open Installed App on Phone
+  // 4h. Open or leave an installed app using everyday speech.
   const knownApps = [
+    'دوربین',
     'تلگرام',
     'واتساپ',
     'واتس‌اپ',
@@ -451,18 +463,36 @@ export function parseOfflineAssistantCommand(
     'مایکت',
     'ساعت',
   ];
-  if (
-    /(باز کن|اجرا کن|بیار بالا)/.test(norm) &&
-    !/(تب |بخش )/.test(norm) &&
-    knownApps.some((a) => norm.includes(normalizeAssistantText(a)))
-  ) {
-    const matchedApp = knownApps.find((a) => norm.includes(normalizeAssistantText(a))) || '';
-    return {
-      action: 'open_app',
-      targetName: matchedApp,
-      query: matchedApp,
-      replyText: `در حال باز کردن «${matchedApp}» هستم.`,
-    };
+  const matchedApp = knownApps.find((a) => norm.includes(normalizeAssistantText(a))) || '';
+  if (matchedApp && /(ببند|بندش|خارج شو|بیا بیرون|برو بیرون|جمعش کن|ازش بیا بیرون|ازش خارج شو)/.test(norm)) {
+    return {action: 'close_app', targetName: matchedApp, query: matchedApp,
+      replyText: `از ${matchedApp} خارج می‌شوم و به صفحه اصلی برمی‌گردم.`};
+  }
+  if (matchedApp && /(باز کن|بازش کن|اجرا کن|بیار بالا|برو تو|برو داخل|بزن تو|برو توی|برو داخلش|بیارش بالا)/.test(norm) && !/(تب |بخش )/.test(norm)) {
+    return {action: matchedApp === 'دوربین' ? 'take_photo' : 'open_app',
+      targetName: matchedApp, query: matchedApp,
+      replyText: matchedApp === 'دوربین' ? 'دوربین را باز می‌کنم.' : `در حال باز کردن «${matchedApp}» هستم.`};
+  }
+
+
+  const typeMatch = commandRaw.match(/^(?:تایپ کن|بنویس توی کادر|تو کادر بنویس)\s+(.+)$/);
+  if (typeMatch && typeMatch[1].trim()) {
+    return {action: 'accessibility_type', query: typeMatch[1].trim(),
+      replyText: 'متن را در کادر فعال می‌نویسم.'};
+  }
+  if (/^(برو پایین|صفحه رو پایین ببر|اسکرول پایین|پایین تر برو)$/.test(norm)) {
+    return {action: 'accessibility_scroll', query: 'down', replyText: 'صفحه را پایین می‌برم.'};
+  }
+  if (/^(برو بالا|صفحه رو بالا ببر|اسکرول بالا|بالاتر برو)$/.test(norm)) {
+    return {action: 'accessibility_scroll', query: 'up', replyText: 'صفحه را بالا می‌برم.'};
+  }
+
+  // Natural UI interaction: "روی ارسال بزن", "روی جستجو کلیک کن".
+  const tapMatch = commandRaw.match(/(?:روی|روى|رو)\s+(.+?)\s+(?:بزن|کلیک کن|لمس کن|انتخاب کن)$/);
+  if (tapMatch && tapMatch[1].trim().length > 1) {
+    const label = tapMatch[1].trim();
+    return {action: 'accessibility_click', query: label,
+      replyText: `روی «${label}» می‌زنم.`};
   }
 
   // 5. Ringer / Silent / Vibrate / Normal
@@ -487,18 +517,28 @@ export function parseOfflineAssistantCommand(
     };
   }
 
-  // 6. Media Volume Up / Down / Max / Mute
-  if (/(صدا رو ببند|قطع صدا|میوت کن|صدا رو قطع کن|صدای گوشی رو قطع)/.test(norm)) {
+  // 6. Media Volume: check explicit minimum/down BEFORE maximum so
+  // "صدا رو تا آخر کم کن" can never be mistaken for "تا آخر زیاد کن".
+  if (/(صدا|ولوم|حجم صدا).*(تا اخر|تا ته|ته).*(کم|پایین|صفر)/.test(norm) ||
+      /(صدا|ولوم|حجم صدا).*(کمترین|حداقل|صفر)/.test(norm)) {
     return {
-      action: 'volume_mute',
-      replyText: 'صدای رسانه و پخش گوشی کم/قطع شد.',
+      action: 'volume_min',
+      replyText: 'صدای رسانه و زنگ گوشی تا حداقل پایین آورده شد.',
     };
   }
 
-  if (/(صدا.*حداکثر|صدا.*تا اخر|بلندترین صدا|ماکزیمم صدا)/.test(norm)) {
+  if (/(صدا رو ببند|قطع صدا|میوت کن|صدا رو قطع کن|صدای گوشی رو قطع)/.test(norm)) {
+    return {
+      action: 'volume_mute',
+      replyText: 'صدای رسانه گوشی قطع شد.',
+    };
+  }
+
+  if (/(صدا.*حداکثر|صدا.*تا اخر|بلندترین صدا|ماکزیمم صدا)/.test(norm) &&
+      !/(کم|پایین|صفر|قطع)/.test(norm)) {
     return {
       action: 'volume_max',
-      replyText: 'صدا روی حداکثر تنظیم شد.',
+      replyText: 'صدای گوشی روی حداکثر تنظیم شد.',
     };
   }
 
@@ -509,7 +549,7 @@ export function parseOfflineAssistantCommand(
     };
   }
 
-  if (/(صدا.*کم|اروم تر کن|بیار پایین صدا|ولوم پایین)/.test(norm)) {
+  if (/(صدا.*کم|اروم تر کن|آروم تر کن|بیار پایین صدا|ولوم پایین)/.test(norm)) {
     return {
       action: 'volume_down',
       replyText: 'صدای گوشی کمتر شد.',
@@ -588,6 +628,15 @@ export function parseOfflineAssistantCommand(
     };
   }
 
+  if (norm.includes('پادکست') && /(پخش|گوش|پیدا|جستجو|بذار|بگذار)/.test(norm)) {
+    const query = commandRaw.replace(/^(لطفا|لطفاً)\s+/, '').replace(/(رو|را)?\s*(پخش کن|بذار|بگذار|پیدا کن|جستجو کن|گوش بده)$/,'').trim();
+    return {
+      action: 'play_podcast',
+      query: query || 'پادکست فارسی',
+      replyText: 'پادکست‌ها را جستجو می‌کنم و قسمت‌های قابل پخش را می‌آورم.',
+    };
+  }
+
   // 9. Radio / Music / Stop Audio
   if (/(پخش رو قطع|موزیک رو قطع|اهنگ رو قطع|رادیو رو قطع|ساکت شو|پخش متوقف|توقف پخش)/.test(norm)) {
     return {
@@ -597,13 +646,14 @@ export function parseOfflineAssistantCommand(
   }
 
   if (norm.includes('رادیو') && /(بذار|بگذار|پخش|باز|گوش)/.test(norm)) {
-    let query = 'iran';
-    if (norm.includes('جهان') || norm.includes('خارجی')) query = 'world';
-    else if (norm.includes('ارام') || norm.includes('لایت') || norm.includes('پیانو')) query = 'chill';
+    let query = commandRaw.replace(/^(لطفا|لطفاً)\s+/,'').replace(/(رو|را)?\s*(پخش کن|بذار|بگذار|باز کن|گوش بده|پخش)$/,'').trim();
+    if (!query || /^(رادیو|رادیوها)$/.test(normalizeAssistantText(query))) query = 'iran';
+    else if (/(جهان|خارجی|بین المللی)/.test(norm)) query = 'world';
+    else if (/(ارام|لایت|پیانو)/.test(norm)) query = 'chill';
     return {
       action: 'play_radio',
       query,
-      replyText: 'بخش رادیو زنده را باز می‌کنم.',
+      replyText: 'ایستگاه رادیویی را جستجو و آماده پخش می‌کنم.',
     };
   }
 
@@ -709,6 +759,13 @@ export async function processAssistantUtterance(
   const wake = extractCommandAfterWakeWord(rawTranscript, assistantName);
   const cleanedUtterance = wake.matched ? wake.command : rawTranscript.trim();
 
+  // A bare search request has no searchable subject; ask for it instead of
+  // sending a vague query to the cloud router.
+  const normalizedRequest = normalizeAssistantText(cleanedUtterance);
+  if (/^(تو اینترنت سرچ کن|اینترنت سرچ کن|برام سرچ کن|تو وب بگرد|جستجو کن|جست و جو کن|یه سرچ بزن)$/.test(normalizedRequest)) {
+    return {action: 'answer', replyText: 'حتماً رفیق، چی رو برات تو اینترنت پیدا کنم؟'};
+  }
+
   // Try deterministic fast parser first (works both online and offline)
   const localMatch = parseOfflineAssistantCommand(rawTranscript, ctx);
   if (localMatch) {
@@ -719,10 +776,9 @@ export async function processAssistantUtterance(
     return localMatch;
   }
 
-  if (!ctx.isOnline) {
-    const offlineReply = buildOfflineConversationReply(cleanedUtterance || rawTranscript.trim(), ctx);
-    return {action: 'answer', replyText: offlineReply};
-  }
+  // Do not trust the browser's online flag as the sole gate for cloud requests.
+  // Android WebView can report offline while the configured API is reachable.
+  // Try the real API; the catch below preserves a graceful offline fallback.
 
   const {timeStr, dateStr} = getCurrentPersianTimeAndDate();
   try {
@@ -747,8 +803,8 @@ export async function processAssistantUtterance(
     }
 
     const result = parsed.data;
-    // Calls are high-impact: never trust an AI-guessed phone number.
-    // Re-resolve the spoken recipient against the local contact book with a strict match.
+    // Calls and SMS are high-impact: never trust an AI-guessed phone number.
+    // Always resolve the recipient locally, even if the server supplied a number.
     if (result.action === 'make_call') {
       const match = result.targetName
         ? findBestContactMatch(result.targetName, ctx.syncedContacts, ctx.callers, ctx.settings, ctx.deviceOwner)
@@ -761,16 +817,18 @@ export async function processAssistantUtterance(
       }
       result.targetName = match.name;
       result.targetPhone = match.phone;
-    } else if (
-      (result.action === 'send_sms' || result.action === 'ask_sms_body') &&
-      result.targetName &&
-      !result.targetPhone
-    ) {
-      const match = findBestContactMatch(result.targetName, ctx.syncedContacts, ctx.callers, ctx.settings, ctx.deviceOwner);
-      if (match) {
-        result.targetName = match.name;
-        result.targetPhone = match.phone;
+    } else if (result.action === 'send_sms' || result.action === 'ask_sms_body') {
+      const match = result.targetName
+        ? findBestContactMatch(result.targetName, ctx.syncedContacts, ctx.callers, ctx.settings, ctx.deviceOwner)
+        : null;
+      if (!match?.phone) {
+        return {
+          action: 'answer',
+          replyText: `برای اینکه پیامک اشتباهی نره، مخاطب «${result.targetName || cleanedUtterance}» رو با اطمینان در دفترچه پیدا نکردم. اسمش رو دقیق‌تر بگو یا دفترچه رو دوباره همگام کن.`,
+        };
       }
+      result.targetName = match.name;
+      result.targetPhone = match.phone;
     }
 
     if ((result.action === 'send_sms' || result.action === 'make_call') && !result.targetPhone) {

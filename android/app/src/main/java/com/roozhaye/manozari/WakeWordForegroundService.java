@@ -62,6 +62,8 @@ public class WakeWordForegroundService extends Service {
     private SpeechService speechService;
     private String assistantName = "هم‌صدا";
     private long lastWakeAt = 0L;
+    private String lastHandledHypothesis = "";
+    private long lastHandledHypothesisAt = 0L;
 
     public static boolean start(Context context, String name) {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
@@ -341,7 +343,7 @@ public class WakeWordForegroundService extends Service {
                 @Override public void onTimeout() {}
             });
             if (!started) throw new IllegalStateException("Vosk listener did not start");
-            updateNotification("گوش‌به‌زنگ پیوسته فارسی فعال است؛ نام هم‌صدا را بگو.");
+            updateNotification("گوش‌به‌زنگ فعال است؛ فرمان‌های واضح را مستقیم بگو.");
         } catch (Exception e) {
             updateNotification("شروع شنود پیوسته ناموفق بود؛ دوباره تلاش می‌کنم.");
             handler.postDelayed(() -> recoverContinuousRecognition(), 2500);
@@ -358,21 +360,42 @@ public class WakeWordForegroundService extends Service {
 
     private void handleRecognizedText(String spoken) {
         if (stopping || spoken == null || spoken.trim().isEmpty()) return;
+        // Vosk may emit the same utterance via both onResult and onFinalResult.
+        // Drop duplicate callbacks before they can speak the wake acknowledgement twice.
+        String normalizedHypothesis = normalize(spoken);
+        long now = System.currentTimeMillis();
+        if (normalizedHypothesis.equals(lastHandledHypothesis)
+                && now - lastHandledHypothesisAt < 2200L) return;
+        lastHandledHypothesis = normalizedHypothesis;
+        lastHandledHypothesisAt = now;
         if (awaitingCommand) {
             awaitingCommand = false;
             savePendingCommand(spoken);
             return;
         }
-        if (!containsWakeWord(spoken)) return;
-
-        onWakeWordHeard();
-        String command = extractCommandAfterWakeWord(spoken);
-        if (!command.isEmpty()) {
-            savePendingCommand(command);
-        } else {
-            awaitingCommand = true;
-            speakWakePrompt();
+        if (containsWakeWord(spoken)) {
+            if (!onWakeWordHeard()) return;
+            String command = extractCommandAfterWakeWord(spoken);
+            if (!command.isEmpty()) {
+                savePendingCommand(command);
+            } else {
+                awaitingCommand = true;
+                speakWakePrompt();
+            }
+            return;
         }
+
+        // Wake-word-free mode: accept only clear device-command phrases, not arbitrary speech.
+        if (isLikelyDeviceCommand(spoken) && onWakeWordHeard()) {
+            savePendingCommand(spoken.trim());
+        }
+    }
+
+    private boolean isLikelyDeviceCommand(String spoken) {
+        if (spoken == null) return false;
+        String text = normalize(spoken);
+        if (text.length() < 4 || text.length() > 180) return false;
+        return text.matches("(?s).*(باز کن|بازش کن|ببند|ببندش|برگرد|برو|بازگشت|تماس بگیر|زنگ بزن|پیامک بده|پیام بده|ارسال کن|رادیو|پادکست|موزیک|موسیقی|آهنگ|پخش کن|مکث کن|ادامه بده|متوقف کن|عکس بگیر|فیلم بگیر|عکس بنداز|چراغ قوه|نور صفحه|صدا رو|صدا را|ساعت چنده|امروز چندشنبه|جستجو کن|دنبال .* بگرد|اسکرول|پایین برو|بالا برو|وای.?فای|بلوتوث|تایمر|آلارم).*");
     }
 
     private void speakWakePrompt() {
@@ -479,11 +502,14 @@ public class WakeWordForegroundService extends Service {
                 .toLowerCase(Locale.ROOT);
     }
 
-    private void onWakeWordHeard() {
+    private boolean onWakeWordHeard() {
         long now = System.currentTimeMillis();
-        if (now - lastWakeAt < 2500L) return;
+        // A slightly wider cooldown also suppresses near-identical Vosk hypotheses
+        // that differ by one or two recognized words and used to queue repeated "جانم".
+        if (now - lastWakeAt < 3500L) return false;
         lastWakeAt = now;
         updateNotification("نام هم‌صدا شنیده شد؛ منتظر فرمان هستم.");
+        return true;
     }
 
     private void savePendingCommand(String command) {

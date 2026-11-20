@@ -88,6 +88,22 @@ public class RoozhayeNativePlugin extends Plugin {
     }
 
     @PluginMethod
+    public void openAccessibilitySettings(PluginCall call) {
+        try {
+            Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+            JSObject ret = new JSObject();
+            ret.put("ok", true);
+            call.resolve(ret);
+        } catch (Exception e) {
+            JSObject ret = new JSObject();
+            ret.put("ok", false);
+            call.resolve(ret);
+        }
+    }
+
+    @PluginMethod
     public void getNativeCapabilities(PluginCall call) {
         call.resolve(buildCapsObject());
     }
@@ -385,6 +401,12 @@ public class RoozhayeNativePlugin extends Plugin {
         try {
             switch (action) {
                 case "make_call": {
+                    if (!call.getBoolean("confirmed", false)) {
+                        ret.put("ok", false);
+                        ret.put("message", "برقراری تماس بدون تأیید صریح کاربر مسدود شد.");
+                        call.resolve(ret);
+                        return;
+                    }
                     if (phone.isEmpty()) {
                         ret.put("ok", false);
                         ret.put("message", "شماره تلفنی برای " + (name.isEmpty() ? "این مخاطب" : name) + " ثبت نشده است.");
@@ -430,6 +452,14 @@ public class RoozhayeNativePlugin extends Plugin {
                     return;
                 }
                 case "send_sms": {
+                    // Defense in depth: SMS must never be sent by an unconfirmed
+                    // command path, even if a UI/parser regression occurs.
+                    if (!call.getBoolean("confirmed", false)) {
+                        ret.put("ok", false);
+                        ret.put("message", "ارسال پیامک بدون تأیید صریح کاربر مسدود شد.");
+                        call.resolve(ret);
+                        return;
+                    }
                     if (phone.isEmpty()) {
                         ret.put("ok", false);
                         ret.put("message", "شماره‌ای برای ارسال پیامک به " + (name.isEmpty() ? "این شخص" : name) + " پیدا نشد.");
@@ -470,6 +500,7 @@ public class RoozhayeNativePlugin extends Plugin {
                 case "volume_up":
                 case "volume_down":
                 case "volume_max":
+                case "volume_min":
                 case "volume_mute": {
                     AudioManager am = (AudioManager) ctx.getSystemService(Context.AUDIO_SERVICE);
                     if (am == null) {
@@ -486,6 +517,12 @@ public class RoozhayeNativePlugin extends Plugin {
                         am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI);
                         am.adjustStreamVolume(AudioManager.STREAM_RING, AudioManager.ADJUST_LOWER, 0);
                         ret.put("message", "صدای گوشی کم شد.");
+                    } else if ("volume_min".equals(action)) {
+                        am.setStreamVolume(AudioManager.STREAM_MUSIC, 0, AudioManager.FLAG_SHOW_UI);
+                        try {
+                            am.setStreamVolume(AudioManager.STREAM_RING, 0, 0);
+                        } catch (Exception ignored) {}
+                        ret.put("message", "صدای رسانه و زنگ گوشی تا حداقل پایین آورده شد.");
                     } else if ("volume_max".equals(action)) {
                         am.setStreamVolume(AudioManager.STREAM_MUSIC, am.getStreamMaxVolume(AudioManager.STREAM_MUSIC), AudioManager.FLAG_SHOW_UI);
                         try {
@@ -550,11 +587,21 @@ public class RoozhayeNativePlugin extends Plugin {
                 }
                 case "take_photo": {
                     Intent camIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-                    camIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    ctx.startActivity(camIntent);
-                    ret.put("ok", true);
-                    ret.put("message", "دوربین عکاسی باز شد.");
-                    call.resolve(ret);
+                    if (camIntent.resolveActivity(ctx.getPackageManager()) == null) {
+                        ret.put("ok", false);
+                        ret.put("message", "برنامه دوربین سازگار روی گوشی پیدا نشد.");
+                        call.resolve(ret);
+                        return;
+                    }
+                    File photoDir = new File(ctx.getExternalFilesDir(Environment.DIRECTORY_PICTURES), "Hamseda");
+                    if (!photoDir.exists() && !photoDir.mkdirs()) throw new Exception("ساخت پوشه عکس ممکن نشد.");
+                    File photoFile = new File(photoDir, "Hamseda_" + System.currentTimeMillis() + ".jpg");
+                    Uri photoUri = FileProvider.getUriForFile(ctx, ctx.getPackageName() + ".fileprovider", photoFile);
+                    camIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoUri);
+                    camIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                    camIntent.setClipData(android.content.ClipData.newRawUri("Hamseda photo", photoUri));
+                    if (HamsedaAccessibilityService.isConnected()) HamsedaAccessibilityService.armCameraShutter();
+                    startActivityForResult(call, camIntent, "handleCameraCaptureResult");
                     return;
                 }
                 case "record_video": {
@@ -657,6 +704,44 @@ public class RoozhayeNativePlugin extends Plugin {
                     ret.put("message", launched
                             ? "برنامه «" + appQuery + "» باز شد."
                             : "برنامه «" + appQuery + "» روی گوشی پیدا نشد یا نصب نیست.");
+                    call.resolve(ret);
+                    return;
+                }
+                case "close_app": {
+                    if (HamsedaAccessibilityService.performGlobalHome()) {
+                        ret.put("ok", true);
+                        ret.put("message", "از برنامه خارج شدم و به صفحه اصلی برگشتم.");
+                    } else {
+                        Intent settingsIntent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+                        settingsIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        ctx.startActivity(settingsIntent);
+                        ret.put("ok", false);
+                        ret.put("needsAccessibility", true);
+                        ret.put("message", "برای کنترل برنامه‌ها، سرویس دسترس‌پذیری هم‌صدا را در این صفحه فعال کن.");
+                    }
+                    call.resolve(ret);
+                    return;
+                }
+                case "accessibility_click": {
+                    String label = queryArg.trim();
+                    boolean clicked = HamsedaAccessibilityService.clickNodeByLabel(label);
+                    ret.put("ok", clicked);
+                    ret.put("message", clicked ? "روی " + label + " زدم." : "این گزینه روی صفحه پیدا نشد؛ صفحه را باز و دسترس‌پذیری را فعال کن.");
+                    call.resolve(ret);
+                    return;
+                }
+                case "accessibility_type": {
+                    boolean typed = HamsedaAccessibilityService.setTextInFocusedField(queryArg);
+                    ret.put("ok", typed);
+                    ret.put("message", typed ? "متن در کادر فعال نوشته شد." : "کادر نوشتاری فعالی پیدا نکردم.");
+                    call.resolve(ret);
+                    return;
+                }
+                case "accessibility_scroll": {
+                    boolean down = !"up".equalsIgnoreCase(queryArg);
+                    boolean scrolled = HamsedaAccessibilityService.scrollActiveWindow(down);
+                    ret.put("ok", scrolled);
+                    ret.put("message", scrolled ? (down ? "صفحه را پایین بردم." : "صفحه را بالا بردم.") : "صفحه قابل پیمایش پیدا نشد.");
                     call.resolve(ret);
                     return;
                 }
@@ -1207,6 +1292,31 @@ public class RoozhayeNativePlugin extends Plugin {
     }
 
     @PluginMethod
+    public void setSmsAnnouncementPolicy(PluginCall call) {
+        String blockedSenders = call.getString("blockedSenders", "");
+        String blockedKeywords = call.getString("blockedKeywords", "");
+        String importantSenders = call.getString("importantSenders", "");
+        Integer quietHours = call.getInt("quietHours", 0);
+        Boolean summarize = call.getBoolean("summarize", true);
+        Boolean filterOperatorPromotions = call.getBoolean("filterOperatorPromotions", true);
+        long quietUntil = quietHours != null && quietHours > 0
+                ? System.currentTimeMillis() + Math.min(24, quietHours) * 60L * 60L * 1000L : 0L;
+        SharedPreferences prefs = getContext().getSharedPreferences("rmz_native_prefs", Context.MODE_PRIVATE);
+        prefs.edit()
+                .putString("sms_blocked_senders", blockedSenders != null ? blockedSenders : "")
+                .putString("sms_blocked_keywords", blockedKeywords != null ? blockedKeywords : "")
+                .putString("sms_important_senders", importantSenders != null ? importantSenders : "")
+                .putBoolean("sms_summarize", summarize == null || summarize)
+                .putBoolean("sms_filter_operator_promotions", filterOperatorPromotions == null || filterOperatorPromotions)
+                .putLong("sms_quiet_until", quietUntil)
+                .apply();
+        JSObject ret = new JSObject();
+        ret.put("ok", true);
+        ret.put("quietUntil", quietUntil);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
     public void syncCallers(PluginCall call) {
         String json = call.getString("callersJson", "[]");
         SharedPreferences prefs = getContext().getSharedPreferences("rmz_native_prefs", Context.MODE_PRIVATE);
@@ -1529,6 +1639,31 @@ public class RoozhayeNativePlugin extends Plugin {
             JSObject ret = new JSObject();
             ret.put("ok", false);
             ret.put("error", "امکان خواندن فایل انتخاب‌شده نبود.");
+            call.resolve(ret);
+        }
+    }
+
+    @ActivityCallback
+    private void handleCameraCaptureResult(PluginCall call, ActivityResult result) {
+        if (call == null) return;
+        if (result.getResultCode() == Activity.RESULT_OK) {
+            JSObject ret = new JSObject();
+            ret.put("ok", true);
+            ret.put("message", "عکس گرفته شد و در پوشه تصاویر هم‌صدا ذخیره شد.");
+            File photoDir = new File(getContext().getExternalFilesDir(Environment.DIRECTORY_PICTURES), "Hamseda");
+            File[] photos = photoDir.listFiles((dir, name) -> name.endsWith(".jpg"));
+            if (photos != null && photos.length > 0) {
+                File newest = photos[0];
+                for (File f : photos) if (f.lastModified() > newest.lastModified()) newest = f;
+                ret.put("savedPath", newest.getAbsolutePath());
+            }
+            call.resolve(ret);
+        } else {
+            HamsedaAccessibilityService.disarmCameraShutter();
+            JSObject ret = new JSObject();
+            ret.put("ok", false);
+            ret.put("cancelled", true);
+            ret.put("message", "عکس‌گرفتن لغو شد.");
             call.resolve(ret);
         }
     }

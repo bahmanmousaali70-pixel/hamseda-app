@@ -71,11 +71,19 @@ interface RoozhayeNativePlugin {
     preferredOfflineEngine?: string;
     speechRate?: number;
   }): Promise<{ok: boolean}>;
+  setSmsAnnouncementPolicy(options: {
+    blockedSenders: string;
+    blockedKeywords: string;
+    importantSenders: string;
+    quietHours: number;
+    summarize: boolean;
+  }): Promise<{ok: boolean; quietUntil?: number}>;
   syncCallers(options: {callersJson: string}): Promise<{count: number}>;
   syncSchedules(options: {schedulesJson: string}): Promise<{count: number}>;
   wasScheduleFiredNatively(options: {scheduleId: string; todayKey: string}): Promise<{fired: boolean}>;
   markScheduleFiredNatively(options: {scheduleId: string; todayKey: string}): Promise<{ok: boolean}>;
   stopNativeAudio(): Promise<{ok: boolean}>;
+  openAccessibilitySettings(): Promise<{ok: boolean}>;
   saveBackupJson(options: {
     filename: string;
     content: string;
@@ -153,6 +161,7 @@ interface RoozhayeNativePlugin {
     action: string;
     phone?: string;
     smsBody?: string;
+    confirmed?: boolean;
     name?: string;
     url?: string;
     query?: string;
@@ -167,6 +176,8 @@ interface RoozhayeNativePlugin {
     permissionRequired?: boolean;
     needsPolicyAccess?: boolean;
     needsWriteSettings?: boolean;
+  needsAccessibility?: boolean;
+  savedPath?: string;
   }>;
 }
 
@@ -402,6 +413,23 @@ export async function syncAnnounceTogglesToNative(options: {
     });
   } catch {
     // ignore
+  }
+}
+
+export async function saveSmsAnnouncementPolicyNative(options: {
+  blockedSenders: string;
+  blockedKeywords: string;
+  importantSenders: string;
+  quietHours: number;
+  summarize: boolean;
+  filterOperatorPromotions?: boolean;
+}): Promise<boolean> {
+  if (!isNativeAndroid()) return false;
+  try {
+    const result = await RoozhayeNative.setSmsAnnouncementPolicy(options);
+    return Boolean(result.ok);
+  } catch {
+    return false;
   }
 }
 
@@ -767,10 +795,17 @@ export async function stopListeningNative(): Promise<void> {
   }
 }
 
+export async function openAccessibilitySettingsNative(): Promise<{ok: boolean}> {
+  if (!isNativeAndroid()) return {ok: false};
+  try { return await RoozhayeNative.openAccessibilitySettings(); }
+  catch { return {ok: false}; }
+}
+
 export async function executeDeviceActionNative(options: {
   action: string;
   phone?: string;
   smsBody?: string;
+  confirmed?: boolean;
   name?: string;
   url?: string;
   query?: string;

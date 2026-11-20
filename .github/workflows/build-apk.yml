@@ -6,7 +6,7 @@ concurrency:
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, release/assistant-final-upgrade]
   workflow_dispatch:
 
 permissions:
@@ -122,6 +122,7 @@ jobs:
           path: hamseda.apk
 
       - name: Publish Latest APK to GitHub Releases
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-apk

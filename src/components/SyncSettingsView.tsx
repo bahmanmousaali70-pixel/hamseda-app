@@ -35,6 +35,7 @@ import {
   pickJsonFileNative,
   requestSmsPermissionsOnlyNative,
   saveBackupJsonNative,
+  saveSmsAnnouncementPolicyNative,
   syncServerBaseUrlToNative,
   type NativeCapabilities,
 } from '../services/nativeAndroidBridge';
@@ -161,6 +162,13 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
   const [importText, setImportText] = useState('');
   const [copied, setCopied] = useState(false);
   const [copiedSpace, setCopiedSpace] = useState(false);
+  const [smsBlockedSenders, setSmsBlockedSenders] = useState(() => localStorage.getItem('rmz_sms_blocked_senders') ?? '');
+  const [smsBlockedKeywords, setSmsBlockedKeywords] = useState(() => localStorage.getItem('rmz_sms_blocked_keywords') ?? 'تبریک برنده شدید\\nجایزه رایگان\\nخرید شارژ\\nوام فوری');
+  const [smsImportantSenders, setSmsImportantSenders] = useState(() => localStorage.getItem('rmz_sms_important_senders') ?? '');
+  const [smsQuietHours, setSmsQuietHours] = useState(() => localStorage.getItem('rmz_sms_quiet_hours') ?? '0');
+  const [smsSummarize, setSmsSummarize] = useState(() => localStorage.getItem('rmz_sms_summarize') !== 'false');
+  const [smsFilterOperatorPromotions, setSmsFilterOperatorPromotions] = useState(() => localStorage.getItem('rmz_sms_filter_operator_promotions') !== 'false');
+  const [smsPolicySaving, setSmsPolicySaving] = useState(false);
 
   const [partnerEmailInput, setPartnerEmailInput] = useState(spaceInfo?.partnerEmail ?? '');
   const [joinCodeInput, setJoinCodeInput] = useState('');
@@ -1187,6 +1195,74 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
             </li>
           </ol>
         </div>
+      </section>
+
+      <section className="rounded-2xl bg-white dark:bg-[#121E1C] border border-slate-200/80 dark:border-emerald-950/70 p-5 sm:p-6 space-y-4">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white">مدیریت هوشمند خواندن پیامک‌ها</h2>
+          <p className="mt-1 text-xs leading-6 text-slate-500 dark:text-slate-400">
+            تنظیمات روی گوشی و به‌صورت آفلاین ذخیره می‌شود. پیامک‌ها همچنان دریافت می‌شوند؛ فقط خواندن خودکار آن‌ها کنترل می‌شود.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold mb-1.5 text-slate-700 dark:text-slate-200">فرستنده‌هایی که خوانده نشوند (شماره یا نام، هرکدام در یک خط)</label>
+            <textarea rows={3} value={smsBlockedSenders} onChange={(e) => setSmsBlockedSenders(e.target.value)} placeholder="مثلاً: 9821\\nشماره یا نام فرستنده" className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50 dark:bg-[#0B1312] text-xs text-slate-900 dark:text-white" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1.5 text-slate-700 dark:text-slate-200">کلمات کلیدی تبلیغاتی</label>
+            <textarea rows={3} value={smsBlockedKeywords} onChange={(e) => setSmsBlockedKeywords(e.target.value)} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50 dark:bg-[#0B1312] text-xs text-slate-900 dark:text-white" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1.5 text-slate-700 dark:text-slate-200">فرستنده‌های مهم که از فیلتر تبلیغاتی مستثنا هستند</label>
+            <textarea rows={2} value={smsImportantSenders} onChange={(e) => setSmsImportantSenders(e.target.value)} placeholder="شماره یا نام مخاطب مهم، هرکدام در یک خط" className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50 dark:bg-[#0B1312] text-xs text-slate-900 dark:text-white" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1.5 text-slate-700 dark:text-slate-200">سکوت موقت خواندن پیامک</label>
+            <select value={smsQuietHours} onChange={(e) => setSmsQuietHours(e.target.value)} className="w-full min-h-[44px] px-3 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50 dark:bg-[#0B1312] text-sm text-slate-900 dark:text-white">
+              <option value="0">خاموش</option>
+              <option value="2">۲ ساعت</option>
+              <option value="4">۴ ساعت</option>
+              <option value="8">۸ ساعت</option>
+              <option value="24">تا پایان یک روز (۲۴ ساعت)</option>
+            </select>
+          </div>
+        </div>
+        <label className="flex items-start gap-2 rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/70 dark:bg-emerald-950/25 p-3 text-xs text-slate-700 dark:text-slate-200">
+          <input type="checkbox" checked={smsFilterOperatorPromotions} onChange={(e) => setSmsFilterOperatorPromotions(e.target.checked)} className="mt-0.5 accent-emerald-700" />
+          <span><strong>پیامک‌های تبلیغاتی اپراتورها خوانده نشوند</strong><span className="block mt-1 leading-5 text-slate-500 dark:text-slate-400">تبلیغات قابل‌شناسایی ایرانسل، همراه اول و رایتل را بی‌صدا رد می‌کند؛ پیامک‌های خدماتی و رمز یک‌بارمصرف نباید صرفاً به‌خاطر نام اپراتور حذف شوند.</span></span>
+        </label>
+        <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200">
+          <input type="checkbox" checked={smsSummarize} onChange={(e) => setSmsSummarize(e.target.checked)} className="accent-emerald-700" />
+          خواندن کوتاه و خلاصه‌وار پیام‌های طولانی
+        </label>
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" disabled={!nativeCaps.isNative || smsPolicySaving} onClick={async () => {
+            setSmsPolicySaving(true);
+            localStorage.setItem('rmz_sms_blocked_senders', smsBlockedSenders);
+            localStorage.setItem('rmz_sms_blocked_keywords', smsBlockedKeywords);
+            localStorage.setItem('rmz_sms_important_senders', smsImportantSenders);
+            localStorage.setItem('rmz_sms_quiet_hours', smsQuietHours);
+            localStorage.setItem('rmz_sms_summarize', String(smsSummarize));
+            localStorage.setItem('rmz_sms_filter_operator_promotions', String(smsFilterOperatorPromotions));
+            const ok = await saveSmsAnnouncementPolicyNative({
+              blockedSenders: smsBlockedSenders,
+              blockedKeywords: smsBlockedKeywords,
+              importantSenders: smsImportantSenders,
+              quietHours: Number(smsQuietHours),
+              summarize: smsSummarize,
+              filterOperatorPromotions: smsFilterOperatorPromotions,
+            });
+            setSmsPolicySaving(false);
+            onStatusToast(ok ? 'تنظیمات فیلتر پیامک روی گوشی ذخیره شد.' : 'ذخیره تنظیمات ناموفق بود؛ نسخه APK اندروید لازم است.');
+          }} className="min-h-[44px] px-5 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white text-xs font-semibold cursor-pointer">
+            {smsPolicySaving ? 'در حال ذخیره...' : 'ذخیره تنظیمات پیامک'}
+          </button>
+          {!nativeCaps.isNative && <span className="text-[11px] text-amber-700 dark:text-amber-300">ذخیره و اجرای این فیلترها فقط در APK اندروید فعال است.</span>}
+        </div>
+        <p className="text-[11px] leading-5 text-slate-500 dark:text-slate-400">
+          سکوت موقت فقط اعلام خودکار پیامک را متوقف می‌کند؛ دستیار و سایر قابلیت‌ها فعال می‌مانند. تشخیص تبلیغ بر پایه فرستنده و کلمات کلیدی است و ممکن است نیاز به تنظیم دستی داشته باشد.
+        </p>
       </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
