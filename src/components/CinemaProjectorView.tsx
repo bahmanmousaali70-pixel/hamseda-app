@@ -35,6 +35,12 @@ export const CinemaProjectorView: React.FC = () => {
   const [isDiscoveringCast, setIsDiscoveringCast] = useState(false);
   const [isCasting, setIsCasting] = useState(false);
   const [castStatus, setCastStatus] = useState('');
+  const [projectorHost, setProjectorHost] = useState('');
+  const [projectorPin, setProjectorPin] = useState('');
+  const [projectorToken, setProjectorToken] = useState('');
+  const [projectorRemoteStatus, setProjectorRemoteStatus] = useState('');
+  const [projectorResults, setProjectorResults] = useState<Array<{id:string;title:string;year?:string}>>([]);
+  const remotePointerLast = useRef(0);
   const [castPlaybackState, setCastPlaybackState] = useState('');
   const isNativeAndroid = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
   const playerShellRef = useRef<HTMLDivElement>(null);
@@ -180,6 +186,82 @@ export const CinemaProjectorView: React.FC = () => {
     if (!result.ok) setCastStatus(result.error || 'تنظیمات نمایش بی‌سیم باز نشد.');
   };
 
+  const projectorApi = async (path: string, body?: Record<string, unknown>) => {
+    const host = projectorHost.trim().replace(/^https?:\\/\\//, '').replace(/\\/$/, '');
+    const response = await fetch(`http://${host}:8765${path}`, {
+      method: body ? 'POST' : 'GET',
+      headers: {'Content-Type':'application/json', ...(projectorToken ? {Authorization:`Bearer ${projectorToken}`} : {})},
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'ارتباط با پروژکتور برقرار نشد.');
+    return data;
+  };
+
+  const connectProjectorRemote = async () => {
+    const host = projectorHost.trim().replace(/^https?:\\/\\//, '').replace(/\\/$/, '');
+    if (!/^([0-9]{1,3}\\.){3}[0-9]{1,3}$/.test(host)) {
+      setProjectorRemoteStatus('آدرس IP پروژکتور را مثل 192.168.1.50 وارد کن.');
+      return;
+    }
+    try {
+      const response = await fetch(`http://${host}:8765/api/pair`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({pin:projectorPin.trim()}),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'کد اتصال اشتباه است.');
+      setProjectorToken(data.token);
+      setProjectorRemoteStatus('گوشی با پروژکتور جفت شد؛ حالا جست‌وجو کن.');
+    } catch (error) {
+      setProjectorRemoteStatus(error instanceof Error ? error.message : 'اتصال ناموفق بود. هر دو دستگاه باید روی یک Wi‑Fi باشند.');
+    }
+  };
+
+  const searchOnProjector = async () => {
+    if (!projectorToken) { setProjectorRemoteStatus('اول گوشی را به پروژکتور وصل کن.'); return; }
+    if (!query.trim()) { setProjectorRemoteStatus('نام فیلم یا سریال را وارد کن.'); return; }
+    try {
+      setProjectorResults([]);
+      await projectorApi('/api/search', {query:query.trim()});
+      setProjectorRemoteStatus('جست‌وجو روی پروژکتور انجام می‌شود؛ فقط نتیجه‌های قابل پخش نمایش داده می‌شوند.');
+    } catch (error) {
+      setProjectorRemoteStatus(error instanceof Error ? error.message : 'جست‌وجو ارسال نشد.');
+    }
+  };
+
+  const sendProjectorInput = async (payload: Record<string, unknown>) => {
+    if (!projectorToken) return;
+    try { await projectorApi('/api/input', payload); }
+    catch (error) { setProjectorRemoteStatus(error instanceof Error ? error.message : 'ارتباط کنترل قطع شد.'); }
+  };
+
+  useEffect(() => {
+    if (!projectorToken || !projectorHost) return;
+    let active = true;
+    const refreshResults = async () => {
+      try {
+        const items = await projectorApi('/api/results');
+        if (active && Array.isArray(items)) setProjectorResults(items);
+      } catch {
+        if (active) setProjectorRemoteStatus('ارتباط با پروژکتور قطع شده؛ اتصال را دوباره برقرار کن.');
+      }
+    };
+    refreshResults();
+    const timer = window.setInterval(refreshResults, 1800);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [projectorToken, projectorHost]);
+
+  const sendProjectorPointer = (event: React.PointerEvent<HTMLDivElement>, click = false) => {
+    const now = Date.now();
+    if (!click && now - remotePointerLast.current < 75) return;
+    remotePointerLast.current = now;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+    const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
+    void sendProjectorInput({action:click ? 'click' : 'move', x, y});
+  };
+
   const openFullscreen = async () => {
     try {
       await playerShellRef.current?.requestFullscreen?.();
@@ -208,6 +290,36 @@ export const CinemaProjectorView: React.FC = () => {
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="نام فیلم یا سریال، دوبله فارسی، زیرنویس..." className="min-w-0 flex-1 min-h-[44px] px-3 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50 dark:bg-[#0B1312] text-sm text-slate-900 dark:text-white" />
         <button type="submit" className="min-h-[44px] px-3 rounded-xl bg-red-600 text-white flex items-center gap-1.5"><Search className="w-4 h-4" /><span className="text-xs">جستجو</span></button>
       </form>
+      <div className="rounded-xl border border-sky-200 dark:border-sky-900 bg-sky-50/70 dark:bg-sky-950/20 p-3 space-y-3">
+        <div className="flex items-center gap-2"><Tv className="w-5 h-5 text-sky-700 dark:text-sky-300" /><h3 className="text-sm font-bold text-slate-900 dark:text-white">کنترل پروژکتور با همین گوشی</h3></div>
+        <p className="text-[11px] leading-5 text-slate-600 dark:text-slate-300">روی پروژکتور هم‌صدا سینما را باز کن. آدرس IP و کد اتصال روی صفحه پروژکتور نمایش داده می‌شود. هر دو دستگاه باید به یک Wi‑Fi وصل باشند.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <input value={projectorHost} onChange={e=>setProjectorHost(e.target.value)} dir="ltr" placeholder="IP پروژکتور، مثل 192.168.1.50" className="min-w-0 min-h-[42px] px-3 rounded-lg border border-slate-200 dark:border-sky-900 bg-white dark:bg-[#0B1312] text-sm" />
+          <input value={projectorPin} onChange={e=>setProjectorPin(e.target.value.replace(/[^0-9]/g,'').slice(0,6))} inputMode="numeric" maxLength={6} placeholder="کد ۶ رقمی روی پروژکتور" className="min-w-0 min-h-[42px] px-3 rounded-lg border border-slate-200 dark:border-sky-900 bg-white dark:bg-[#0B1312] text-sm" />
+        </div>
+        <button type="button" onClick={connectProjectorRemote} className="min-h-[42px] px-4 rounded-lg bg-sky-700 text-white text-xs font-semibold">{projectorToken ? 'اتصال برقرار است' : 'اتصال به پروژکتور'}</button>
+        {projectorToken && <form onSubmit={e=>{e.preventDefault();searchOnProjector();}} className="flex gap-2">
+          <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="نام فیلم یا سریال برای جست‌وجو روی پروژکتور" className="min-w-0 flex-1 min-h-[42px] px-3 rounded-lg border border-slate-200 dark:border-sky-900 bg-white dark:bg-[#0B1312] text-sm" />
+          <button type="submit" className="min-h-[42px] px-4 rounded-lg bg-emerald-700 text-white text-xs font-semibold">جست‌وجو</button>
+        </form>}
+        {projectorRemoteStatus && <p className="text-[11px] leading-5 text-sky-800 dark:text-sky-200">{projectorRemoteStatus}</p>}
+        {projectorToken && <div className="space-y-2">
+          <div className="text-xs font-bold text-slate-800 dark:text-white">نتیجه‌های قابل پخش روی پروژکتور ({projectorResults.length})</div>
+          {projectorResults.map(item=><div key={item.id} className="flex items-center justify-between gap-2 rounded-lg border border-sky-200 dark:border-sky-900 p-2">
+            <div className="min-w-0"><div className="text-xs font-semibold text-slate-900 dark:text-white truncate">{item.title}</div><div className="text-[10px] text-emerald-700 dark:text-emerald-300">قابل پخش · {item.year || 'سال نامشخص'}</div></div>
+            <button type="button" onClick={()=>projectorApi('/api/play',{id:item.id}).then(()=>setProjectorRemoteStatus('درخواست پخش به پروژکتور ارسال شد.')).catch(err=>setProjectorRemoteStatus(err.message))} className="shrink-0 min-h-[36px] px-3 rounded-lg bg-emerald-700 text-white text-[11px]">پخش</button>
+          </div>)}
+        </div>}
+        {projectorToken && <div className="space-y-2">
+          <div className="text-xs font-bold text-slate-800 dark:text-white">تاچ‌پد موس</div>
+          <div onPointerDown={e=>{e.currentTarget.setPointerCapture(e.pointerId);sendProjectorPointer(e);}} onPointerMove={e=>{if(e.buttons)sendProjectorPointer(e);}} onPointerUp={e=>sendProjectorPointer(e,true)} style={{touchAction:'none'}} className="h-28 rounded-xl border-2 border-dashed border-sky-400 bg-slate-900/10 flex items-center justify-center text-xs text-slate-600 dark:text-slate-300">برای حرکت نشانگر لمس و بکش؛ برای کلیک رها کن</div>
+          <div className="grid grid-cols-4 gap-2">
+            {(['ArrowUp','ArrowLeft','Enter','ArrowRight','Escape','ArrowDown','Backspace','Tab'] as const).map(key=><button key={key} type="button" onClick={()=>sendProjectorInput({action:'key',key})} className="min-h-[38px] rounded-lg border border-sky-300 dark:border-sky-800 text-[11px]">{({ArrowUp:'↑',ArrowDown:'↓',ArrowLeft:'←',ArrowRight:'→',Enter:'انتخاب',Escape:'بازگشت',Backspace:'⌫',Tab:'Tab'} as Record<string,string>)[key]}</button>)}
+          </div>
+          <div className="flex gap-2"><button type="button" onClick={()=>sendProjectorInput({action:'scroll',delta:-450})} className="flex-1 min-h-[38px] rounded-lg border border-sky-300 dark:border-sky-800 text-xs">اسکرول بالا</button><button type="button" onClick={()=>sendProjectorInput({action:'scroll',delta:450})} className="flex-1 min-h-[38px] rounded-lg border border-sky-300 dark:border-sky-800 text-xs">اسکرول پایین</button></div>
+        </div>}
+      </div>
+
       <div className="rounded-xl border border-slate-200 dark:border-emerald-900 p-3 space-y-3">
         <div className="flex items-center justify-between gap-2"><h3 className="text-sm font-bold text-slate-900 dark:text-white">منابع جستجوی سینما</h3><span className="text-[10px] text-slate-500">۱۲ منبع</span></div>
         <p className="text-[11px] leading-5 text-slate-500 dark:text-slate-400">جستجوی یکپارچه، عنوان را در دامنه منابع زیر پیدا می‌کند. برای نتیجه دقیق‌تر، نام فارسی یا اصلی اثر را وارد کن.</p>
