@@ -187,7 +187,7 @@ export const CinemaProjectorView: React.FC = () => {
   };
 
   const projectorApi = async (path: string, body?: Record<string, unknown>) => {
-    const host = projectorHost.trim().replace(/^https?:\\/\\//, '').replace(/\\/$/, '');
+    const host = projectorHost.trim().replace(/^https?:\/\//, '').replace(/\/$/, '');
     const response = await fetch(`http://${host}:8765${path}`, {
       method: body ? 'POST' : 'GET',
       headers: {'Content-Type':'application/json', ...(projectorToken ? {Authorization:`Bearer ${projectorToken}`} : {})},
@@ -199,8 +199,8 @@ export const CinemaProjectorView: React.FC = () => {
   };
 
   const connectProjectorRemote = async () => {
-    const host = projectorHost.trim().replace(/^https?:\\/\\//, '').replace(/\\/$/, '');
-    if (!/^([0-9]{1,3}\\.){3}[0-9]{1,3}$/.test(host)) {
+    const host = projectorHost.trim().replace(/^https?:\/\//, '').replace(/\/$/, '');
+    if (!/^([0-9]{1,3}\.){3}[0-9]{1,3}$/.test(host)) {
       setProjectorRemoteStatus('آدرس IP پروژکتور را مثل 192.168.1.50 وارد کن.');
       return;
     }
