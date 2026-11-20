@@ -1,8 +1,19 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
+import {Capacitor, registerPlugin} from '@capacitor/core';
 import {ExternalLink, Film, Maximize, Play, Search, Tv, Youtube} from 'lucide-react';
 
 type RecentItem = {url: string; title: string; playedAt: number};
 const STORAGE_KEY = 'hamseda_cinema_recent_v1';
+
+type CinemaCastDevice = {id: string; name: string; address: string; isTV: boolean};
+type CinemaCastPlugin = {
+  discoverDevices: (options?: {timeoutMs?: number}) => Promise<{ok: boolean; devices: CinemaCastDevice[]; error?: string}>;
+  castToDevice: (options: {deviceId: string; url: string; title?: string}) => Promise<{ok: boolean; error?: string; deviceName?: string}>;
+  controlPlayback: (options: {action: 'play' | 'pause' | 'stop'; value?: number}) => Promise<{ok: boolean; error?: string}>;
+  getPlaybackState: () => Promise<{ok: boolean; connected?: boolean; deviceName?: string; playbackState?: string; isPlaying?: boolean; isPaused?: boolean; error?: string}>;
+  openSystemCastSettings: () => Promise<{ok: boolean; error?: string}>;
+};
+const CinemaCast = registerPlugin<CinemaCastPlugin>('CinemaCast');
 
 function getYouTubeId(input: string): string | null {
   const value = input.trim();
@@ -36,6 +47,13 @@ export const CinemaProjectorView: React.FC = () => {
   const [activeUrl, setActiveUrl] = useState('');
   const [recent, setRecent] = useState<RecentItem[]>([]);
   const [playerError, setPlayerError] = useState('');
+  const [castDevices, setCastDevices] = useState<CinemaCastDevice[]>([]);
+  const [selectedCastDevice, setSelectedCastDevice] = useState('');
+  const [isDiscoveringCast, setIsDiscoveringCast] = useState(false);
+  const [isCasting, setIsCasting] = useState(false);
+  const [castStatus, setCastStatus] = useState('');
+  const [castPlaybackState, setCastPlaybackState] = useState('');
+  const isNativeAndroid = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
   const playerShellRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -80,6 +98,88 @@ export const CinemaProjectorView: React.FC = () => {
   };
 
   const openFullscreen = async () => {
+  const discoverCastDevices = async () => {
+    if (!isNativeAndroid) {
+      setCastStatus('جستجوی DLNA فقط در نسخه نصب‌شده اندروید فعال است.');
+      return;
+    }
+    setIsDiscoveringCast(true);
+    setCastStatus('در حال جستجوی پروژکتورها و تلویزیون‌های سازگار در همین شبکه Wi-Fi…');
+    try {
+      const result = await CinemaCast.discoverDevices({timeoutMs: 6500});
+      const devices = result.devices || [];
+      setCastDevices(devices);
+      setSelectedCastDevice((current) => devices.some((device) => device.id === current)
+        ? current
+        : (devices.find((device) => device.isTV) || devices[0])?.id || '');
+      setCastStatus(result.ok
+        ? (devices.length ? `${devices.length} دستگاه پیدا شد. دستگاه موردنظر را انتخاب کن.` : 'دستگاهی پیدا نشد؛ پروژکتور و گوشی باید به یک Wi-Fi وصل باشند و DLNA روشن باشد.')
+        : (result.error || 'جستجوی دستگاه ناموفق بود.'));
+    } catch {
+      setCastStatus('ارتباط با سرویس DLNA برقرار نشد.');
+    } finally {
+      setIsDiscoveringCast(false);
+    }
+  };
+
+  const castCurrentVideo = async () => {
+    if (!isNativeAndroid || !selectedCastDevice || !activeUrl) return;
+    if (youtubeId) {
+      setCastStatus('برای DLNA لینک مستقیم MP4 یا HLS لازم است؛ لینک صفحه یوتیوب قابل ارسال نیست.');
+      return;
+    }
+    setIsCasting(true);
+    setCastStatus('در حال ارسال ویدئو به پروژکتور…');
+    try {
+      const result = await CinemaCast.castToDevice({
+        deviceId: selectedCastDevice,
+        url: activeUrl,
+        title: 'سینمای هم‌صدا',
+      });
+      setCastStatus(result.ok
+        ? `ویدئو به ${result.deviceName || 'دستگاه انتخاب‌شده'} ارسال شد.`
+        : (result.error || 'پروژکتور ویدئو را نپذیرفت.'));
+      if (result.ok) await refreshCastState();
+    } catch {
+      setCastStatus('ارسال ویدئو ناموفق بود؛ لینک و سازگاری فرمت را بررسی کن.');
+    } finally {
+      setIsCasting(false);
+    }
+  };
+
+  const controlCastPlayback = async (action: 'play' | 'pause' | 'stop') => {
+    try {
+      const result = await CinemaCast.controlPlayback({action});
+      setCastStatus(result.ok ? 'فرمان به پروژکتور ارسال شد.' : (result.error || 'فرمان اجرا نشد.'));
+      await refreshCastState();
+    } catch {
+      setCastStatus('ارتباط کنترل با پروژکتور قطع است.');
+    }
+  };
+
+  const refreshCastState = async () => {
+    if (!isNativeAndroid) return;
+    try {
+      const state = await CinemaCast.getPlaybackState();
+      if (state.ok && state.connected) {
+        setCastPlaybackState(state.playbackState || 'connected');
+      } else {
+        setCastPlaybackState('');
+      }
+    } catch {
+      setCastPlaybackState('');
+    }
+  };
+
+  const openSystemCast = async () => {
+    if (!isNativeAndroid) {
+      setCastStatus('تنظیمات نمایش بی‌سیم از نسخه اندرویدی برنامه قابل بازشدن است.');
+      return;
+    }
+    const result = await CinemaCast.openSystemCastSettings();
+    if (!result.ok) setCastStatus(result.error || 'تنظیمات نمایش بی‌سیم باز نشد.');
+  };
+
     try {
       await playerShellRef.current?.requestFullscreen?.();
     } catch {
@@ -140,6 +240,46 @@ export const CinemaProjectorView: React.FC = () => {
       )}
 
       {recent.length > 0 && (
+      <div className="rounded-xl border border-sky-200 dark:border-sky-900 bg-sky-50/70 dark:bg-sky-950/20 p-3 space-y-3">
+        <div className="flex items-center gap-2">
+          <Tv className="w-5 h-5 text-sky-700 dark:text-sky-300" />
+          <div className="flex-1">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">اتصال به پروژکتور و کنترل از گوشی</h3>
+            <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1">کشف DLNA، ارسال لینک مستقیم و کنترل پخش روی شبکه محلی</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={discoverCastDevices} disabled={!isNativeAndroid || isDiscoveringCast} className="min-h-[42px] px-3 rounded-lg bg-sky-700 text-white text-xs font-semibold disabled:opacity-50">
+            {isDiscoveringCast ? 'در حال جستجو…' : 'جستجوی پروژکتورها'}
+          </button>
+          <button type="button" onClick={openSystemCast} disabled={!isNativeAndroid} className="min-h-[42px] px-3 rounded-lg border border-sky-300 dark:border-sky-800 text-xs disabled:opacity-50">
+            نمایش بی‌سیم صفحه گوشی
+          </button>
+        </div>
+        {castDevices.length > 0 && (
+          <div className="space-y-2">
+            <label className="block text-xs font-semibold text-slate-800 dark:text-slate-100">دستگاه پیدا‌شده</label>
+            <select value={selectedCastDevice} onChange={(event) => setSelectedCastDevice(event.target.value)} className="w-full min-h-[42px] px-3 rounded-lg border border-slate-200 dark:border-sky-900 bg-white dark:bg-[#0B1312] text-sm">
+              {castDevices.map((device) => <option key={device.id} value={device.id}>{device.name} · {device.address}</option>)}
+            </select>
+            <button type="button" onClick={castCurrentVideo} disabled={!activeUrl || !selectedCastDevice || isCasting || !!youtubeId} className="w-full min-h-[42px] rounded-lg bg-emerald-700 text-white text-xs font-semibold disabled:opacity-50">
+              {isCasting ? 'در حال ارسال…' : 'ارسال ویدئوی فعلی به پروژکتور'}
+            </button>
+            {castPlaybackState && (
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => controlCastPlayback('play')} className="min-h-[38px] px-3 rounded-lg border border-sky-300 dark:border-sky-800 text-xs">پخش</button>
+                <button type="button" onClick={() => controlCastPlayback('pause')} className="min-h-[38px] px-3 rounded-lg border border-sky-300 dark:border-sky-800 text-xs">مکث</button>
+                <button type="button" onClick={() => controlCastPlayback('stop')} className="min-h-[38px] px-3 rounded-lg border border-sky-300 dark:border-sky-800 text-xs">توقف</button>
+                <button type="button" onClick={refreshCastState} className="min-h-[38px] px-3 rounded-lg border border-sky-300 dark:border-sky-800 text-xs">به‌روزرسانی وضعیت</button>
+              </div>
+            )}
+          </div>
+        )}
+        {castStatus && <p role="status" className="text-xs leading-6 text-sky-900 dark:text-sky-100">{castStatus}</p>}
+        {!isNativeAndroid && <p className="text-[11px] leading-5 text-slate-500">برای کشف و کنترل DLNA باید همین نسخه روی گوشی اندرویدی نصب باشد.</p>}
+        <p className="text-[10px] leading-5 text-slate-500 dark:text-slate-400">DLNA به اتصال یکسان گوشی و پروژکتور به Wi-Fi نیاز دارد. گزینه «نمایش بی‌سیم» فقط تنظیمات Cast اندروید را باز می‌کند و به قابلیت Miracast خودکار دسترسی تضمین‌شده نمی‌دهد.</p>
+      </div>
+
         <div className="space-y-2">
           <h3 className="text-sm font-bold text-slate-900 dark:text-white">آخرین ویدئوها</h3>
           <div className="grid gap-2">
