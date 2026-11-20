@@ -129,14 +129,15 @@ class CinemaCastPlugin : Plugin() {
         scope.launch {
             try {
                 val state = DLNACast.getState()
+                val livePlaybackState = DLNACast.getPlaybackState()
                 val progress = DLNACast.getProgress()
                 call.resolve(JSObject().apply {
                     put("ok", true)
                     put("connected", state.isConnected)
                     put("deviceName", state.currentDevice?.name ?: "")
-                    put("playbackState", state.playbackState.name.lowercase())
-                    put("isPlaying", state.isPlaying)
-                    put("isPaused", state.isPaused)
+                    put("playbackState", livePlaybackState.name.lowercase())
+                    put("isPlaying", livePlaybackState == DLNACast.PlaybackState.PLAYING)
+                    put("isPaused", livePlaybackState == DLNACast.PlaybackState.PAUSED)
                     put("volume", state.volume)
                     put("isMuted", state.isMuted)
                     if (progress != null) {
