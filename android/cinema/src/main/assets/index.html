@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#080d18"><title>هم‌صدا سینما</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#080d18;color:#f5f7fb;font-family:Tahoma,Arial,sans-serif;font-size:18px}
+main{max-width:1100px;margin:auto;padding:28px}header{display:flex;align-items:center;gap:16px;margin-bottom:24px}
+.logo{width:58px;height:58px;border-radius:18px;background:#13a078;display:grid;place-items:center;font-size:28px}
+h1{font-size:30px;margin:0}p{color:#aeb9c9;line-height:1.8;margin:8px 0}
+.search{display:flex;gap:12px;margin:24px 0}.search input{flex:1;min-width:0;background:#151e2d;border:2px solid #34445c;color:white;border-radius:14px;padding:18px;font-size:20px}
+button,a{font:inherit}button{border:0;border-radius:14px;background:#10a078;color:white;padding:16px 24px;font-weight:bold;cursor:pointer}
+button:focus,a:focus,input:focus{outline:3px solid #f4c95d;outline-offset:3px}
+h2{font-size:22px;margin:26px 0 12px}.sources{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.source{display:block;text-decoration:none;color:white;background:#151e2d;border:1px solid #293950;border-radius:16px;padding:18px;min-height:94px}
+.source b{display:block;margin-bottom:8px}.source small{color:#aeb9c9;line-height:1.6}
+.note{background:#182638;border-right:4px solid #10a078;border-radius:12px;padding:16px;margin-top:22px;color:#cbd5e1;line-height:1.8}
+#player{display:none;margin-top:20px}video{width:100%;max-height:60vh;background:#000;border-radius:14px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}.muted{font-size:14px;color:#9aa9bb}
+@media(max-width:600px){main{padding:16px}.search{flex-direction:column}h1{font-size:24px}}
+</style></head>
+<body><main>
+<header><div class="logo">▶</div><div><h1>هم‌صدا سینما</h1><p>جست‌وجوی فیلم و سریال در منابع قابل‌دسترسی ایران</p></div></header>
+<p>نام فیلم یا سریال را وارد کن. هر منبع در صفحه جست‌وجوی خودش باز می‌شود؛ نتیجه‌ها را از نظر رایگان‌بودن، دوبله و امکان پخش بررسی کن.</p>
+<div class="search"><input id="q" type="search" placeholder="مثلاً سرخ و سیاه، دوبله فارسی..." autofocus><button id="search">جست‌وجو در همه منابع</button></div>
+<h2>منابع رایگان و عمومی</h2><div class="sources" id="sources"></div>
+<div class="note">هم‌صدا سینما فقط محتوای رایگانِ منتشرشده با اجازه صاحب اثر یا پخش رسمی را برای تماشا پیشنهاد می‌کند. بعضی منابع رایگان‌اند اما همه فیلم‌هایشان رایگان نیست. محتوای اشتراکی، محدودیت منطقه‌ای یا DRM دور زده نمی‌شود.</div>
+<section id="player"><h2>پخش مستقیم</h2><video id="video" controls playsinline></video><div class="actions"><button id="close">بستن پخش‌کننده</button></div></section>
+<p class="muted">نسخه سبک آزمایشی برای Android 9 و کنترل با ریموت. جست‌وجوی تجمیعی واقعی و API رسمی منابع در مراحل بعدی به اتصال مجاز هر سرویس نیاز دارد.</p>
+</main>
+<script>
+const providers=[
+{name:'آپارات',desc:'ویدئوهای عمومی، کانال‌های رسمی و پخش زنده',url:q=>'https://www.google.com/search?q='+encodeURIComponent('site:aparat.com '+q+' (فیلم کامل OR دوبله فارسی)')},
+{name:'نماشا',desc:'ویدئوهای عمومی و کانال‌های منتشرکننده',url:q=>'https://www.google.com/search?q='+encodeURIComponent('site:namasha.com '+q)},
+{name:'تلوبیون',desc:'آرشیو و پخش رسمی برنامه‌ها و آثار تلویزیونی',url:q=>'https://www.google.com/search?q='+encodeURIComponent('site:telewebion.com '+q)},
+{name:'سپهر',desc:'پخش و آرشیو رسانه‌ای رسمی',url:q=>'https://www.google.com/search?q='+encodeURIComponent('site:sepehrtv.ir '+q)},
+{name:'تماشاخونه',desc:'کاتالوگ فیلم و سریال؛ رایگان‌بودن هر عنوان را بررسی کن',url:q=>'https://www.google.com/search?q='+encodeURIComponent('site:tmk.ir '+q+' رایگان')},
+{name:'آرشیو اینترنت',desc:'آثار عمومی، کلاسیک و دارای مجوز آزاد',url:q=>'https://archive.org/search?query='+encodeURIComponent(q+' feature films')}
+];
+const container=document.getElementById('sources');
+providers.forEach(p=>{const a=document.createElement('a');a.className='source';a.href='#';a.innerHTML='<b>'+p.name+'</b><small>'+p.desc+'</small>';a.addEventListener('click',e=>{e.preventDefault();const q=document.getElementById('q').value.trim();if(!q){document.getElementById('q').focus();return}location.href=p.url(q)});container.appendChild(a)});
+function searchAll(){const q=document.getElementById('q').value.trim();if(!q){document.getElementById('q').focus();return}const urls=providers.map(p=>p.url(q));urls.forEach((u,i)=>setTimeout(()=>{if(i===0)location.href=u;},i*250));}
+document.getElementById('search').addEventListener('click',()=>searchAll());
+document.getElementById('q').addEventListener('keydown',e=>{if(e.key==='Enter')searchAll()});
+document.getElementById('close').addEventListener('click',()=>{const v=document.getElementById('video');v.pause();v.removeAttribute('src');v.load();document.getElementById('player').style.display='none'});
+</script></body></html>
