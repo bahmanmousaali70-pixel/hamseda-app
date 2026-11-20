@@ -422,6 +422,7 @@ export async function saveSmsAnnouncementPolicyNative(options: {
   importantSenders: string;
   quietHours: number;
   summarize: boolean;
+  filterOperatorPromotions?: boolean;
 }): Promise<boolean> {
   if (!isNativeAndroid()) return false;
   try {
