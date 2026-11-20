@@ -156,9 +156,9 @@ class ProjectorRemoteServer(
                                         else "document.dispatchEvent(new KeyboardEvent('keydown',{key:'$key',bubbles:true}));"
                                     }
                                     "move" -> {
-                                        val x = (body.optDouble("x", 0.5).coerceIn(0.0, 1.0) * webView.width.coerceAtLeast(1)).toInt()
-                                        val y = (body.optDouble("y", 0.5).coerceIn(0.0, 1.0) * webView.height.coerceAtLeast(1)).toInt()
-                                        "document.dispatchEvent(new MouseEvent('mousemove',{clientX:$x,clientY:$y,bubbles:true}));"
+                                        val x = (body.optDouble("x", 0.5).coerceIn(0.0, 1.0) * (webView.width / activity.resources.displayMetrics.density).toInt().coerceAtLeast(1)).toInt()
+                                        val y = (body.optDouble("y", 0.5).coerceIn(0.0, 1.0) * (webView.height / activity.resources.displayMetrics.density).toInt().coerceAtLeast(1)).toInt()
+                                        "(()=>{const e=document.elementFromPoint($x,$y)||document;e.dispatchEvent(new MouseEvent('mousemove',{clientX:$x,clientY:$y,bubbles:true}));})();"
                                     }
                                     "click" -> {
                                         val x = (body.optDouble("x", 0.5).coerceIn(0.0, 1.0) * webView.width.coerceAtLeast(1)).toInt()
