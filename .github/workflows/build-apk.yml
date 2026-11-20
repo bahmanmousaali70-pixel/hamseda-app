@@ -88,7 +88,21 @@ jobs:
           npm run build
           npx cap sync android
 
-      - name: Build standalone Cinema APK for 32-bit projector\n        working-directory: android\n        run: |\n          chmod +x gradlew\n          ./gradlew :cinema:assembleDebug --no-daemon\n          test -s cinema/build/outputs/apk/debug/cinema-debug.apk\n          cp cinema/build/outputs/apk/debug/cinema-debug.apk ../hamseda-cinema-sd500.apk\n\n      - name: Upload Cinema APK Artifact\n        uses: actions/upload-artifact@v4\n        with:\n          name: hamseda-cinema-sd500\n          path: hamseda-cinema-sd500.apk\n\n      - name: Build Debug APK
+      - name: Build standalone Cinema APK for 32-bit projector
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew :cinema:assembleDebug --no-daemon
+          test -s cinema/build/outputs/apk/debug/cinema-debug.apk
+          cp cinema/build/outputs/apk/debug/cinema-debug.apk ../hamseda-cinema-sd500.apk
+
+      - name: Upload Cinema APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hamseda-cinema-sd500
+          path: hamseda-cinema-sd500.apk
+
+      - name: Build Debug APK
         working-directory: android
         run: |
           chmod +x gradlew
