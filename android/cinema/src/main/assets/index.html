@@ -25,7 +25,7 @@ h2{font-size:21px;margin:24px 0 12px}.sources,.results{display:grid;grid-templat
 <header><div class="logo">▶</div><div><h1>هم‌صدا سینما</h1><p>جست‌وجو و تماشای منابع رایگان و مجاز</p></div></header>
 <p>نام فیلم یا سریال را بنویس. آرشیو اینترنت به‌صورت مستقیم جست‌وجو می‌شود؛ منابع ایرانی نیز با جست‌وجوی اختصاصی باز می‌شوند.</p>
 <div class="search"><input id="q" type="search" placeholder="مثلاً سرخ و سیاه، فیلم کلاسیک..." autocomplete="off"><button id="search">جست‌وجو</button></div>
-<div id="status" class="status" aria-live="polite">برای شروع، نام یک عنوان را وارد کن.</div>
+<div id="status" class="status" aria-live="polite">برای شروع، نام یک عنوان را وارد کن.</div>\n<div class="note" id="phonePairing">برای کنترل با گوشی، اطلاعات اتصال نمایش داده می‌شود…</div>
 <h2>نتایج آرشیو عمومی Internet Archive</h2>
 <div id="results" class="results"><div class="empty">نتایج جست‌وجو اینجا نمایش داده می‌شوند.</div></div>
 <h2>جست‌وجو در منابع ایرانی</h2>
@@ -53,8 +53,23 @@ function isPermissiveLicense(meta){
  return /public.?domain|creativecommons\.org\/publicdomain|creativecommons\.org\/licenses\/(by|by-sa)\/|cc0|(^|[^a-z])cc[- ]by(?:[- ]sa)?([^a-z]|$)/i.test(raw);
 }
 function licenseLabel(meta){const raw=[meta.licenseurl,meta.license,meta.rights].filter(Boolean).join(' ');return raw||'مجوز در فراداده روشن نیست'}
+async function inspectPlayable(doc){
+ const r=await fetch('https://archive.org/metadata/'+encodeURIComponent(doc.identifier),{headers:{'Accept':'application/json'}});
+ if(!r.ok)return null;
+ const item=await r.json();const m=item.metadata||{};
+ if(!isPermissiveLicense(m))return null;
+ const files=(item.files||[]).filter(f=>String(f.private).toLowerCase()!=='true'&&/\\.(mp4|webm)$/i.test(f.name||'')&&Number(f.size||0)>1000000);
+ if(!files.length)return null;
+ files.sort((a,b)=>{
+  const aMp4=/\\.mp4$/i.test(a.name)?1:0,bMp4=/\\.mp4$/i.test(b.name)?1:0;
+  if(aMp4!==bMp4)return bMp4-aMp4;
+  return Number(a.size||0)-Number(b.size||0);
+ });
+ const file=files[0],path=file.name.split('/').map(encodeURIComponent).join('/');
+ return {id:doc.identifier,title:doc.title||doc.identifier,year:doc.year||'',url:'https://archive.org/download/'+encodeURIComponent(doc.identifier)+'/'+path,license:licenseLabel(m)};
+}
 async function searchArchive(query){
- $('results').replaceChildren();setStatus('در حال جست‌وجو در آرشیو عمومی…');
+ $('results').replaceChildren();setStatus('در حال جست‌وجو و بررسی مجوز و فایل‌های قابل پخش…');
  const params=new URLSearchParams();
  params.set('q','mediatype:movies AND (title:('+query+') OR description:('+query+'))');
  ['identifier','title','year','licenseurl','description'].forEach(f=>params.append('fl[]',f));
@@ -62,37 +77,34 @@ async function searchArchive(query){
  const response=await fetch('https://archive.org/advancedsearch.php?'+params.toString(),{headers:{'Accept':'application/json'}});
  if(!response.ok)throw new Error('پاسخ آرشیو دریافت نشد: '+response.status);
  const data=await response.json();const docs=data.response&&data.response.docs?data.response.docs:[];
- if(!docs.length){$('results').innerHTML='<div class="empty">نتیجه‌ای پیدا نشد. عبارت دیگری را امتحان کن.</div>';setStatus('جست‌وجو تمام شد؛ نتیجه‌ای پیدا نشد.');return}
- setStatus(docs.length+' نتیجه پیدا شد؛ مجوز و امکان پخش هر عنوان بررسی می‌شود.');
- docs.forEach(doc=>{
+ if(!docs.length){$('results').innerHTML='<div class="empty">نتیجه‌ای پیدا نشد.</div>';setStatus('جست‌وجو تمام شد؛ نتیجه‌ای پیدا نشد.');if(window.CinemaBridge)CinemaBridge.publishResults('[]');return}
+ setStatus(docs.length+' عنوان پیدا شد؛ در حال فیلترکردن موارد قابل پخش…');
+ const playable=[];let cursor=0;
+ const workers=Array.from({length:4},async()=>{while(cursor<docs.length){const i=cursor++;try{const item=await inspectPlayable(docs[i]);if(item)playable.push(item)}catch(_){}}});
+ await Promise.all(workers);
+ playable.sort((a,b)=>a.title.localeCompare(b.title));
+ window.playableItems=playable;
+ $('results').replaceChildren();
+ if(!playable.length){$('results').innerHTML='<div class="empty">در این جست‌وجو عنوانی با مجوز روشن و فایل ویدئویی مستقیمِ قابل پخش پیدا نشد. نتیجه غیرقابل‌پخش نمایش داده نمی‌شود.</div>'}
+ playable.forEach(item=>{
   const card=document.createElement('article');card.className='item';
-  const title=document.createElement('b');title.textContent=doc.title||doc.identifier;
-  const meta=document.createElement('div');meta.className='meta';meta.textContent=(doc.year||'سال نامشخص')+' · '+(doc.licenseurl?'مجوز ثبت‌شده':'مجوز نامشخص');
-  const desc=document.createElement('small');desc.textContent=(doc.description||'توضیحی ثبت نشده').toString().replace(/<[^>]*>/g,'').slice(0,180);
-  const actions=document.createElement('div');actions.className='row';
-  const inspect=document.createElement('button');inspect.textContent='بررسی و پخش';inspect.addEventListener('click',()=>loadArchiveItem(doc.identifier,doc.title||doc.identifier,inspect));
-  const open=document.createElement('button');open.className='secondary';open.textContent='صفحه منبع';open.addEventListener('click',()=>location.href='https://archive.org/details/'+encodeURIComponent(doc.identifier));
-  actions.append(inspect,open);card.append(title,meta,desc,actions);$('results').appendChild(card);
+  const title=document.createElement('b');title.textContent=item.title;
+  const meta=document.createElement('div');meta.className='meta';meta.textContent=(item.year||'سال نامشخص')+' · مجوز آزاد تأیید شد';
+  const license=document.createElement('small');license.textContent=item.license;
+  const play=document.createElement('button');play.textContent='پخش روی پروژکتور';play.addEventListener('click',()=>playPlayable(item.id));
+  card.append(title,meta,license,play);$('results').appendChild(card);
  });
+ if(window.CinemaBridge)CinemaBridge.publishResults(JSON.stringify(playable.map(({id,title,year})=>({id,title,year}))));
+ setStatus('بررسی تمام شد: '+playable.length+' عنوان واقعاً قابل پخش از '+docs.length+' نتیجه پیدا شد.');
 }
-async function loadArchiveItem(id,title,button){
- button.disabled=true;button.textContent='بررسی…';setStatus('در حال بررسی مجوز و فایل‌های '+title+'…');
- try{
-  const r=await fetch('https://archive.org/metadata/'+encodeURIComponent(id),{headers:{'Accept':'application/json'}});
-  if(!r.ok)throw new Error('فراداده دریافت نشد');
-  const item=await r.json();const m=item.metadata||{};
-  if(!isPermissiveLicense(m))throw new Error('مجوز این عنوان برای پخش مستقیم در برنامه به‌طور روشن تأیید نشد. صفحه منبع را برای شرایط استفاده ببین.');
-  const files=(item.files||[]).filter(f=>String(f.private).toLowerCase()!=='true'&&/\.(mp4|webm)$/i.test(f.name||'')&&Number(f.size||0)>0);
-  if(!files.length)throw new Error('فایل MP4 یا WebM قابل پخش در این عنوان پیدا نشد.');
-  files.sort((a,b)=>Number(b.size||0)-Number(a.size||0));
-  const file=files[0];const path=file.name.split('/').map(encodeURIComponent).join('/');
-  const url='https://archive.org/download/'+encodeURIComponent(id)+'/'+path;
-  $('video').pause();$('video').src=url;$('playingTitle').textContent=title;$('player').style.display='block';
-  $('player').scrollIntoView({behavior:'smooth',block:'start'});
-  await $('video').play();setStatus('مجوز ثبت‌شده و فایل قابل پخش پیدا شد. اگر پخش آغاز نشد، صفحه منبع را باز کن.');
- }catch(e){setStatus(e.message||'خطا در بررسی این عنوان');}
- finally{button.disabled=false;button.textContent='بررسی و پخش'}
+function playPlayable(id){
+ const item=(window.playableItems||[]).find(x=>x.id===id);if(!item){setStatus('این نتیجه دیگر در فهرست قابل پخش نیست؛ دوباره جست‌وجو کن.');return}
+ $('video').pause();$('video').src=item.url;$('playingTitle').textContent=item.title;$('player').style.display='block';
+ $('player').scrollIntoView({behavior:'smooth',block:'start'});
+ $('video').play().then(()=>setStatus('در حال پخش: '+item.title)).catch(()=>setStatus('فایل پیدا شد، اما پخش خودکار انجام نشد؛ دکمه پخش را بزن.'));
 }
+window.cinemaRemoteSearch=query=>{$('q').value=query;searchAll()};
+window.cinemaRemotePlay=id=>playPlayable(id);
 async function searchAll(){
  const q=$('q').value.trim();if(!q){$('q').focus();return}
  $('search').disabled=true;
@@ -101,5 +113,5 @@ async function searchAll(){
 }
 $('search').addEventListener('click',searchAll);
 $('q').addEventListener('keydown',e=>{if(e.key==='Enter')searchAll()});
-$('close').addEventListener('click',()=>{$('video').pause();$('video').removeAttribute('src');$('video').load();$('player').style.display='none'});
+try{if(window.CinemaBridge){const info=JSON.parse(CinemaBridge.getPairingInfo());$('phonePairing').innerHTML='کنترل با گوشی: <b dir="ltr">http://'+info.ip+':'+info.port+'</b><br>کد اتصال: <b style="font-size:24px;letter-spacing:5px">'+info.pin+'</b><br>گوشی و پروژکتور را به یک Wi‑Fi وصل کن و این آدرس و کد را در بخش سینمای هم‌صدا در گوشی وارد کن.'}}catch(_){}\n$('close').addEventListener('click',()=>{$('video').pause();$('video').removeAttribute('src');$('video').load();$('player').style.display='none'});
 </script></body></html>
