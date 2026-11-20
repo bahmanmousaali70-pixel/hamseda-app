@@ -25,7 +25,7 @@ h2{font-size:22px;margin:26px 0 12px}.sources{display:grid;grid-template-columns
 <div class="search"><input id="q" type="search" placeholder="مثلاً سرخ و سیاه، دوبله فارسی..." autofocus><button id="search">جست‌وجو در همه منابع</button></div>
 <h2>منابع رایگان و عمومی</h2><div class="sources" id="sources"></div>
 <div class="note">هم‌صدا سینما فقط محتوای رایگانِ منتشرشده با اجازه صاحب اثر یا پخش رسمی را برای تماشا پیشنهاد می‌کند. بعضی منابع رایگان‌اند اما همه فیلم‌هایشان رایگان نیست. محتوای اشتراکی، محدودیت منطقه‌ای یا DRM دور زده نمی‌شود.</div>
-<section id="player"><h2>پخش مستقیم</h2><video id="video" controls playsinline></video><div class="actions"><button id="close">بستن پخش‌کننده</button></div></section>
+<section id="player"><h2>پخش لینک مستقیم مجاز</h2><div class="search"><input id="mediaUrl" type="url" placeholder="https://example.com/video.mp4"><button id="play">پخش</button></div><video id="video" controls playsinline></video><div class="actions"><button id="close">بستن پخش‌کننده</button></div></section>
 <p class="muted">نسخه سبک آزمایشی برای Android 9 و کنترل با ریموت. جست‌وجوی تجمیعی واقعی و API رسمی منابع در مراحل بعدی به اتصال مجاز هر سرویس نیاز دارد.</p>
 </main>
 <script>
@@ -39,8 +39,8 @@ const providers=[
 ];
 const container=document.getElementById('sources');
 providers.forEach(p=>{const a=document.createElement('a');a.className='source';a.href='#';a.innerHTML='<b>'+p.name+'</b><small>'+p.desc+'</small>';a.addEventListener('click',e=>{e.preventDefault();const q=document.getElementById('q').value.trim();if(!q){document.getElementById('q').focus();return}location.href=p.url(q)});container.appendChild(a)});
-function searchAll(){const q=document.getElementById('q').value.trim();if(!q){document.getElementById('q').focus();return}const urls=providers.map(p=>p.url(q));urls.forEach((u,i)=>setTimeout(()=>{if(i===0)location.href=u;},i*250));}
+function searchAll(){const q=document.getElementById('q').value.trim();if(!q){document.getElementById('q').focus();return}const domains='(site:aparat.com OR site:namasha.com OR site:telewebion.com OR site:sepehrtv.ir OR site:tmk.ir OR site:archive.org)';location.href='https://www.google.com/search?q='+encodeURIComponent(domains+' '+q+' (دوبله فارسی OR فیلم کامل OR سریال)');}
 document.getElementById('search').addEventListener('click',()=>searchAll());
 document.getElementById('q').addEventListener('keydown',e=>{if(e.key==='Enter')searchAll()});
-document.getElementById('close').addEventListener('click',()=>{const v=document.getElementById('video');v.pause();v.removeAttribute('src');v.load();document.getElementById('player').style.display='none'});
+document.getElementById('play').addEventListener('click',()=>{const u=document.getElementById('mediaUrl').value.trim();if(!/^https?:\\/\\//i.test(u)||!(/\\.(mp4|m3u8|webm)(\\?|$)/i.test(u))){alert('فقط لینک مستقیم و مجاز MP4، M3U8 یا WebM قابل پخش است.');return}const v=document.getElementById('video');v.src=u;document.getElementById('player').style.display='block';v.play().catch(()=>{});});\ndocument.getElementById('close').addEventListener('click',()=>{const v=document.getElementById('video');v.pause();v.removeAttribute('src');v.load();document.getElementById('player').style.display='none'});
 </script></body></html>
