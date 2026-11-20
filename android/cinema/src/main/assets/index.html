@@ -70,7 +70,7 @@ async function inspectPlayable(doc){
  return {id:doc.identifier,title:doc.title||doc.identifier,year:doc.year||'',url:'https://archive.org/download/'+encodeURIComponent(doc.identifier)+'/'+path,license:licenseLabel(m)};
 }
 async function searchArchive(query){
- $('results').replaceChildren();setStatus('در حال جست‌وجو و بررسی مجوز و فایل‌های قابل پخش…');
+ $('results').replaceChildren();if(window.CinemaBridge)CinemaBridge.publishResults('[]');setStatus('در حال جست‌وجو و بررسی مجوز و فایل‌های قابل پخش…');
  const params=new URLSearchParams();
  params.set('q','mediatype:movies AND (title:('+query+') OR description:('+query+'))');
  ['identifier','title','year','licenseurl','description'].forEach(f=>params.append('fl[]',f));
