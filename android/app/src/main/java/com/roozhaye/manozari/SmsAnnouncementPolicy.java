@@ -21,8 +21,26 @@ public final class SmsAnnouncementPolicy {
         if (containsEntry(important, s) || containsEntry(important, a)) return true;
         String blocked = p.getString("sms_blocked_senders", "");
         if (containsEntry(blocked, s) || containsEntry(blocked, a)) return false;
+        if (p.getBoolean("sms_filter_operator_promotions", true) && isOperatorPromotion(s + " " + a, b)) return false;
         if (containsAny(b, p.getString("sms_blocked_keywords", ""))) return false;
         return true;
+    }
+
+
+    private static boolean isOperatorPromotion(String sender, String body) {
+        String senderText = normalize(sender);
+        String bodyText = normalize(body);
+        boolean knownOperator = containsAny(senderText,
+                "ایرانسل\nirancell\nmtn\nmtn irancell\nهمراه اول\nhamrah aval\nmci\nرایتل\nrightel");
+        if (!knownOperator || bodyText.isEmpty()) return false;
+
+        // Preserve OTP, account/security alerts, balance and service notifications.
+        if (containsAny(bodyText,
+                "رمز یکبار مصرف\nرمز پویا\nکد تایید\nکد تأیید\nکد ورود\nرمز ورود\nتراکنش\nبرداشت\nواریز\nمانده حساب\nصورتحساب\nبدهی\nتمدید خودکار بسته\nاتمام اعتبار بسته\nشارژ اضطراری")) {
+            return false;
+        }
+        return containsAny(bodyText,
+                "پیشنهاد ویژه\nجشنواره\nتخفیف\nهدیه رایگان\nهدیه ویژه\nبرنده شدید\nقرعه کشی\nخرید بسته\nبسته ارزان\nهمین حالا بخر\nفرصت محدود\nمشترک گرامی\nپیشنهاد می کنیم\nپیشنهاد می‌کنیم\nفعال سازی هدیه\nاینترنت رایگان");
     }
 
     public static String spokenBody(Context context, String body) {
