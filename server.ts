@@ -1702,21 +1702,23 @@ app.post('/api/podcast-search', async (req, res) => {
   const searchTerms = [...new Set([query, coreQuery].filter(Boolean))];
 
   try {
-    const directoryResults = await Promise.all(searchTerms.map(async (term) => {
-      const url = new URL('https://itunes.apple.com/search');
-      url.searchParams.set('term', term);
-      url.searchParams.set('entity', 'podcast');
-      url.searchParams.set('limit', '25');
-      url.searchParams.set('country', 'ir');
-      const response = await fetch(url, {headers: {'User-Agent': 'Hamseda/1.0'}});
-      if (!response.ok) return [];
-      const data = await response.json() as {results?: Array<{
-        collectionId?: number; collectionName?: string; artistName?: string;
-        feedUrl?: string; artworkUrl600?: string; artworkUrl100?: string;
-        trackViewUrl?: string; primaryGenreName?: string;
-      }>};
-      return data.results ?? [];
-    }));
+    const directoryResults = await Promise.all(searchTerms.flatMap((term) =>
+      ['ir', 'us'].map(async (country) => {
+        const url = new URL('https://itunes.apple.com/search');
+        url.searchParams.set('term', term);
+        url.searchParams.set('entity', 'podcast');
+        url.searchParams.set('limit', '25');
+        url.searchParams.set('country', country);
+        const response = await fetch(url, {headers: {'User-Agent': 'Hamseda/1.0'}});
+        if (!response.ok) return [];
+        const data = await response.json() as {results?: Array<{
+          collectionId?: number; collectionName?: string; artistName?: string;
+          feedUrl?: string; artworkUrl600?: string; artworkUrl100?: string;
+          trackViewUrl?: string; primaryGenreName?: string;
+        }>};
+        return data.results ?? [];
+      })
+    ));
 
     const unique = new Map<string, NonNullable<(typeof directoryResults)[number][number]>>();
     for (const item of directoryResults.flat()) {
