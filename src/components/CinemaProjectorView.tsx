@@ -97,7 +97,6 @@ export const CinemaProjectorView: React.FC = () => {
     window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(search)}`, '_blank', 'noopener,noreferrer');
   };
 
-  const openFullscreen = async () => {
   const discoverCastDevices = async () => {
     if (!isNativeAndroid) {
       setCastStatus('جستجوی DLNA فقط در نسخه نصب‌شده اندروید فعال است.');
@@ -180,6 +179,7 @@ export const CinemaProjectorView: React.FC = () => {
     if (!result.ok) setCastStatus(result.error || 'تنظیمات نمایش بی‌سیم باز نشد.');
   };
 
+  const openFullscreen = async () => {
     try {
       await playerShellRef.current?.requestFullscreen?.();
     } catch {
