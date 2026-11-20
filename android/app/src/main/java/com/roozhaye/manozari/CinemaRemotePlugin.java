@@ -1,5 +1,10 @@
 package com.roozhaye.manozari;
 
+import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -53,7 +58,7 @@ public class CinemaRemotePlugin extends Plugin {
 
     private JSObject request(String host, String path, String token, JSONObject body) throws Exception {
         if (host.isEmpty() || !(path.startsWith("/api/"))) throw new IllegalArgumentException("آدرس پروژکتور معتبر نیست.");
-        HttpURLConnection connection = (HttpURLConnection) new URL("http://" + host + ":8765" + path).openConnection();
+        HttpURLConnection connection = openWifiConnection(new URL("http://" + host + ":8765" + path));
         try {
             connection.setConnectTimeout(5000);
             connection.setReadTimeout(15000);
@@ -91,6 +96,19 @@ public class CinemaRemotePlugin extends Plugin {
         } finally {
             connection.disconnect();
         }
+    }
+
+    private HttpURLConnection openWifiConnection(URL url) throws Exception {
+        ConnectivityManager manager = (ConnectivityManager) getContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (manager != null) {
+            for (Network network : manager.getAllNetworks()) {
+                NetworkCapabilities capabilities = manager.getNetworkCapabilities(network);
+                if (capabilities != null && capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                    return (HttpURLConnection) network.openConnection(url);
+                }
+            }
+        }
+        return (HttpURLConnection) url.openConnection();
     }
 
     private String normalizeHost(String value) {
