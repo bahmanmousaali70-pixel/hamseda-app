@@ -6,7 +6,7 @@ concurrency:
 
 on:
   push:
-    branches: [main, master, release/assistant-final-upgrade, feature/family-life-suite-design]
+    branches: [main, master, 'release/**', 'feature/**']
   workflow_dispatch:
 
 permissions:
@@ -111,8 +111,11 @@ jobs:
         run: |
           APK="android/app/build/outputs/apk/debug/app-debug.apk"
           APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
-          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          AAPT2="$ANDROID_HOME/build-tools/36.0.0/aapt2"
           test -s "$APK"
+          unzip -t "$APK" > /dev/null
+          "$AAPT2" dump badging "$APK" | head -n 25
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
           ls -lh "$APK"
 
       - name: Rename APK for easy installation
@@ -125,15 +128,16 @@ jobs:
           path: hamseda.apk
 
       - name: Publish Development APK to GitHub Pre-release
-        if: github.ref == 'refs/heads/feature/family-life-suite-design'
+        if: github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: dev-v${{ env.APP_VERSION }}
           name: هم‌صدا - نسخه آزمایشی ${{ env.APP_VERSION }}
-          body: نسخه آزمایشی شاخه توسعه هم‌صدا. برای آزمایش است و نسخه نهایی نیست.
+          body: نسخه آزمایشی شاخه توسعه هم‌صدا (${{ github.ref_name }}). فایل حاصله را مستقیم بدون نیاز به استخراج ZIP نصب کنید.
           prerelease: true
           make_latest: false
           files: hamseda.apk
+          overwrite_files: true
           fail_on_unmatched_files: true
 
       - name: Publish Latest APK to GitHub Releases

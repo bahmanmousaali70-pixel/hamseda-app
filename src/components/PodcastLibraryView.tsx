@@ -178,7 +178,7 @@ export const PodcastLibraryView: React.FC<{
       const endpoints = [
         ...new Set([
           apiUrl('/api/podcast-search'),
-          'https://ais-dev-5dqrp6vmbjkluesjlbth6l-737153117526.europe-west2.run.app/api/podcast-search',
+          'https://hamseda-app.ai.studio/api/podcast-search',
         ]),
       ];
       let response: Response | null = null;

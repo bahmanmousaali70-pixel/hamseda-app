@@ -1033,7 +1033,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
                 dir="ltr"
                 value={serverUrlInput}
                 onChange={(e) => setServerUrlInput(e.target.value)}
-                placeholder="https://ais-pre-5dqrp6vmbjkluesjlbth6l-737153117526.europe-west2.run.app"
+                placeholder="https://hamseda-app.ai.studio"
                 className="w-full min-h-[44px] px-3 rounded-xl border border-slate-200 dark:border-emerald-900 bg-white dark:bg-[#121E1C] text-xs font-mono-num text-slate-900 dark:text-white"
               />
             </div>

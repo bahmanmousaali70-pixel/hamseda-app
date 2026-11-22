@@ -69,7 +69,7 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public final class SecurityAlertHelper {
     private static final String PREFS = "rmz_native_prefs";
-    private static final String DEFAULT_API_BASE = "https://ais-pre-5dqrp6vmbjkluesjlbth6l-737153117526.europe-west2.run.app";
+    private static final String DEFAULT_API_BASE = "https://hamseda-app.ai.studio";
     private static final AtomicBoolean CAPTURE_IN_PROGRESS = new AtomicBoolean(false);
     private static final AtomicBoolean FLUSH_IN_PROGRESS = new AtomicBoolean(false);
 
@@ -388,7 +388,9 @@ public final class SecurityAlertHelper {
         String normalizedBase = baseUrl != null ? baseUrl.trim().replaceAll("/+$", "") : "";
         if (normalizedBase.isEmpty()
                 || "https://roozhaye-manozari-7.ai.studio".equals(normalizedBase)
-                || "https://hamseda-voice-suite.ai.studio".equals(normalizedBase)) {
+                || "https://hamseda-voice-suite.ai.studio".equals(normalizedBase)
+                || "https://ais-pre-5dqrp6vmbjkluesjlbth6l-737153117526.europe-west2.run.app".equals(normalizedBase)
+                || "https://ais-dev-5dqrp6vmbjkluesjlbth6l-737153117526.europe-west2.run.app".equals(normalizedBase)) {
             baseUrl = DEFAULT_API_BASE;
         } else {
             baseUrl = normalizedBase;

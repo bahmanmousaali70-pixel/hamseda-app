@@ -143,7 +143,7 @@ testConnection();
 export async function signInWithGoogleSmart(): Promise<User | null> {
   if (Capacitor.isNativePlatform()) {
     throw new Error(
-      'گوگل اجازه ورود OAuth را داخل WebView اپلیکیشن نمی‌دهد. برای همگام‌سازی ابری، سایت roozhaye-manozari-7.ai.studio را در مرورگر کروم باز کنید یا از دکمه‌های پشتیبان JSON استفاده نمایید.'
+      'گوگل اجازه ورود OAuth را داخل WebView اپلیکیشن نمی‌دهد. برای همگام‌سازی ابری، سایت hamseda-app.ai.studio را در مرورگر کروم باز کنید یا از دکمه‌های پشتیبان JSON استفاده نمایید.'
     );
   }
   try {
@@ -164,7 +164,7 @@ export async function signInWithGoogleSmart(): Promise<User | null> {
     if (code === 'auth/unauthorized-domain') {
       const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
       throw new Error(
-        `دامنه «${host}» در Firebase Authorized Domains مجاز نشده است. در کنسول Firebase (بخش Authentication > Settings) دامنه‌های roozhaye-manozari-7.ai.studio و localhost را اضافه کنید یا همگام‌سازی گوگل را در نسخه وب انجام دهید.`
+        `دامنه «${host}» در Firebase Authorized Domains مجاز نشده است. در کنسول Firebase (بخش Authentication > Settings) دامنه‌های hamseda-app.ai.studio و localhost را اضافه کنید یا همگام‌سازی گوگل را در نسخه وب انجام دهید.`
       );
     }
     throw err;

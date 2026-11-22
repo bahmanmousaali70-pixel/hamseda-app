@@ -92,9 +92,11 @@ export const TopBar: React.FC<TopBarProps> = ({
               onClick={() => onSelectTab('today')}
               className="flex items-center gap-2 text-base md:text-lg font-extrabold tracking-tight text-slate-900 dark:text-slate-50 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-emerald-600 rounded-lg px-1"
             >
-              <span className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-800 to-emerald-950 dark:from-emerald-600 dark:to-emerald-900 border border-amber-400/40 flex items-center justify-center shrink-0">
-                <AudioLines className="w-4 h-4 text-amber-300" />
-              </span>
+              <img
+                src="/hamseda-icon.png"
+                alt="لوگوی هم‌صدا"
+                className="w-8 h-8 rounded-xl object-cover shrink-0 shadow-xs"
+              />
               <span>هم‌صدا</span>
             </button>
             <button
