@@ -12,7 +12,6 @@ import {
   setDoc,
   updateDoc,
   where,
-  type DocumentData,
   type Unsubscribe,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
