@@ -2783,7 +2783,8 @@ async function searchPublicWeb(query: string): Promise<PublicSearchResult[]> {
   const engines = [
     {kind: 'bing' as const, url: 'https://www.bing.com/search?q=' + encodeURIComponent(cleanQuery)},
     {kind: 'duckduckgo' as const, url: 'https://html.duckduckgo.com/html/?q=' + encodeURIComponent(cleanQuery)},
-    {kind: 'google' as const, url: 'https://www.google.com/search?hl=fa&num=10&q=' + encodeURIComponent(cleanQuery)},\n    {kind: 'brave' as const, url: 'https://search.brave.com/search?q=' + encodeURIComponent(cleanQuery)},
+    {kind: 'google' as const, url: 'https://www.google.com/search?hl=fa&num=10&q=' + encodeURIComponent(cleanQuery)},
+    {kind: 'brave' as const, url: 'https://search.brave.com/search?q=' + encodeURIComponent(cleanQuery)},
   ];
 
   const parseResults = (html: string, kind: 'bing' | 'duckduckgo' | 'google' | 'brave'): PublicSearchResult[] => {
