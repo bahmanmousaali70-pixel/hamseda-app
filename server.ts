@@ -3322,10 +3322,8 @@ ${compactContacts.length > 0 ? `مخاطبین دفترچه تلفن برای ت
 
     let parsed: ParsedAssistantCommand | null = null;
     let lastRouterErr: unknown = null;
-    let fastWebRouted = false;
 
     if (isDirectLiveWebQuery) {
-      fastWebRouted = true;
       parsed = {
         action: 'web_search',
         query: utterance,
@@ -3370,7 +3368,6 @@ ${compactContacts.length > 0 ? `مخاطبین دفترچه تلفن برای ت
           utterance
         ) && !/(تماس|زنگ|پیامک|اس ام اس|باز کن|تلگرام|واتساپ|تایمر|آلارم|چراغ|رادیو|پادکست|موزیک|آهنگ)/.test(utterance);
       if (looksLikeLiveWebQuery) {
-        fastWebRouted = true;
         parsed = {
           action: 'web_search',
           query: utterance,
@@ -3403,7 +3400,7 @@ ${compactContacts.length > 0 ? `مخاطبین دفترچه تلفن برای ت
       const requestedQuery = (parsed.query || utterance).trim();
       let gotGroundedAnswer = false;
       const groundingModels = getAvailableTextModels();
-      if (!fastWebRouted && searchClient && groundingModels.includes('gemini-4-hydrogen')) {
+      if (searchClient && groundingModels.includes('gemini-4-hydrogen')) {
         try {
           const searchPrompt =
             action === 'download_url'
@@ -3443,9 +3440,11 @@ ${compactContacts.length > 0 ? `مخاطبین دفترچه تلفن برای ت
             if (links.length >= 6) break;
           }
 
-          if (webText && links.length > 0) {
+          if (webText) {
             parsed.replyText = webText;
-            parsed.links = links;
+            parsed.links = links.length > 0
+              ? links
+              : [{title: 'مشاهده نتایج جستجوی گوگل', url: 'https://www.google.com/search?q=' + encodeURIComponent(requestedQuery)}];
             gotGroundedAnswer = true;
           }
           if (action === 'download_url' && links.length > 0 && !parsed.downloadUrl) {
