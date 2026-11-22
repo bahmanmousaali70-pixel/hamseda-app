@@ -41,6 +41,7 @@ import {
   isNativeAndroid,
   openAccessibilitySettingsNative,
   openBatteryAndAutostartSettingsNative,
+  openExternalUrlNative,
   pickJsonFileNative,
   requestSecurityPermissionsNative,
   requestSmsPermissionsOnlyNative,
@@ -48,6 +49,7 @@ import {
   saveSmsAnnouncementPolicyNative,
   setSecurityGuardConfigNative,
   syncServerBaseUrlToNative,
+  triggerDirectWebhookTestNative,
   triggerTestPowerGuardNative,
   type NativeCapabilities,
   type SecurityGuardStatus,
@@ -989,7 +991,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
                 dir="ltr"
                 value={serverUrlInput}
                 onChange={(e) => setServerUrlInput(e.target.value)}
-                placeholder="https://roozhaye-manozari-7.ai.studio"
+                placeholder="https://ais-pre-5dqrp6vmbjkluesjlbth6l-737153117526.europe-west2.run.app"
                 className="w-full min-h-[44px] px-3 rounded-xl border border-slate-200 dark:border-emerald-900 bg-white dark:bg-[#121E1C] text-xs font-mono-num text-slate-900 dark:text-white"
               />
             </div>
@@ -1321,32 +1323,54 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
             onClick={async () => {
               setSendingTestAlert(true);
               try {
-                const res = await fetch(apiUrl('/api/security-alert'), {
-                  method: 'POST',
-                  headers: {'Content-Type': 'application/json'},
-                  body: JSON.stringify({
-                    ownerName: selfName,
-                    backupEmail: backupSecurityEmail.trim(),
-                    webhookUrl: securityWebhookUrl.trim(),
-                    reason: 'web_connection_test',
-                    attemptCount: 1,
-                    networkType: isNativeAndroid() ? securityStatus?.networkType || 'android' : 'web',
-                  }),
-                });
-                const parsed = await safeReadJsonResponse<{
-                  ok?: boolean;
-                  emailSent?: boolean;
-                  webhookSent?: boolean;
-                  message?: string;
-                }>(res);
-                if (res.ok && parsed.data?.ok) {
-                  onStatusToast(parsed.data.message || 'تست ارسال با سرور انجام شد.');
-                } else {
-                  onStatusToast('ارتباط با مسیر هشدار سرور برقرار نشد.');
+                let serverHandled = false;
+                try {
+                  const res = await fetch(apiUrl('/api/security-alert'), {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                      ownerName: selfName,
+                      backupEmail: backupSecurityEmail.trim(),
+                      webhookUrl: securityWebhookUrl.trim(),
+                      reason: 'web_connection_test',
+                      attemptCount: 1,
+                      networkType: isNativeAndroid() ? securityStatus?.networkType || 'android' : 'web',
+                    }),
+                  });
+                  const parsed = await safeReadJsonResponse<{
+                    ok?: boolean;
+                    emailSent?: boolean;
+                    webhookSent?: boolean;
+                    message?: string;
+                  }>(res);
+                  if (res.ok && parsed.data?.ok) {
+                    serverHandled = true;
+                    onStatusToast(parsed.data.message || 'تست ارسال با سرور انجام شد.');
+                  }
+                } catch {
+                  // Fall through to direct Android HTTPS webhook test if configured
+                }
+
+                if (!serverHandled) {
+                  const trimmedHook = securityWebhookUrl.trim();
+                  if (isNativeAndroid() && trimmedHook.startsWith('https://')) {
+                    const directRes = await triggerDirectWebhookTestNative({
+                      webhookUrl: trimmedHook,
+                      backupEmail: backupSecurityEmail.trim(),
+                      ownerName: selfName,
+                    });
+                    onStatusToast(
+                      directRes.ok
+                        ? 'هشدار آزمایشی مستقیماً از گوشی به وب‌هوک شخصی ارسال شد.'
+                        : directRes.error || 'ارسال به سرور و وب‌هوک ناموفق بود.'
+                    );
+                  } else {
+                    onStatusToast(
+                      'ارتباط با مسیر هشدار سرور برقرار نشد. برای ارسال مستقیم بدون نیاز به سرور، وب‌هوک HTTPS (مثل Google Apps Script) را وارد کنید.'
+                    );
+                  }
                 }
                 void refreshServerSecurityStatus();
-              } catch {
-                onStatusToast('خطا در اتصال به سرور؛ نشانی سرور و اینترنت را بررسی کنید.');
               } finally {
                 setSendingTestAlert(false);
               }
@@ -1501,6 +1525,12 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
                             href={al.mapsUrl}
                             target="_blank"
                             rel="noopener noreferrer"
+                            onClick={(e) => {
+                              if (isNativeAndroid()) {
+                                e.preventDefault();
+                                void openExternalUrlNative(al.mapsUrl);
+                              }
+                            }}
                             className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 hover:underline shrink-0"
                           >
                             مشاهده روی نقشه گوگل

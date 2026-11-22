@@ -44,6 +44,7 @@ import {
   getWakeWordStatusNative,
   isNativeAndroid,
   listenOncePersianNative,
+  openExternalUrlNative,
   startNativeWakeWordService,
   stopNativeWakeWordService,
   stopListeningNative,
@@ -454,6 +455,8 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
           } else {
             setPendingIntent({type: 'awaiting_sms_recipient'});
           }
+        } else if (result.action === 'web_search' && !result.query?.trim()) {
+          setPendingIntent({type: 'awaiting_search_query'});
         } else {
           setPendingIntent(null);
         }
@@ -486,6 +489,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
               action: result.action,
               phone: result.targetPhone,
               smsBody: result.smsBody,
+              callScript: confirmedCallScript || undefined,
               confirmed:
                 (result.action === 'send_sms' && pendingIntent?.type === 'awaiting_sms_confirmation') ||
                 (result.action === 'make_call' && pendingIntent?.type === 'awaiting_call_confirmation'),
@@ -525,6 +529,8 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
               }
             } else if (nativeRes.savedPath) {
               finalReply = `${nativeRes.message || 'ذخیره شد'} (${nativeRes.savedPath})`;
+            } else if (result.action === 'make_call' && nativeRes.message) {
+              finalReply = nativeRes.message;
             }
           }
         } else if (result.action === 'open_tab' && result.tab) {
@@ -1331,6 +1337,11 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
                   <strong>در انتظار متن پیامک به {pendingIntent.targetName}:</strong>{' '}
                   متن پیامک را بگو یا تایپ کن؛ قبل از ارسال تأیید نهایی می‌گیری.
                 </>
+              ) : pendingIntent.type === 'awaiting_search_query' ? (
+                <>
+                  <strong>در انتظار موضوع جستجو در اینترنت:</strong>{' '}
+                  موضوع یا سوال مورد نظرتان را بگویید یا بنویسید تا الان در اینترنت جستجو کنم.
+                </>
               ) : (
                 <>
                   <strong>در انتظار نام مخاطب برای پیامک:</strong> نام شخص مورد نظر را بگویید یا بنویسید.
@@ -1372,12 +1383,20 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
                 type="button"
                 onClick={() => {
                   const isCall = pendingIntent.type === 'awaiting_call_confirmation';
+                  const isSearch = pendingIntent.type === 'awaiting_search_query';
                   setPendingIntent(null);
-                  appendMessage('assistant', isCall ? 'تماس لغو شد و شماره‌گیری انجام نمی‌شود.' : 'ارسال پیامک لغو شد.');
+                  appendMessage(
+                    'assistant',
+                    isCall ? 'تماس لغو شد و شماره‌گیری انجام نمی‌شود.' : isSearch ? 'جستجو لغو شد.' : 'ارسال پیامک لغو شد.'
+                  );
                 }}
                 className="min-h-[44px] px-4 rounded-xl border border-amber-400 dark:border-amber-700 text-xs font-semibold text-amber-900 dark:text-amber-200 cursor-pointer shrink-0"
               >
-                {pendingIntent.type === 'awaiting_call_confirmation' ? 'لغو تماس' : 'لغو پیامک'}
+                {pendingIntent.type === 'awaiting_call_confirmation'
+                  ? 'لغو تماس'
+                  : pendingIntent.type === 'awaiting_search_query'
+                    ? 'لغو جستجو'
+                    : 'لغو پیامک'}
               </button>
             </div>
           </div>
@@ -1404,7 +1423,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
             {activeProxyCall.script}
           </p>
           <p className="text-[11px] leading-5 text-slate-600 dark:text-slate-300">
-            وقتی طرف مقابل گوشی را برداشت، تلفن را روی <strong>بلندگو (Speaker)</strong> بگذارید و دکمه «خواندن متن روی اسپیکر» را بزنید تا پیام یا سفارش شما دقیق خوانده شود (اندروید در تماس مخابراتی سیم‌کارت به هیچ برنامه‌ای اجازه تزریق مستقیم صدا پشت خط را نمی‌دهد).
+            روی نسخه اندروید، حین تماس یک نوار شناور بالای صفحه شماره‌گیر باز می‌شود که به‌صورت خودکار (با شمارش معکوس ۹ ثانیه‌ای یا لمس فوری «الان بگو روی اسپیکر») بلندگو را روشن کرده و متن بالا را برای طرف مقابل می‌خواند. همچنین می‌توانید از دکمه زیر هم مستقیم متن را بخوانید.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -1494,6 +1513,12 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
                         href={msg.downloadUrl}
                         target="_blank"
                         rel="noopener noreferrer"
+                        onClick={(e) => {
+                          if (isNativeAndroid() && msg.downloadUrl) {
+                            e.preventDefault();
+                            void openExternalUrlNative(msg.downloadUrl);
+                          }
+                        }}
                         className="min-h-[40px] px-3 py-1.5 rounded-xl border border-slate-300 dark:border-emerald-800 text-slate-800 dark:text-slate-100 text-xs font-semibold flex items-center gap-1.5"
                       >
                         <ExternalLink className="w-3.5 h-3.5" />
@@ -1516,6 +1541,12 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
                             href={lk.url}
                             target="_blank"
                             rel="noopener noreferrer"
+                            onClick={(e) => {
+                              if (isNativeAndroid()) {
+                                e.preventDefault();
+                                void openExternalUrlNative(lk.url);
+                              }
+                            }}
                             className="text-emerald-700 dark:text-emerald-400 font-medium hover:underline truncate max-w-[200px] sm:max-w-[260px]"
                           >
                             {lk.title}
@@ -1533,6 +1564,12 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
                               href={lk.url}
                               target="_blank"
                               rel="noopener noreferrer"
+                              onClick={(e) => {
+                                if (isNativeAndroid()) {
+                                  e.preventDefault();
+                                  void openExternalUrlNative(lk.url);
+                                }
+                              }}
                               className="px-2 py-1 rounded-lg border border-slate-200 dark:border-emerald-900 text-[11px] text-slate-700 dark:text-slate-200 flex items-center gap-1"
                             >
                               <ExternalLink className="w-3 h-3" />
@@ -1584,7 +1621,9 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
               placeholder={
                 pendingIntent?.type === 'awaiting_sms_body'
                   ? `متن پیامک به ${pendingIntent.targetName} را بنویسید...`
-                  : `مثلاً: ${assistantName} ساعت چنده؟ یا به ${partnerOtherName} پیامک بده...`
+                  : pendingIntent?.type === 'awaiting_search_query'
+                    ? 'موضوع مورد نظر برای جستجو در اینترنت را بنویسید...'
+                    : `مثلاً: ${assistantName} ساعت چنده؟ یا به ${partnerOtherName} پیامک بده...`
               }
               className="flex-1 min-h-[46px] rounded-xl border border-slate-200 dark:border-emerald-950 bg-slate-50 dark:bg-[#0D1614] px-3.5 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-emerald-700"
             />

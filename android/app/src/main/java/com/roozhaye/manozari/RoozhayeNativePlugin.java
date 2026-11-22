@@ -617,6 +617,14 @@ public class RoozhayeNativePlugin extends Plugin {
                         call.resolve(ret);
                         return;
                     }
+                    String callScript = call.getString("callScript", "");
+                    if (callScript == null || callScript.trim().isEmpty()) {
+                        callScript = smsBody != null ? smsBody : "";
+                    }
+                    boolean hasCallScript = !callScript.trim().isEmpty();
+                    if (hasCallScript) {
+                        CallProxyController.armAndShow(ctx, name, phone, callScript.trim());
+                    }
                     boolean hasCallPerm = ContextCompat.checkSelfPermission(ctx, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED;
                     if (!hasCallPerm && getActivity() != null) {
                         ActivityCompat.requestPermissions(getActivity(), new String[]{Manifest.permission.CALL_PHONE}, PERM_REQ_CODE + 3);
@@ -625,9 +633,13 @@ public class RoozhayeNativePlugin extends Plugin {
                     callIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     ctx.startActivity(callIntent);
                     ret.put("ok", true);
-                    ret.put("message", hasCallPerm
-                            ? "در حال برقراری تماس با " + (name.isEmpty() ? phone : name)
-                            : "شماره‌گیر برای " + (name.isEmpty() ? phone : name) + " باز شد (برای تماس مستقیم بدون لمس، اجازه تلفن را تایید کنید).");
+                    if (hasCallPerm) {
+                        ret.put("message", hasCallScript
+                                ? "در حال تماس با " + (name.isEmpty() ? phone : name) + " — پنجره خواندن پیام روی صفحه تماس باز شد (پس از چند ثانیه به‌صورت خودکار یا با یک لمس روی بلندگو خوانده می‌شود)."
+                                : "در حال برقراری تماس با " + (name.isEmpty() ? phone : name));
+                    } else {
+                        ret.put("message", "شماره‌گیر برای " + (name.isEmpty() ? phone : name) + " باز شد (برای تماس مستقیم بدون لمس، اجازه تلفن را تایید کنید).");
+                    }
                     call.resolve(ret);
                     return;
                 }
@@ -2169,6 +2181,72 @@ public class RoozhayeNativePlugin extends Plugin {
         JSObject ret = new JSObject();
         ret.put("ok", true);
         call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void triggerDirectWebhookTest(PluginCall call) {
+        String webhookUrl = call.getString("webhookUrl", "");
+        String backupEmail = call.getString("backupEmail", "");
+        String ownerName = call.getString("ownerName", "کاربر هم‌صدا");
+        Context ctx = getContext().getApplicationContext();
+        new Thread(() -> {
+            boolean sent = SecurityAlertHelper.sendDirectWebhookTest(ctx, webhookUrl, backupEmail, ownerName);
+            JSObject ret = new JSObject();
+            ret.put("ok", sent);
+            if (!sent) {
+                ret.put("error", "ارسال مستقیم به وب‌هوک ناموفق بود؛ نشانی HTTPS وب‌هوک و اینترنت را بررسی کنید.");
+            }
+            mainHandler.post(() -> call.resolve(ret));
+        }, "HamsedaWebhookTest").start();
+    }
+
+    @PluginMethod
+    public void openExternalUrl(PluginCall call) {
+        String rawUrl = call.getString("url", "");
+        if (rawUrl == null || rawUrl.trim().isEmpty()) {
+            JSObject ret = new JSObject();
+            ret.put("ok", false);
+            ret.put("error", "نشانی خالی است.");
+            call.resolve(ret);
+            return;
+        }
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(rawUrl.trim()));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+            JSObject ret = new JSObject();
+            ret.put("ok", true);
+            call.resolve(ret);
+        } catch (Exception e) {
+            JSObject ret = new JSObject();
+            ret.put("ok", false);
+            ret.put("error", e.getMessage() != null ? e.getMessage() : "امکان باز کردن لینک در برنامه خارجی نبود.");
+            call.resolve(ret);
+        }
+    }
+
+    @PluginMethod
+    public void searchWebNative(PluginCall call) {
+        final String query = call.getString("query", "");
+        final Context appCtx = getContext().getApplicationContext();
+        new Thread(() -> {
+            JSONObject res = NativeWebSearchHelper.search(appCtx, query);
+            JSObject ret;
+            try {
+                ret = JSObject.fromJSONObject(res);
+            } catch (Exception e) {
+                ret = new JSObject();
+                ret.put("ok", res.optBoolean("ok", false));
+                ret.put("offline", res.optBoolean("offline", false));
+                ret.put("needsQuery", res.optBoolean("needsQuery", false));
+                ret.put("query", res.optString("query", query));
+                ret.put("replyText", res.optString("replyText", ""));
+                ret.put("linksJson", res.optString("linksJson", "[]"));
+                ret.put("error", res.optString("error", ""));
+            }
+            final JSObject finalRet = ret;
+            mainHandler.post(() -> call.resolve(finalRet));
+        }, "HamsedaWebSearch").start();
     }
 
     private JSObject buildCapsObject() {

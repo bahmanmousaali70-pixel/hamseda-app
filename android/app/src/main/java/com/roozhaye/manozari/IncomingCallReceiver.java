@@ -31,10 +31,22 @@ public class IncomingCallReceiver extends BroadcastReceiver {
         }
 
         String state = intent.getStringExtra(TelephonyManager.EXTRA_STATE);
-        if (TelephonyManager.EXTRA_STATE_OFFHOOK.equals(state) || TelephonyManager.EXTRA_STATE_IDLE.equals(state)) {
+        if (TelephonyManager.EXTRA_STATE_OFFHOOK.equals(state)) {
             cancelPendingFallback();
             lastHandledRingAtMs = 0L;
             lastHandledNumber = "";
+            if (CallProxyController.isOutgoingProxyCallActive()) {
+                CallProxyController.onOutgoingOffhook(context);
+            } else {
+                CallAnnouncerService.stopActive(context);
+            }
+            return;
+        }
+        if (TelephonyManager.EXTRA_STATE_IDLE.equals(state)) {
+            cancelPendingFallback();
+            lastHandledRingAtMs = 0L;
+            lastHandledNumber = "";
+            CallProxyController.onCallEnded(context);
             CallAnnouncerService.stopActive(context);
             return;
         }

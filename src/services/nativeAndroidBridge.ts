@@ -167,6 +167,7 @@ interface RoozhayeNativePlugin {
     action: string;
     phone?: string;
     smsBody?: string;
+    callScript?: string;
     confirmed?: boolean;
     name?: string;
     url?: string;
@@ -231,6 +232,21 @@ interface RoozhayeNativePlugin {
   triggerTestPowerGuard(): Promise<{ok: boolean; message?: string}>;
   flushPendingSecurityAlerts(): Promise<{ok: boolean}>;
   clearSecurityAlertsLog(): Promise<{ok: boolean}>;
+  triggerDirectWebhookTest(options: {
+    webhookUrl: string;
+    backupEmail?: string;
+    ownerName?: string;
+  }): Promise<{ok: boolean; error?: string}>;
+  openExternalUrl(options: {url: string}): Promise<{ok: boolean; error?: string}>;
+  searchWebNative(options: {query: string}): Promise<{
+    ok: boolean;
+    offline?: boolean;
+    needsQuery?: boolean;
+    query?: string;
+    replyText?: string;
+    linksJson?: string;
+    error?: string;
+  }>;
 }
 
 const RoozhayeNative = registerPlugin<RoozhayeNativePlugin>('RoozhayeNative');
@@ -887,6 +903,7 @@ export async function executeDeviceActionNative(options: {
   action: string;
   phone?: string;
   smsBody?: string;
+  callScript?: string;
   confirmed?: boolean;
   name?: string;
   url?: string;
@@ -1103,5 +1120,81 @@ export async function clearSecurityAlertsLogNative(): Promise<boolean> {
     return Boolean(res.ok);
   } catch {
     return false;
+  }
+}
+
+export async function triggerDirectWebhookTestNative(options: {
+  webhookUrl: string;
+  backupEmail?: string;
+  ownerName?: string;
+}): Promise<{ok: boolean; error?: string}> {
+  if (!isNativeAndroid()) {
+    return {ok: false, error: 'فقط در اپلیکیشن اندروید پشتیبانی می‌شود.'};
+  }
+  try {
+    return await RoozhayeNative.triggerDirectWebhookTest(options);
+  } catch (err) {
+    return {ok: false, error: err instanceof Error ? err.message : 'خطا در ارسال مستقیم به وب‌هوک'};
+  }
+}
+
+export async function openExternalUrlNative(url: string): Promise<boolean> {
+  if (!url.trim()) return false;
+  if (!isNativeAndroid()) {
+    window.open(url, '_blank', 'noopener,noreferrer');
+    return true;
+  }
+  try {
+    const res = await RoozhayeNative.openExternalUrl({url: url.trim()});
+    return Boolean(res.ok);
+  } catch {
+    return false;
+  }
+}
+
+export async function searchWebNative(query: string): Promise<{
+  ok: boolean;
+  offline?: boolean;
+  needsQuery?: boolean;
+  query?: string;
+  replyText?: string;
+  links?: {title: string; url: string}[];
+  error?: string;
+}> {
+  if (!isNativeAndroid()) {
+    return {ok: false, error: 'فقط در نسخه اندروید (APK) پشتیبانی می‌شود.'};
+  }
+  try {
+    const res = await RoozhayeNative.searchWebNative({query});
+    let links: {title: string; url: string}[] = [];
+    if (res.linksJson) {
+      try {
+        const parsed = JSON.parse(res.linksJson) as {title?: string; url?: string}[];
+        if (Array.isArray(parsed)) {
+          links = parsed
+            .filter((item) => item && typeof item.url === 'string' && item.url.trim())
+            .map((item) => ({
+              title: (item.title || item.url || 'نتیجه جستجو').trim(),
+              url: String(item.url).trim(),
+            }));
+        }
+      } catch {
+        links = [];
+      }
+    }
+    return {
+      ok: Boolean(res.ok),
+      offline: Boolean(res.offline),
+      needsQuery: Boolean(res.needsQuery),
+      query: res.query,
+      replyText: res.replyText,
+      links,
+      error: res.error,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'خطا در جستجوی مستقیم اندروید',
+    };
   }
 }

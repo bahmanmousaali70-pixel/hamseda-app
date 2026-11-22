@@ -54,7 +54,7 @@ public class CallAnnouncerService extends Service {
     public static final String EXTRA_VOICE_NAME = "voice_name";
     public static final String EXTRA_REPEAT = "repeat_count";
     public static final String EXTRA_IS_CALL = "is_call";
-    private static final String DEFAULT_API_BASE = "https://hamseda-voice-suite.ai.studio";
+    private static final String DEFAULT_API_BASE = "https://ais-pre-5dqrp6vmbjkluesjlbth6l-737153117526.europe-west2.run.app";
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private volatile boolean cancelled = false;
@@ -377,6 +377,18 @@ public class CallAnnouncerService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        String action = intent != null ? intent.getAction() : null;
+        if (CallProxyController.ACTION_SPEAK_NOW.equals(action)) {
+            CallProxyController.speakNow(this);
+            stopSelfSafely();
+            return START_NOT_STICKY;
+        }
+        if (CallProxyController.ACTION_DISMISS.equals(action)) {
+            CallProxyController.onCallEnded(this);
+            stopSelfSafely();
+            return START_NOT_STICKY;
+        }
+
         final int sessionId = ++activeSessionId;
         final long myGen = GLOBAL_PLAY_GEN.incrementAndGet();
         cancelled = false;
@@ -639,10 +651,14 @@ public class CallAnnouncerService extends Service {
 
             SharedPreferences prefs = context.getSharedPreferences("rmz_native_prefs", MODE_PRIVATE);
             String baseUrl = prefs.getString("server_base_url", DEFAULT_API_BASE);
-            if (baseUrl == null || baseUrl.trim().isEmpty()) {
+            String normalizedBase = baseUrl != null ? baseUrl.trim().replaceAll("/+$", "") : "";
+            if (normalizedBase.isEmpty()
+                    || "https://roozhaye-manozari-7.ai.studio".equals(normalizedBase)
+                    || "https://hamseda-voice-suite.ai.studio".equals(normalizedBase)) {
                 baseUrl = DEFAULT_API_BASE;
+            } else {
+                baseUrl = normalizedBase;
             }
-            baseUrl = baseUrl.replaceAll("/+$", "");
 
             URL url = new URL(baseUrl + "/api/tts");
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();

@@ -16,10 +16,16 @@ import {
   normalizeAssistantText,
 } from '../utils/deviceIdentity';
 import {apiUrl, safeReadJsonResponse} from './apiConfig';
+import {isNativeAndroid, searchWebNative} from './nativeAndroidBridge';
 import {loadPersonalCallProfile} from '../utils/personalProfile';
 
 export interface PendingAssistantIntent {
-  type: 'awaiting_sms_body' | 'awaiting_sms_recipient' | 'awaiting_sms_confirmation' | 'awaiting_call_confirmation';
+  type:
+    | 'awaiting_sms_body'
+    | 'awaiting_sms_recipient'
+    | 'awaiting_sms_confirmation'
+    | 'awaiting_call_confirmation'
+    | 'awaiting_search_query';
   targetName?: string;
   targetPhone?: string;
   smsBody?: string;
@@ -290,7 +296,9 @@ export function parseOfflineAssistantCommand(
   if (ctx.pendingIntent && /^(لغو(ش)? کن|لغو|کنسل(ش)? کن|کنسل|بی ?خیال|بیخیال|ولش کن|نفرست|زنگ نزن|تماس نگیر|پشیمون شدم|انصراف|نه|خیر)$/.test(norm)) {
     return {action: 'answer', replyText: ctx.pendingIntent.type === 'awaiting_call_confirmation'
       ? 'باشه، تماس لغو شد و شماره‌گیری انجام نمی‌دم.'
-      : 'باشه، پیامک لغو شد و هیچ پیامی ارسال نمی‌شه.'};
+      : ctx.pendingIntent.type === 'awaiting_search_query'
+        ? 'باشه، جستجو لغو شد.'
+        : 'باشه، پیامک لغو شد و هیچ پیامی ارسال نمی‌شه.'};
   }
   if (ctx.pendingIntent?.type === 'awaiting_sms_confirmation') {
     if (/^(تایید|تأیید|بله|آره|اره|درسته|درست است|ارسال کن|بفرست|اوکی|باشه|تایید ارسال پیامک|تأیید ارسال پیامک|تایید و ارسال|تأیید و ارسال)$/.test(norm)) {
@@ -982,11 +990,19 @@ export async function processAssistantUtterance(
   const wake = extractCommandAfterWakeWord(rawTranscript, assistantName);
   const cleanedUtterance = wake.matched ? wake.command : rawTranscript.trim();
 
-  // A bare search request has no searchable subject; ask for it instead of
-  // sending a vague query to the cloud router.
+  // A bare search request (such as "در اینترنت جستجو کن" or "تو اینترنت سرچ کن")
+  // has no searchable subject yet; prompt for it cleanly instead of failing.
   const normalizedRequest = normalizeAssistantText(cleanedUtterance);
-  if (/^(تو اینترنت سرچ کن|اینترنت سرچ کن|برام سرچ کن|تو وب بگرد|جستجو کن|جست و جو کن|یه سرچ بزن)$/.test(normalizedRequest)) {
-    return {action: 'answer', replyText: 'حتماً رفیق، چی رو برات تو اینترنت پیدا کنم؟'};
+  const isBareSearchPhrase =
+    /^(?:(?:برام|لطفاً|لطفا|میشه|یه|یک)\s+)*(?:(?:در|توی|تو)\s+(?:اینترنت|وب|گوگل)\s+(?:جستجو|جست‌وجو|جست و جو|سرچ|پیدا|بگرد)\s*(?:کن|بکن)?|(?:جستجو|جست‌وجو|جست و جو|سرچ)\s*(?:کن|بکن|بزن)?(?:\s+(?:در|توی|تو)\s+(?:اینترنت|وب|گوگل))?|(?:اینترنت|گوگل)\s+(?:سرچ|جستجو|جست‌وجو|جست و جو)\s*(?:کن|بکن)?)$/.test(
+      normalizedRequest
+    );
+  if (ctx.pendingIntent?.type !== 'awaiting_search_query' && isBareSearchPhrase) {
+    return {
+      action: 'web_search',
+      query: '',
+      replyText: 'حتماً، درباره چه موضوعی در اینترنت جستجو کنم؟',
+    };
   }
 
   // Try deterministic fast parser first (works both online and offline)
@@ -1001,7 +1017,15 @@ export async function processAssistantUtterance(
 
   // Do not trust the browser's online flag as the sole gate for cloud requests.
   // Android WebView can report offline while the configured API is reachable.
-  // Try the real API; the catch below preserves a graceful offline fallback.
+  // Try the real API; the catch below runs direct on-device Android web search
+  // (or offline conversation fallback).
+
+  const rawQueryForWeb = cleanedUtterance || rawTranscript.trim();
+  const forceLiveSearch = ctx.pendingIntent?.type === 'awaiting_search_query';
+  const effectiveUtterance =
+    forceLiveSearch && !/(جستجو|سرچ|اینترنت|گوگل)/.test(normalizedRequest)
+      ? `در اینترنت جستجو کن درباره ${rawQueryForWeb}`
+      : rawQueryForWeb;
 
   const {timeStr, dateStr} = getCurrentPersianTimeAndDate();
   const storedProfile = loadPersonalCallProfile();
@@ -1017,7 +1041,7 @@ export async function processAssistantUtterance(
         headers: {'Content-Type': 'application/json'},
         signal: commandController.signal,
         body: JSON.stringify({
-          utterance: cleanedUtterance || rawTranscript.trim(),
+          utterance: effectiveUtterance,
           assistantName,
           deviceOwner: ctx.deviceOwner,
           myName: ctx.settings.myName,
@@ -1116,19 +1140,71 @@ export async function processAssistantUtterance(
 
     return result;
   } catch (err) {
-    const fallbackText = cleanedUtterance || rawTranscript.trim();
-    const isLiveWebQuery =
-      /(جستجو|سرچ|تو اینترنت|در اینترنت|تو وب|وب گردی|آب و هوا|اب و هوا|هواشناسی|دمای هوا|قیمت دلار|قیمت طلا|قیمت سکه|قیمت ارز|نرخ ارز|اخبار|خبر امروز|نتیجه بازی|جست و جو|دستور پخت|طرز تهیه|مواد لازم)/.test(
+    const fallbackText = (cleanedUtterance || rawTranscript.trim()).trim();
+    const isExplicitWebOrInfoQuery =
+      forceLiveSearch ||
+      /(جستجو|سرچ|تو اینترنت|در اینترنت|توی اینترنت|در گوگل|تو گوگل|تو وب|وب گردی|آب و هوا|اب و هوا|هواشناسی|دمای هوا|قیمت دلار|قیمت طلا|قیمت سکه|قیمت ارز|نرخ ارز|اخبار|خبر امروز|نتیجه بازی|جست و جو|دستور پخت|طرز تهیه|مواد لازم|چیست|کیست|چند است|چقدر است|چطور|کجاست|تاریخچه|معنی|ترجمه)/.test(
         normalizedRequest
       );
-    if (isLiveWebQuery) {
+    const isSmallTalkOnly =
+      /^(سلام|درود|صبح بخیر|صبحت بخیر|عصر بخیر|شب بخیر|خوبی|حالت چطوره|چه خبر|اسم تو چیه|اسمت چیه|تو کی هستی|خودتو معرفی کن|من کیم|اسم من چیه|منو می شناسی|منو میشناسی|ممنون|مرسی|دمت گرم|تشکر|یادت هست|یادته|درباره چی حرف می زدیم|چی گفتم|چه کارهایی می تونی|چیکار می تونی|چه قابلیت|چه امکاناتی)/.test(
+        normalizedRequest
+      );
+
+    // On Android APK, query the internet directly from Java (Open-Meteo, Wikipedia,
+    // DuckDuckGo + clickable Google link) without depending on AI Studio auth cookies.
+    if (isNativeAndroid() && (isExplicitWebOrInfoQuery || (!isSmallTalkOnly && fallbackText.length >= 3))) {
+      const nativeSearch = await searchWebNative(fallbackText);
+      if (nativeSearch.offline) {
+        return {
+          action: 'answer',
+          replyText: 'در این لحظه گوشی به وای‌فای یا اینترنت همراه متصل نیست. لطفاً اینترنت گوشی را روشن کنید و دوباره بپرسید.',
+        };
+      }
+      if (nativeSearch.needsQuery) {
+        return {
+          action: 'web_search',
+          query: '',
+          replyText: 'حتماً، درباره چه موضوعی در اینترنت جستجو کنم؟',
+        };
+      }
+      if (nativeSearch.ok && nativeSearch.replyText) {
+        return {
+          action: 'web_search',
+          query: nativeSearch.query || fallbackText,
+          replyText: nativeSearch.replyText,
+          links: nativeSearch.links && nativeSearch.links.length > 0 ? nativeSearch.links : undefined,
+        };
+      }
+      if (isExplicitWebOrInfoQuery) {
+        return {
+          action: 'web_search',
+          query: fallbackText,
+          replyText: `لینک جستجوی مستقیم «${fallbackText}» در گوگل آماده شد؛ برای دیدن نتایج روی لینک زیر بزنید.`,
+          links: [
+            {
+              title: `جستجوی «${fallbackText}» در گوگل`,
+              url: `https://www.google.com/search?q=${encodeURIComponent(fallbackText)}`,
+            },
+          ],
+        };
+      }
+    }
+
+    if (isExplicitWebOrInfoQuery) {
       const reason = err instanceof Error && err.message && !err.message.includes('Failed to fetch')
         ? ` (${err.message})`
         : '';
       return {
         action: 'web_search',
         query: fallbackText,
-        replyText: `در حال حاضر امکان جستجوی زنده اینترنتی برقرار نشد${reason}. لطفاً اتصال اینترنت یا دسترسی به سرور را بررسی کنید و دوباره امتحان کنید.`,
+        replyText: `در حال حاضر امکان دریافت پاسخ هوشمند سرور برقرار نشد${reason}؛ می‌توانید نتایج «${fallbackText}» را مستقیم در لینک گوگل زیر ببینید.`,
+        links: [
+          {
+            title: `جستجوی «${fallbackText}» در گوگل`,
+            url: `https://www.google.com/search?q=${encodeURIComponent(fallbackText)}`,
+          },
+        ],
       };
     }
     return {

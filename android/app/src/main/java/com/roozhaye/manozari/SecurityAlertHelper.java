@@ -69,7 +69,7 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public final class SecurityAlertHelper {
     private static final String PREFS = "rmz_native_prefs";
-    private static final String DEFAULT_API_BASE = "https://hamseda-voice-suite.ai.studio";
+    private static final String DEFAULT_API_BASE = "https://ais-pre-5dqrp6vmbjkluesjlbth6l-737153117526.europe-west2.run.app";
     private static final AtomicBoolean CAPTURE_IN_PROGRESS = new AtomicBoolean(false);
     private static final AtomicBoolean FLUSH_IN_PROGRESS = new AtomicBoolean(false);
 
@@ -385,9 +385,13 @@ public final class SecurityAlertHelper {
         if (webhookUrl.isEmpty()) webhookUrl = prefs.getString("security_webhook_url", "").trim();
 
         String baseUrl = prefs.getString("server_base_url", DEFAULT_API_BASE);
-        if (baseUrl == null || baseUrl.trim().isEmpty()
-                || "https://roozhaye-manozari-7.ai.studio".equals(baseUrl.replaceAll("/+$", ""))) {
+        String normalizedBase = baseUrl != null ? baseUrl.trim().replaceAll("/+$", "") : "";
+        if (normalizedBase.isEmpty()
+                || "https://roozhaye-manozari-7.ai.studio".equals(normalizedBase)
+                || "https://hamseda-voice-suite.ai.studio".equals(normalizedBase)) {
             baseUrl = DEFAULT_API_BASE;
+        } else {
+            baseUrl = normalizedBase;
         }
         String endpoint = baseUrl.replaceAll("/+$", "") + "/api/security-alert";
 
@@ -518,6 +522,35 @@ public final class SecurityAlertHelper {
             return false;
         } finally {
             if (conn != null) conn.disconnect();
+        }
+    }
+
+    public static boolean sendDirectWebhookTest(Context ctx, String webhookUrl, String backupEmail, String ownerName) {
+        if (webhookUrl == null || !webhookUrl.trim().startsWith("https://")) {
+            return false;
+        }
+        try {
+            SimpleDateFormat isoFmt = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US);
+            isoFmt.setTimeZone(TimeZone.getTimeZone("UTC"));
+            JSONObject rec = new JSONObject();
+            rec.put("ownerName", ownerName != null ? ownerName : "کاربر هم‌صدا");
+            rec.put("reason", "android_webhook_test");
+            rec.put("attemptCount", 1);
+            rec.put("timestampIso", isoFmt.format(new Date()));
+            rec.put("deviceModel", Build.MANUFACTURER + " " + Build.MODEL);
+            JSONObject net = getNetworkSnapshot(ctx);
+            rec.put("networkType", net.optString("networkType", "unknown"));
+            rec.put("vpnActive", net.optBoolean("vpnActive", false));
+            Location loc = acquireBestLocation(ctx);
+            if (loc != null) {
+                rec.put("lat", loc.getLatitude());
+                rec.put("lng", loc.getLongitude());
+                rec.put("accuracyMeters", Math.round(loc.getAccuracy()));
+                rec.put("mapsUrl", String.format(Locale.US, "https://maps.google.com/?q=%.6f,%.6f", loc.getLatitude(), loc.getLongitude()));
+            }
+            return tryDirectWebhookPost(webhookUrl.trim(), rec, backupEmail != null ? backupEmail.trim() : "");
+        } catch (Exception ignored) {
+            return false;
         }
     }
 
