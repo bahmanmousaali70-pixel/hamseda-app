@@ -204,11 +204,14 @@ export const CallsView: React.FC<CallsViewProps> = ({displayName, visible, onOpe
     if (!identity) return;
     const stop = watchIncomingVoiceCalls(
       identity.uid,
-      (calls) => setIncomingCalls(calls),
+      (calls) => {
+        setIncomingCalls(calls);
+        if (calls.some((call) => call.status === 'ringing')) onOpenCalls();
+      },
       (err) => setError(err.message)
     );
     return stop;
-  }, [identity]);
+  }, [identity, onOpenCalls]);
 
   useEffect(() => {
     if (!remoteStream || !audioRef.current) return;
@@ -219,7 +222,7 @@ export const CallsView: React.FC<CallsViewProps> = ({displayName, visible, onOpe
   useEffect(() => {
     if (!autoAnswer || !identity || activeCall || busy) return;
     const trustedIncoming = incomingCalls.find((call) =>
-      trustedUids.includes(call.callerUid) && !autoAnsweredRef.current.has(call.id)
+      call.status === 'ringing' && trustedUids.includes(call.callerUid) && !autoAnsweredRef.current.has(call.id)
     );
     if (trustedIncoming) {
       autoAnsweredRef.current.add(trustedIncoming.id);
