@@ -735,5 +735,79 @@ service cloud.firestore {
         allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(choreId) && isSpaceMember(spaceId);
       }
     }
+    // Hamseda app-to-app audio calling. Anonymous Firebase Auth users are allowed,
+    // but every call and ICE record is restricted to its two participants.
+    match /voiceInvites/{inviteCode} {
+      allow get: if request.auth != null && inviteCode.matches('^[A-Z0-9]{8}$');
+      allow list: if false;
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['uid', 'displayName', 'createdAt', 'updatedAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() >= 1
+        && request.resource.data.displayName.size() <= 48
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if request.auth != null
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'displayName', 'createdAt', 'updatedAt'])
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() >= 1
+        && request.resource.data.displayName.size() <= 48
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
+    }
+
+    match /voiceCalls/{callId} {
+      function isCallParticipant() {
+        return request.auth != null
+          && (resource.data.callerUid == request.auth.uid || resource.data.calleeUid == request.auth.uid);
+      }
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['callerUid', 'calleeUid', 'callerName', 'calleeName', 'offer', 'status', 'createdAt', 'updatedAt'])
+        && request.resource.data.callerUid == request.auth.uid
+        && request.resource.data.calleeUid is string
+        && request.resource.data.calleeUid != request.auth.uid
+        && request.resource.data.callerName is string
+        && request.resource.data.callerName.size() <= 48
+        && request.resource.data.calleeName is string
+        && request.resource.data.calleeName.size() <= 48
+        && request.resource.data.offer is map
+        && request.resource.data.status == 'ringing'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow get, list: if isCallParticipant();
+      allow update: if isCallParticipant()
+        && request.resource.data.callerUid == resource.data.callerUid
+        && request.resource.data.calleeUid == resource.data.calleeUid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['answer', 'status', 'updatedAt', 'endedByUid'])
+        && request.resource.data.status in ['connecting', 'active', 'ended', 'rejected']
+        && request.resource.data.updatedAt == request.time
+        && (!('endedByUid' in request.resource.data) || request.resource.data.endedByUid == request.auth.uid)
+        && (!('answer' in request.resource.data) || request.resource.data.answer is map);
+      allow delete: if false;
+
+      match /ice/{iceId} {
+        function parentCall() {
+          return get(/databases/$(database)/documents/voiceCalls/$(callId)).data;
+        }
+        allow create: if request.auth != null
+          && request.resource.data.keys().hasOnly(['fromUid', 'toUid', 'candidate', 'createdAt'])
+          && request.resource.data.fromUid == request.auth.uid
+          && request.resource.data.toUid is string
+          && request.resource.data.toUid != request.auth.uid
+          && (parentCall().callerUid == request.auth.uid || parentCall().calleeUid == request.auth.uid)
+          && (parentCall().callerUid == request.resource.data.toUid || parentCall().calleeUid == request.resource.data.toUid)
+          && request.resource.data.candidate is map
+          && request.resource.data.createdAt == request.time;
+        allow get, list: if request.auth != null
+          && resource.data.toUid == request.auth.uid
+          && (parentCall().callerUid == request.auth.uid || parentCall().calleeUid == request.auth.uid);
+        allow update, delete: if false;
+      }
+    }
+
   }
 }
