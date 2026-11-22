@@ -1756,9 +1756,13 @@ async function searchIranianMusicWeb(query: string): Promise<{tracks: ServerMusi
   for (const result of searches) {
     if (result.status !== 'fulfilled') continue;
     for (const item of result.value) {
-      if (seen.has(item.url)) continue;
-      seen.add(item.url);
-      found.push(item);
+      try {
+        const host = new URL(item.url).hostname.toLowerCase();
+        const trustedIranianCatalog = IRANIAN_MUSIC_SEARCH_HOSTS.some((domain) => host === domain || host.endsWith('.' + domain));
+        if (!trustedIranianCatalog || seen.has(item.url)) continue;
+        seen.add(item.url);
+        found.push(item);
+      } catch {}
     }
   }
   const pageTracks = await Promise.all(found.slice(0, 18).map((item) => extractPublicMusicPage(item)));
@@ -2759,14 +2763,21 @@ function decodeSearchHtml(value: string): string {
 function unwrapSearchUrl(rawUrl: string, base: string): string {
   try {
     const parsed = new URL(rawUrl, base);
-    const redirected =
-      parsed.searchParams.get('q') ||
+    let redirected =
       parsed.searchParams.get('uddg') ||
-      parsed.searchParams.get('url');
+      parsed.searchParams.get('url') ||
+      parsed.searchParams.get('q');
+    if (!redirected && /(?:^|\.)bing\.com$/i.test(parsed.hostname)) {
+      const encoded = parsed.searchParams.get('u') || '';
+      if (encoded.startsWith('a1')) {
+        const decoded = Buffer.from(encoded.slice(2), 'base64').toString('utf8');
+        if (/^https?:\/\//i.test(decoded)) redirected = decoded;
+      }
+    }
     const candidate = redirected ? decodeURIComponent(redirected) : parsed.href;
     if (
       /^https?:\/\//i.test(candidate) &&
-      !/^(https?:\/\/)?(www\.)?(google|duckduckgo)\.com\//i.test(candidate)
+      !/^(https?:\/\/)?(www\.)?(google|duckduckgo|bing)\.com\//i.test(candidate)
     ) {
       return candidate;
     }
