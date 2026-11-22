@@ -1695,7 +1695,7 @@ function musicQueryVariants(raw: string): string[] {
 
 async function extractPublicMusicPage(result: PublicSearchResult): Promise<ServerMusicTrack | null> {
   const page = isSafePublicAudioUrl(result.url);
-  if (!page || !IRANIAN_MUSIC_SEARCH_HOSTS.some((host) => page.hostname === host || page.hostname.endsWith('.' + host))) return null;
+  if (!page || !(page.hostname.endsWith('.ir') || IRANIAN_MUSIC_SEARCH_HOSTS.some((host) => page.hostname === host || page.hostname.endsWith('.' + host)))) return null;
   try {
     const response = await fetch(page.href, {
       headers: {
@@ -1748,10 +1748,13 @@ async function searchIranianMusicWeb(query: string): Promise<{tracks: ServerMusi
     ['iranibeat.ir', 'iromusic.live', 'hailymusic.ir', 'biya2ahang.ir'],
     ['music.iranseda.ir', 'beeptunes.com'],
   ];
-  const searches = await Promise.allSettled(hostGroups.map((hosts, index) => {
-    const q = variants[index % variants.length] || query;
-    return searchPublicWeb(`(${hosts.map((h) => 'site:' + h).join(' OR ')}) "${q}"`);
-  }));
+  const searches = await Promise.allSettled([
+    ...hostGroups.map((hosts, index) => {
+      const q = variants[index % variants.length] || query;
+      return searchPublicWeb(`(${hosts.map((h) => 'site:' + h).join(' OR ')}) "${q}"`);
+    }),
+    searchPublicWeb(`"${variants[0] || query}" (آهنگ OR موزیک OR موسیقی OR آلبوم OR album) فارسی`),
+  ]);
   const found: PublicSearchResult[] = [];
   const seen = new Set<string>();
   for (const result of searches) {
@@ -1759,7 +1762,7 @@ async function searchIranianMusicWeb(query: string): Promise<{tracks: ServerMusi
     for (const item of result.value) {
       try {
         const host = new URL(item.url).hostname.toLowerCase();
-        const trustedIranianCatalog = IRANIAN_MUSIC_SEARCH_HOSTS.some((domain) => host === domain || host.endsWith('.' + domain));
+        const trustedIranianCatalog = host.endsWith('.ir') || IRANIAN_MUSIC_SEARCH_HOSTS.some((domain) => host === domain || host.endsWith('.' + domain));
         if (!trustedIranianCatalog || seen.has(item.url)) continue;
         seen.add(item.url);
         found.push(item);
