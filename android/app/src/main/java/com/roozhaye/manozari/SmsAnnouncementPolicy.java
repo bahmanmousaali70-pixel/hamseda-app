@@ -20,10 +20,11 @@ public final class SmsAnnouncementPolicy {
         String blocked = p.getString("sms_blocked_senders", "");
         if (containsEntry(blocked, s) || containsEntry(blocked, a)) return false;
         if (containsAny(b, p.getString("sms_blocked_keywords", ""))) return false;
-        if (p.getBoolean("sms_skip_bank_and_otp", true) && isBankOrFinancialSms(s + " " + a, b)) return false;
+        boolean hasLink = SmsLinkAnnouncementHelper.containsLink(body);
+        if (!hasLink && p.getBoolean("sms_skip_bank_and_otp", true) && isBankOrFinancialSms(s + " " + a, b)) return false;
         String important = p.getString("sms_important_senders", "");
         if (containsEntry(important, s) || containsEntry(important, a)) return true;
-        if (p.getBoolean("sms_filter_operator_promotions", true) && isOperatorPromotion(s + " " + a, b)) return false;
+        if (!hasLink && p.getBoolean("sms_filter_operator_promotions", true) && isOperatorPromotion(s + " " + a, b)) return false;
         return true;
     }
 
