@@ -41,7 +41,12 @@ public final class SmsLinkAnnouncementHelper {
             if (!spoken.isEmpty()) hosts.add(spoken);
             if (hosts.size() >= 3) break;
         }
-        return String.join("، ", hosts);
+        StringBuilder joined = new StringBuilder();
+        for (String item : hosts) {
+            if (joined.length() > 0) joined.append("، ");
+            joined.append(item);
+        }
+        return joined.toString();
     }
 
     private static String speakHost(String host) {
