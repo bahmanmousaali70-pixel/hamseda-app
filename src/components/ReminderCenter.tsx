@@ -18,7 +18,7 @@ const DAYS_LABELS: Record<ScheduledAnnouncement['days'], string> = {
 };
 
 interface ReminderCenterProps {
-  settings: AppSettings;
+  settings: Pick<AppSettings, 'backgroundKeepAlive' | 'autoOpenMorning' | 'defaultVoice'>;
   schedules: ScheduledAnnouncement[];
   notifPermission: NotificationPermission;
   keepAliveActive: boolean;
