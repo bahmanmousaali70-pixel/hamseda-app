@@ -1055,39 +1055,6 @@ export const CallerAnnouncerView: React.FC<CallerAnnouncerViewProps> = ({
           </div>
         </div>
 
-        {/* Xiaomi Mi 10T Pro / MIUI 14 Practical Guide */}
-        <div className="lg:col-span-5 rounded-2xl bg-white dark:bg-[#121E1C] border border-slate-200/80 dark:border-emerald-950/70 p-6 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
-              <Smartphone className="w-5 h-5" />
-              <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                راه‌اندازی روی Xiaomi Mi 10T Pro (MIUI 14)
-              </h2>
-            </div>
-            <p className="mt-2.5 text-xs leading-6 text-slate-600 dark:text-slate-300">
-              مرورگر وب به‌طور مستقیم اجازه شنود تماس‌های مخابراتی گوشی را ندارد؛ اما با دو روش کاربردی زیر می‌توانید روی گوشی <strong>Mi 10T Pro (Android 12 / MIUI 14)</strong> دقیقاً همین صدای روان فارسی و لاتین را هنگام زنگ خوردن بشنوید:
-            </p>
-
-            <ol className="mt-4 space-y-3 text-xs leading-6 text-slate-700 dark:text-slate-300">
-              <li className="flex items-start gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-700 dark:text-emerald-400 shrink-0 mt-0.5" />
-                <span>
-                  <strong>روش ۱ (۱۰۰٪ آفلاین با زنگ اختصاصی):</strong> دکمه <em>«دانلود زنگ WAV»</em> کنار هر مخاطب را بزنید. فایل ترکیبی زنگ + صدای روان فارسی/لاتین ذخیره می‌شود. سپس در برنامه <strong>Contacts (مخاطبین)</strong> شیائومی روی مخاطب بزنید و آن فایل را به عنوان <strong>آهنگ زنگ اختصاصی</strong> انتخاب کنید.
-                </span>
-              </li>
-              <li className="flex items-start gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-700 dark:text-emerald-400 shrink-0 mt-0.5" />
-                <span>
-                  <strong>روش ۲ (اعلام خودکار همه شماره‌ها در MIUI 14):</strong> در گوشی به مسیر{' '}
-                  <span className="font-medium text-slate-900 dark:text-white">
-                    تنظیمات ← تنظیمات بیشتر ← زبان و ورودی ← خروجی تبدیل متن به گفتار
-                  </span>{' '}
-                  بروید، <em>Speech Services by Google</em> را انتخاب و زبان فارسی را دانلود کنید؛ سپس در برنامه تلفن (Phone) گزینه <em>اعلام شناسه تماس‌گیرنده</em> را روشن کنید.
-                </span>
-              </li>
-            </ol>
-          </div>
-        </div>
       </section>
 
       {/* Add Caller + Directory */}
