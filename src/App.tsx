@@ -4,6 +4,7 @@ import {AssistantView} from './components/AssistantView';
 import {CallerAnnouncerView} from './components/CallerAnnouncerView';
 import {DriveModeModal} from './components/DriveModeModal';
 import {GratitudeView} from './components/GratitudeView';
+import {FamilyLifeSuite} from './components/FamilyLifeSuite';
 import {advanceDateKey} from './components/LifeToolsView';
 import {NightAndMessagesView} from './components/NightAndMessagesView';
 import {SyncSettingsView} from './components/SyncSettingsView';
@@ -2068,7 +2069,9 @@ export default function App() {
         onOpenDriveMode={() => setDriveModeOpen(true)}
       />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-28 lg:pb-12">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-20 lg:pb-8">
+        {activeTab === 'family' && <FamilyLifeSuite />}
+
         {activeTab === 'today' && (
           <TodayView
             goals={goals}
@@ -2077,6 +2080,12 @@ export default function App() {
             expenses={expenses}
             monthlyBudget={monthlyBudget}
             bills={bills}
+            schedules={schedules}
+            notifPermission={notifPermission}
+            keepAliveActive={keepAliveActive}
+            backgroundKeepAlive={settings.backgroundKeepAlive}
+            autoOpenMorning={settings.autoOpenMorning}
+            defaultVoiceForReminder={settings.defaultVoice}
             meds={meds}
             meals={meals}
             vaultNotes={vaultNotes}
@@ -2115,6 +2124,15 @@ export default function App() {
             onAddBill={handleAddBill}
             onToggleBillPaid={handleToggleBillPaid}
             onDeleteBill={handleDeleteBill}
+            onUpdateSettings={handleUpdateSettings}
+            onRequestNotificationPermission={requestNotificationPermission}
+            onToggleKeepAlive={handleToggleKeepAlive}
+            onAddSchedule={handleAddSchedule}
+            onToggleSchedule={handleToggleSchedule}
+            onUpdateSchedule={handleUpdateSchedule}
+            onDeleteSchedule={handleDeleteSchedule}
+            onTestSchedule={(item) => handleTriggerSchedule(item, true)}
+            onDownloadScheduleAlarm={handleDownloadScheduleAlarm}
             onAddMed={handleAddMed}
             onToggleMedTakenToday={handleToggleMedTakenToday}
             onToggleMedEnabled={handleToggleMedEnabled}
@@ -2358,7 +2376,7 @@ export default function App() {
         onStatusToast={showToast}
       />
 
-      <footer className="border-t border-[#E6E2D8] dark:border-emerald-950/60 py-5 pb-24 lg:pb-6 px-4 text-center text-xs text-slate-500 dark:text-slate-400 space-y-1.5">
+      <footer className="border-t border-[#E6E2D8] dark:border-emerald-950/60 py-4 pb-[calc(68px+env(safe-area-inset-bottom)+8px)] lg:pb-4 px-4 text-center text-xs text-slate-500 dark:text-slate-400 space-y-1.5">
         <div>
           هم‌صدا · برنامه‌ریزی روزانه، لیست خرید و غذا، مالی و تسویه، دارو، مناسبت‌ها، سفر، حالت رانندگی و دستیار صوتی فارسی
         </div>

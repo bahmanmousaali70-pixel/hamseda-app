@@ -56,6 +56,7 @@ import type {
   QuickVaultNote,
   ShoppingCategory,
   ShoppingItem,
+  ScheduledAnnouncement,
   SpecialEventItem,
   SpecialEventKind,
   TimeBlock,
@@ -81,6 +82,7 @@ import {
   QuickVaultPanel,
 } from './LifeToolsView';
 import {ExpenseTrackerPanel, ShoppingChecklistPanel} from './PracticalToolsView';
+import {ReminderCenter} from './ReminderCenter';
 
 interface TodayViewProps {
   goals: GoalItem[];
@@ -89,6 +91,12 @@ interface TodayViewProps {
   expenses: ExpenseEntry[];
   monthlyBudget: number;
   bills: BillReminderItem[];
+  schedules: ScheduledAnnouncement[];
+  notifPermission: NotificationPermission;
+  keepAliveActive: boolean;
+  backgroundKeepAlive: boolean;
+  autoOpenMorning: boolean;
+  defaultVoiceForReminder: VoiceName;
   meds: MedicationItem[];
   meals: MealPlanEntry[];
   vaultNotes: QuickVaultNote[];
@@ -127,6 +135,15 @@ interface TodayViewProps {
   onAddBill: (bill: Omit<BillReminderItem, 'id' | 'createdAt' | 'paid'>) => void;
   onToggleBillPaid: (id: string, logAsExpense: boolean) => void;
   onDeleteBill: (id: string) => void;
+  onUpdateSettings: (patch: Partial<import('../types/app').AppSettings>) => void;
+  onRequestNotificationPermission: () => void;
+  onToggleKeepAlive: (enabled: boolean) => void;
+  onAddSchedule: (schedule: Omit<ScheduledAnnouncement, 'id'>) => void;
+  onToggleSchedule: (id: string) => void;
+  onUpdateSchedule: (id: string, patch: Partial<ScheduledAnnouncement>) => void;
+  onDeleteSchedule: (id: string) => void;
+  onTestSchedule: (schedule: ScheduledAnnouncement) => void;
+  onDownloadScheduleAlarm: (schedule: ScheduledAnnouncement) => Promise<void>;
   onAddMed: (item: Omit<MedicationItem, 'id' | 'createdAt' | 'takenDates'>) => void;
   onToggleMedTakenToday: (id: string) => void;
   onToggleMedEnabled: (id: string) => void;
@@ -187,6 +204,12 @@ export const TodayView: React.FC<TodayViewProps> = ({
   expenses,
   monthlyBudget,
   bills,
+  schedules,
+  notifPermission,
+  keepAliveActive,
+  backgroundKeepAlive,
+  autoOpenMorning,
+  defaultVoiceForReminder,
   meds,
   meals,
   vaultNotes,
@@ -225,6 +248,15 @@ export const TodayView: React.FC<TodayViewProps> = ({
   onAddBill,
   onToggleBillPaid,
   onDeleteBill,
+  onUpdateSettings,
+  onRequestNotificationPermission,
+  onToggleKeepAlive,
+  onAddSchedule,
+  onToggleSchedule,
+  onUpdateSchedule,
+  onDeleteSchedule,
+  onTestSchedule,
+  onDownloadScheduleAlarm,
   onAddMed,
   onToggleMedTakenToday,
   onToggleMedEnabled,
@@ -430,8 +462,8 @@ export const TodayView: React.FC<TodayViewProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Practical Daily Workspace Switcher (5 clean sections) */}
-      <div className="luxury-card p-2 grid grid-cols-2 lg:grid-cols-5 gap-1.5">
+      {/* Practical Daily Workspace Switcher (6 clean sections) */}
+      <div className="luxury-card p-2 grid grid-cols-2 lg:grid-cols-6 gap-1.5">
         <button
           type="button"
           onClick={() => onChangeSubSection('planner')}
@@ -443,6 +475,19 @@ export const TodayView: React.FC<TodayViewProps> = ({
         >
           <CalendarCheck className={`w-4 h-4 shrink-0 ${activeSubSection === 'planner' ? 'text-amber-300' : 'text-emerald-700 dark:text-emerald-400'}`} />
           <span>برنامه و گزارش روز</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onChangeSubSection('reminders')}
+          className={`min-h-[46px] px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+            activeSubSection === 'reminders'
+              ? 'bg-emerald-800 text-white shadow-xs'
+              : 'text-slate-600 dark:text-slate-300 hover:bg-[#F0EEE8] dark:hover:bg-emerald-950/40'
+          }`}
+        >
+          <Bell className={`w-4 h-4 shrink-0 ${activeSubSection === 'reminders' ? 'text-amber-300' : 'text-emerald-700 dark:text-emerald-400'}`} />
+          <span>یادآورها</span>
         </button>
 
         <button
@@ -498,7 +543,24 @@ export const TodayView: React.FC<TodayViewProps> = ({
         </button>
       </div>
 
-      {activeSubSection === 'shopping_meals' ? (
+      {activeSubSection === 'reminders' ? (
+        <ReminderCenter
+          settings={{backgroundKeepAlive, autoOpenMorning, defaultVoice: defaultVoiceForReminder}}
+          schedules={schedules}
+          notifPermission={notifPermission}
+          keepAliveActive={keepAliveActive}
+          onUpdateSettings={onUpdateSettings}
+          onRequestNotificationPermission={onRequestNotificationPermission}
+          onToggleKeepAlive={onToggleKeepAlive}
+          onAddSchedule={onAddSchedule}
+          onToggleSchedule={onToggleSchedule}
+          onUpdateSchedule={onUpdateSchedule}
+          onDeleteSchedule={onDeleteSchedule}
+          onTestSchedule={onTestSchedule}
+          onDownloadScheduleAlarm={onDownloadScheduleAlarm}
+          onStatusToast={onStatusToast ?? (() => {})}
+        />
+      ) : activeSubSection === 'shopping_meals' ? (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2 p-1.5 luxury-card w-fit">
             <button

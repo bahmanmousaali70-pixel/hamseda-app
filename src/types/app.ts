@@ -1,4 +1,4 @@
-export type AppTab = 'today' | 'assistant' | 'gratitude' | 'night' | 'voice' | 'caller' | 'sync';
+export type AppTab = 'today' | 'assistant' | 'gratitude' | 'night' | 'voice' | 'caller' | 'sync' | 'family';
 
 export type OwnerRole = 'man' | 'zari' | 'both';
 
@@ -211,7 +211,7 @@ export interface HomeChoreItem {
 
 export type PersonalityFocusId = 'analytical' | 'creative' | 'sensitive' | 'active' | 'calm_leader';
 
-export type TodaySubSection = 'planner' | 'shopping_meals' | 'finance_bills' | 'health_vault' | 'growth_lab';
+export type TodaySubSection = 'planner' | 'reminders' | 'shopping_meals' | 'finance_bills' | 'health_vault' | 'growth_lab';
 
 export interface AppSettings {
   theme: 'light' | 'dark';
