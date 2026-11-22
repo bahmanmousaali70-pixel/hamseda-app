@@ -43,6 +43,7 @@ import {
 } from '../services/speechEngine';
 import type {AppSettings, CallerContact, DeviceOwner, SyncedPhoneContact, VoiceName} from '../types/app';
 import {getPartnerNameForDevice} from '../utils/deviceIdentity';
+import {buildSmsSpokenScript, isNumericOrShortcodeSender} from '../utils/smsFormatters';
 
 interface CallerAnnouncerViewProps {
   callers: CallerContact[];
@@ -483,17 +484,18 @@ export const CallerAnnouncerView: React.FC<CallerAnnouncerViewProps> = ({
   };
 
   const handleTestSms = async () => {
-    const sender = smsSender.trim() || 'مخاطب';
+    const sender = smsSender.trim();
     const body = smsBody.trim() || 'پیام جدید دارید.';
     unlockAudioPlayback();
     setSmsTesting(true);
     try {
-      const script = `پیامک جدید از طرف ${sender}. متن پیام: ${body}`;
+      const script = buildSmsSpokenScript(sender, body, {summarize: true, prefixLabel: 'پیامک جدید'});
+      const isUnnamedSender = isNumericOrShortcodeSender(sender);
       await playSoftChime('gentle');
       let hadError = false;
       const src = await speakFluentPersian({
         text: script,
-        title: `پیامک از ${sender}`,
+        title: isUnnamedSender ? 'پیامک جدید' : `پیامک از ${sender}`,
         category: 'caller',
         voiceName: testVoice,
         rate: speechRate,
@@ -795,10 +797,15 @@ export const CallerAnnouncerView: React.FC<CallerAnnouncerViewProps> = ({
                 type="text"
                 value={smsBody}
                 onChange={(e) => setSmsBody(e.target.value)}
-                placeholder="متن پیامک ورودی..."
+                placeholder="مثلاً: بسته شما ارسال شد https://tapnfc.ir/track?id=123"
                 className="w-full min-h-[44px] px-3.5 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50/70 dark:bg-[#0B1312] text-sm text-slate-900 dark:text-white"
               />
             </div>
+          </div>
+
+          <div className="rounded-xl bg-slate-50/80 dark:bg-[#0B1312] border border-slate-200/80 dark:border-emerald-900/60 px-3.5 py-2.5 text-xs leading-6 text-slate-700 dark:text-slate-300">
+            <span className="font-semibold text-emerald-800 dark:text-emerald-300">خروجی گفتاری هوشمند (لینک فقط نام سایت · سرشماره عددی حذف): </span>
+            <span>{buildSmsSpokenScript(smsSender, smsBody || 'پیام جدید دارید.')}</span>
           </div>
 
           <button

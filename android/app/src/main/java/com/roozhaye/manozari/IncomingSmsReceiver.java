@@ -56,8 +56,8 @@ public class IncomingSmsReceiver extends BroadcastReceiver {
         }
 
         String body = fullBody.toString().trim();
-        if (body.length() > 240) {
-            body = body.substring(0, 240);
+        if (body.length() > 450) {
+            body = body.substring(0, 450);
         }
 
         String senderName = lookupContactName(context, originatingAddress);
@@ -73,16 +73,17 @@ public class IncomingSmsReceiver extends BroadcastReceiver {
         if (!SmsAnnouncementPolicy.shouldAnnounce(context, originatingAddress, senderName, body)) {
             return;
         }
-        body = SmsAnnouncementPolicy.spokenBody(context, body);
 
         boolean isMale = "male".equals(prefs.getString("default_voice_gender", "female"));
         String voiceName = prefs.getString("default_voice_name", isMale ? "Charon" : "Kore");
-        String spokenSender = FinglishPhoneticHelper.resolveSenderDisplayName(context, senderName);
-        String spoken = "پیامک جدید از طرف " + spokenSender + ". متن پیام: " + (body.isEmpty() ? "بدون متن" : body);
+        String spoken = SmsAnnouncementPolicy.buildSpokenAnnouncement(context, senderName, body, "پیامک جدید");
+        String notifLabel = SmsAnnouncementPolicy.isNumericOrShortcodeSender(senderName)
+                ? "پیامک جدید"
+                : ("پیامک جدید: " + senderName);
 
         CallAnnouncerService.announce(
                 context.getApplicationContext(),
-                "پیامک جدید: " + senderName,
+                notifLabel,
                 spoken,
                 voiceName,
                 isMale,

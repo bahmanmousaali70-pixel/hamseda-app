@@ -88,6 +88,7 @@ public class KeepAliveForegroundService extends Service {
         }
 
         ScheduleAlarmHelper.rescheduleAll(this);
+        SecurityAlertHelper.flushPendingAlertsAsync(this);
         return START_STICKY;
     }
 
@@ -154,7 +155,7 @@ public class KeepAliveForegroundService extends Service {
                 lastObservedSmsId = id;
 
                 String safeBody = body != null ? body.trim() : "";
-                if (safeBody.length() > 240) safeBody = safeBody.substring(0, 240);
+                if (safeBody.length() > 450) safeBody = safeBody.substring(0, 450);
 
                 String sender = resolveContactDisplay(address);
                 if (sender == null || sender.trim().isEmpty()) {
@@ -164,15 +165,20 @@ public class KeepAliveForegroundService extends Service {
                 if (IncomingSmsReceiver.shouldSkipDuplicateSms(sender, safeBody)) {
                     return;
                 }
+                if (!SmsAnnouncementPolicy.shouldAnnounce(this, address, sender, safeBody)) {
+                    return;
+                }
 
                 boolean isMale = "male".equals(prefs.getString("default_voice_gender", "female"));
                 String voiceName = prefs.getString("default_voice_name", isMale ? "Charon" : "Kore");
-                String spokenSender = FinglishPhoneticHelper.resolveSenderDisplayName(this, sender);
-                String spoken = "پیامک جدید از طرف " + spokenSender + ". متن پیام: " + (safeBody.isEmpty() ? "بدون متن" : safeBody);
+                String spoken = SmsAnnouncementPolicy.buildSpokenAnnouncement(this, sender, safeBody, "پیامک جدید");
+                String notifLabel = SmsAnnouncementPolicy.isNumericOrShortcodeSender(sender)
+                        ? "پیامک جدید"
+                        : ("پیامک جدید: " + sender);
 
                 CallAnnouncerService.announce(
                         getApplicationContext(),
-                        "پیامک جدید: " + sender,
+                        notifLabel,
                         spoken,
                         voiceName,
                         isMale,

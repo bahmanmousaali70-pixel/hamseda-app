@@ -81,8 +81,8 @@ public class NotificationSmsListenerService extends NotificationListenerService 
             return;
         }
 
-        if (body.length() > 240) {
-            body = body.substring(0, 240);
+        if (body.length() > 450) {
+            body = body.substring(0, 450);
         }
 
         if (IncomingSmsReceiver.shouldSkipDuplicateSms(title, body)) {
@@ -91,16 +91,17 @@ public class NotificationSmsListenerService extends NotificationListenerService 
         if (!SmsAnnouncementPolicy.shouldAnnounce(getApplicationContext(), title, title, body)) {
             return;
         }
-        body = SmsAnnouncementPolicy.spokenBody(getApplicationContext(), body);
 
         boolean isMale = "male".equals(prefs.getString("default_voice_gender", "female"));
         String voiceName = prefs.getString("default_voice_name", isMale ? "Charon" : "Kore");
-        String spokenSender = FinglishPhoneticHelper.resolveSenderDisplayName(getApplicationContext(), title);
-        String spoken = "پیام جدید از طرف " + spokenSender + ". متن پیام: " + body;
+        String spoken = SmsAnnouncementPolicy.buildSpokenAnnouncement(getApplicationContext(), title, body, "پیام جدید");
+        String notifLabel = SmsAnnouncementPolicy.isNumericOrShortcodeSender(title)
+                ? "پیام جدید"
+                : ("پیام جدید: " + title);
 
         CallAnnouncerService.announce(
                 getApplicationContext(),
-                "پیام جدید: " + title,
+                notifLabel,
                 spoken,
                 voiceName,
                 isMale,

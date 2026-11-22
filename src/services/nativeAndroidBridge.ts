@@ -24,6 +24,9 @@ export interface NativeCapabilities {
   callPhone?: boolean;
   sendSms?: boolean;
   writeSettings?: boolean;
+  camera?: boolean;
+  location?: boolean;
+  accessibility?: boolean;
 }
 
 interface NativeSchedulePayload {
@@ -181,6 +184,50 @@ interface RoozhayeNativePlugin {
     needsWriteSettings?: boolean;
     needsAccessibility?: boolean;
   }>;
+  getSecurityGuardStatus(): Promise<{
+    ok: boolean;
+    enabled?: boolean;
+    hasPin?: boolean;
+    backupEmail?: string;
+    webhookUrl?: string;
+    cameraGranted?: boolean;
+    locationGranted?: boolean;
+    accessibilityEnabled?: boolean;
+    overlayGranted?: boolean;
+    vpnActive?: boolean;
+    networkConnected?: boolean;
+    networkType?: string;
+    queuedAlertsCount?: number;
+    recentAlertsJson?: string;
+    error?: string;
+  }>;
+  setSecurityGuardConfig(options: {
+    enabled: boolean;
+    pin?: string;
+    clearPin?: boolean;
+    backupEmail?: string;
+    webhookUrl?: string;
+    serverBaseUrl?: string;
+  }): Promise<{
+    ok: boolean;
+    enabled?: boolean;
+    hasPin?: boolean;
+    backupEmail?: string;
+    webhookUrl?: string;
+    cameraGranted?: boolean;
+    locationGranted?: boolean;
+    accessibilityEnabled?: boolean;
+    overlayGranted?: boolean;
+    vpnActive?: boolean;
+    networkConnected?: boolean;
+    networkType?: string;
+    queuedAlertsCount?: number;
+    recentAlertsJson?: string;
+  }>;
+  requestSecurityPermissions(): Promise<NativeCapabilities>;
+  triggerTestPowerGuard(): Promise<{ok: boolean; message?: string}>;
+  flushPendingSecurityAlerts(): Promise<{ok: boolean}>;
+  clearSecurityAlertsLog(): Promise<{ok: boolean}>;
 }
 
 const RoozhayeNative = registerPlugin<RoozhayeNativePlugin>('RoozhayeNative');
@@ -867,5 +914,182 @@ export async function executeDeviceActionNative(options: {
     return await RoozhayeNative.executeDeviceAction(options);
   } catch (err) {
     return {ok: false, message: err instanceof Error ? err.message : 'خطا در اجرای دستور روی گوشی'};
+  }
+}
+
+export interface SecurityAlertRecord {
+  id: string;
+  createdAt: number;
+  timestampIso: string;
+  reason: string;
+  attemptCount: number;
+  mapsUrl: string;
+  sent: boolean;
+  emailSent: boolean;
+  dispatchStatus: string;
+  hasFrontPhoto: boolean;
+  hasBackPhoto: boolean;
+}
+
+export interface SecurityGuardStatus {
+  ok: boolean;
+  enabled: boolean;
+  hasPin: boolean;
+  backupEmail: string;
+  webhookUrl: string;
+  cameraGranted: boolean;
+  locationGranted: boolean;
+  accessibilityEnabled: boolean;
+  overlayGranted: boolean;
+  vpnActive: boolean;
+  networkConnected: boolean;
+  networkType: string;
+  queuedAlertsCount: number;
+  recentAlerts: SecurityAlertRecord[];
+  error?: string;
+}
+
+function parseSecurityGuardResponse(res: {
+  ok: boolean;
+  enabled?: boolean;
+  hasPin?: boolean;
+  backupEmail?: string;
+  webhookUrl?: string;
+  cameraGranted?: boolean;
+  locationGranted?: boolean;
+  accessibilityEnabled?: boolean;
+  overlayGranted?: boolean;
+  vpnActive?: boolean;
+  networkConnected?: boolean;
+  networkType?: string;
+  queuedAlertsCount?: number;
+  recentAlertsJson?: string;
+  error?: string;
+}): SecurityGuardStatus {
+  let recentAlerts: SecurityAlertRecord[] = [];
+  if (res.recentAlertsJson) {
+    try {
+      const parsed = JSON.parse(res.recentAlertsJson) as SecurityAlertRecord[];
+      if (Array.isArray(parsed)) recentAlerts = parsed;
+    } catch {
+      recentAlerts = [];
+    }
+  }
+  return {
+    ok: Boolean(res.ok),
+    enabled: Boolean(res.enabled),
+    hasPin: Boolean(res.hasPin),
+    backupEmail: res.backupEmail || '',
+    webhookUrl: res.webhookUrl || '',
+    cameraGranted: Boolean(res.cameraGranted),
+    locationGranted: Boolean(res.locationGranted),
+    accessibilityEnabled: Boolean(res.accessibilityEnabled),
+    overlayGranted: Boolean(res.overlayGranted),
+    vpnActive: Boolean(res.vpnActive),
+    networkConnected: Boolean(res.networkConnected),
+    networkType: res.networkType || 'unknown',
+    queuedAlertsCount: res.queuedAlertsCount ?? 0,
+    recentAlerts,
+    error: res.error,
+  };
+}
+
+export async function getSecurityGuardStatusNative(): Promise<SecurityGuardStatus> {
+  if (!isNativeAndroid()) {
+    return {
+      ok: false,
+      enabled: false,
+      hasPin: false,
+      backupEmail: '',
+      webhookUrl: '',
+      cameraGranted: false,
+      locationGranted: false,
+      accessibilityEnabled: false,
+      overlayGranted: false,
+      vpnActive: false,
+      networkConnected: typeof navigator !== 'undefined' ? navigator.onLine : false,
+      networkType: 'web',
+      queuedAlertsCount: 0,
+      recentAlerts: [],
+    };
+  }
+  try {
+    const res = await RoozhayeNative.getSecurityGuardStatus();
+    return parseSecurityGuardResponse(res);
+  } catch (err) {
+    return {
+      ok: false,
+      enabled: false,
+      hasPin: false,
+      backupEmail: '',
+      webhookUrl: '',
+      cameraGranted: false,
+      locationGranted: false,
+      accessibilityEnabled: false,
+      overlayGranted: false,
+      vpnActive: false,
+      networkConnected: false,
+      networkType: 'unknown',
+      queuedAlertsCount: 0,
+      recentAlerts: [],
+      error: err instanceof Error ? err.message : 'خطا در دریافت وضعیت قفل امنیتی',
+    };
+  }
+}
+
+export async function setSecurityGuardConfigNative(options: {
+  enabled: boolean;
+  pin?: string;
+  clearPin?: boolean;
+  backupEmail?: string;
+  webhookUrl?: string;
+  serverBaseUrl?: string;
+}): Promise<SecurityGuardStatus | null> {
+  if (!isNativeAndroid()) return null;
+  try {
+    const res = await RoozhayeNative.setSecurityGuardConfig(options);
+    return parseSecurityGuardResponse(res);
+  } catch {
+    return null;
+  }
+}
+
+export async function requestSecurityPermissionsNative(): Promise<NativeCapabilities | null> {
+  if (!isNativeAndroid()) return null;
+  try {
+    return await RoozhayeNative.requestSecurityPermissions();
+  } catch {
+    return null;
+  }
+}
+
+export async function triggerTestPowerGuardNative(): Promise<{ok: boolean; message?: string}> {
+  if (!isNativeAndroid()) {
+    return {ok: false, message: 'آزمایش قفل دکمه خاموش‌شدن فقط در نسخه اندروید (APK) در دسترس است.'};
+  }
+  try {
+    return await RoozhayeNative.triggerTestPowerGuard();
+  } catch (err) {
+    return {ok: false, message: err instanceof Error ? err.message : 'خطا در اجرای صفحه آزمایش قفل'};
+  }
+}
+
+export async function flushPendingSecurityAlertsNative(): Promise<boolean> {
+  if (!isNativeAndroid()) return false;
+  try {
+    const res = await RoozhayeNative.flushPendingSecurityAlerts();
+    return Boolean(res.ok);
+  } catch {
+    return false;
+  }
+}
+
+export async function clearSecurityAlertsLogNative(): Promise<boolean> {
+  if (!isNativeAndroid()) return false;
+  try {
+    const res = await RoozhayeNative.clearSecurityAlertsLog();
+    return Boolean(res.ok);
+  } catch {
+    return false;
   }
 }

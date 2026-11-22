@@ -9,11 +9,13 @@ import {fileURLToPath} from 'url';
 import {Readable} from 'stream';
 import {GoogleGenAI, ThinkingLevel, Type} from '@google/genai';
 import {MsEdgeTTS, OUTPUT_FORMAT} from 'msedge-tts';
+import nodemailer from 'nodemailer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+app.use('/api/security-alert', express.json({limit: '8mb'}));
 app.use(express.json({limit: '2mb'}));
 app.use('/api', (req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
@@ -3134,6 +3136,8 @@ app.post('/api/assistant-command', async (req, res) => {
 
   const localTimeText = typeof req.body?.localTimeText === 'string' ? req.body.localTimeText.trim() : '';
   const jalaliDate = typeof req.body?.jalaliDate === 'string' ? req.body.jalaliDate.trim() : '';
+  const homeAddress = typeof req.body?.homeAddress === 'string' ? req.body.homeAddress.trim() : '';
+  const callbackPhone = typeof req.body?.callbackPhone === 'string' ? req.body.callbackPhone.trim() : '';
   const rawContacts = Array.isArray(req.body?.contacts) ? (req.body.contacts as {name?: string; phone?: string; persianPhonetic?: string}[]) : [];
   const needsContactsInPrompt = /(تماس|زنگ|شماره|پیام|مسیج|اس ام اس|اس‌ام‌اس|بفرست|بگو به|به .* بگو)/.test(
     utterance
@@ -3166,6 +3170,8 @@ app.post('/api/assistant-command', async (req, res) => {
   try {
     const prompt = `تو «${assistantName}» دستیار صوتی شخصی و همه‌کاره روی گوشی «${ownerSelf}» هستی (همراه زندگی او: «${partnerOther}»).
 زمان فعلی گوشی: ${localTimeText || 'نامشخص'} — تاریخ امروز: ${jalaliDate || 'امروز'}.
+${homeAddress ? `نشانی ذخیره‌شده کاربر برای سفارش‌ها و تماس: ${homeAddress}` : ''}
+${callbackPhone ? `شماره تماس بازگشت ذخیره‌شده کاربر: ${callbackPhone}` : ''}
 ${compactContacts.length > 0 ? `مخاطبین دفترچه تلفن برای تطبیق نام و شماره:\n${JSON.stringify(compactContacts)}` : ''}
 
 درخواست ${ownerSelf}:
@@ -3185,7 +3191,7 @@ ${compactContacts.length > 0 ? `مخاطبین دفترچه تلفن برای ت
 - tell_time: پرسیدن ساعت یا تاریخ امروز.
 - ask_sms_body: درخواست ارسال پیامک به یک شخص وقتی متن پیامک هنوز گفته نشده.
 - send_sms: ارسال پیامک وقتی هم مخاطب و هم متن پیام هر دو مشخص هستند (smsBody پر شود).
-- make_call / end_call: برقراری تماس یا قطع تماس تلفنی.
+- make_call / end_call: برقراری تماس یا قطع تماس تلفنی. اگر کاربر از هم‌صدا خواست حین تماس پیامی را به طرف مقابل بگوید یا سفارشی ثبت کند (مثلاً پیتزا سفارش بده یا به خانومی پیام بده)، متن دقیق و مؤدبانه پیام تلفنی را در callScript بنویس و اگر سفارش یا آدرس خواست includeAddressAndPhone را true کن (و آدرس/تلفن ذخیره‌شده را در callScript بگنجان).
 - volume_up / volume_down / volume_max / volume_mute: تنظیم بلندی صدا.
 - ringer_silent / ringer_vibrate / ringer_normal: گذاشتن گوشی روی سایلنت، ویبره یا حالت عادی.
 - take_photo / record_video: باز کردن دوربین عکس یا فیلم‌برداری.
@@ -3264,6 +3270,8 @@ ${compactContacts.length > 0 ? `مخاطبین دفترچه تلفن برای ت
         targetName: {type: Type.STRING, description: 'Matched contact name or app name'},
         targetPhone: {type: Type.STRING, description: 'Matched phone number if call/SMS'},
         smsBody: {type: Type.STRING, description: 'SMS body text if already spoken'},
+        callScript: {type: Type.STRING, description: 'Polite Persian message or order script to be spoken during the phone call'},
+        includeAddressAndPhone: {type: Type.BOOLEAN, description: 'True when call is for ordering/delivery or explicitly needs saved address & phone'},
         tab: {type: Type.STRING, description: 'Target app tab id if open_tab'},
         todaySection: {type: Type.STRING, description: 'Sub-section inside today tab: planner | shopping_meals | finance_bills | health_vault | growth_lab'},
         query: {type: Type.STRING, description: 'Search, music, radio, or navigation query'},
@@ -3289,6 +3297,8 @@ ${compactContacts.length > 0 ? `مخاطبین دفترچه تلفن برای ت
       targetName?: string;
       targetPhone?: string;
       smsBody?: string;
+      callScript?: string;
+      includeAddressAndPhone?: boolean;
       tab?: string;
       todaySection?: string;
       query?: string;
@@ -3723,6 +3733,327 @@ app.get('/api/download-source-zip', (_req, res) => {
       }
     });
   });
+});
+
+const SECURITY_ALERTS_STORE = path.join(os.tmpdir(), 'hamseda-security-alerts.json');
+
+interface StoredSecurityAlert {
+  id: string;
+  receivedAt: string;
+  timestampIso: string;
+  ownerName: string;
+  reason: string;
+  attemptCount: number;
+  mapsUrl: string;
+  lat: number | null;
+  lng: number | null;
+  accuracyMeters: number | null;
+  deviceModel: string;
+  networkType: string;
+  vpnActive: boolean;
+  hasFrontPhoto: boolean;
+  hasBackPhoto: boolean;
+  emailSent: boolean;
+  emailProvider: string;
+  webhookSent: boolean;
+}
+
+const recentSecurityAlerts: StoredSecurityAlert[] = [];
+try {
+  if (fs.existsSync(SECURITY_ALERTS_STORE)) {
+    const raw = fs.readFileSync(SECURITY_ALERTS_STORE, 'utf8');
+    const parsed = JSON.parse(raw) as StoredSecurityAlert[];
+    if (Array.isArray(parsed)) {
+      recentSecurityAlerts.push(...parsed.slice(0, 20));
+    }
+  }
+} catch {
+  // Ignore malformed cache file
+}
+
+function cleanBase64Jpeg(raw: unknown): Buffer | null {
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  const cleaned = raw.replace(/^data:image\/[a-zA-Z+]+;base64,/, '').trim();
+  if (cleaned.length < 16 || cleaned.length > 4_000_000) return null;
+  try {
+    return Buffer.from(cleaned, 'base64');
+  } catch {
+    return null;
+  }
+}
+
+app.post('/api/security-alert', async (req, res) => {
+  const body = req.body || {};
+  const backupEmail = typeof body.backupEmail === 'string' ? body.backupEmail.trim() : '';
+  const webhookUrl = typeof body.webhookUrl === 'string' ? body.webhookUrl.trim() : '';
+  const ownerName = typeof body.ownerName === 'string' && body.ownerName.trim() ? body.ownerName.trim() : 'کاربر هم‌صدا';
+  const reason = typeof body.reason === 'string' && body.reason.trim() ? body.reason.trim() : 'power_off_attempt';
+  const attemptCount = typeof body.attemptCount === 'number' && Number.isFinite(body.attemptCount) ? body.attemptCount : 1;
+  const timestampIso = typeof body.timestampIso === 'string' && body.timestampIso.trim()
+    ? body.timestampIso.trim()
+    : new Date().toISOString();
+  const lat = typeof body.lat === 'number' && Number.isFinite(body.lat) ? body.lat : null;
+  const lng = typeof body.lng === 'number' && Number.isFinite(body.lng) ? body.lng : null;
+  const accuracyMeters = typeof body.accuracyMeters === 'number' && Number.isFinite(body.accuracyMeters) ? body.accuracyMeters : null;
+  const mapsUrl = typeof body.mapsUrl === 'string' && body.mapsUrl.trim()
+    ? body.mapsUrl.trim()
+    : lat !== null && lng !== null
+      ? `https://maps.google.com/?q=${lat},${lng}`
+      : '';
+  const deviceModel = typeof body.deviceModel === 'string' ? body.deviceModel.trim() : 'Android';
+  const networkType = typeof body.networkType === 'string' ? body.networkType.trim() : 'unknown';
+  const vpnActive = Boolean(body.vpnActive);
+
+  const frontBuf = cleanBase64Jpeg(body.frontPhotoBase64);
+  const backBuf = cleanBase64Jpeg(body.backPhotoBase64);
+
+  const subject = `هشدار امنیتی هم‌صدا (${ownerName}) - تلاش خاموش کردن گوشی`;
+  const textBody = [
+    `هشدار ضدسرقت هم‌صدا برای ${ownerName}`,
+    `علت ثبت هشدار: ${reason}`,
+    `شماره تلاش ناموفق: ${attemptCount}`,
+    `زمان دقیق (UTC/ISO): ${timestampIso}`,
+    `دستگاه: ${deviceModel}`,
+    `شبکه: ${networkType} | وضعیت VPN: ${vpnActive ? 'متصل' : 'غیرفعال'}`,
+    mapsUrl ? `موقعیت مکانی روی نقشه: ${mapsUrl}` : 'موقعیت مکانی در لحظه ثبت در دسترس نبود.',
+    accuracyMeters !== null ? `دقت موقعیت: حدود ${Math.round(accuracyMeters)} متر` : '',
+    `تصاویر پیوست: سلفی=${frontBuf ? 'موجود' : 'ناموجود'} | دوربین پشت=${backBuf ? 'موجود' : 'ناموجود'}`,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  let emailSent = false;
+  let emailProvider = 'none';
+  const smtpHost = (process.env.SMTP_HOST || '').trim();
+  const smtpUser = (process.env.SMTP_USER || '').trim();
+  const smtpPass = (process.env.SMTP_PASS || '').trim();
+  const resendKey = (process.env.RESEND_API_KEY || '').trim();
+  const emailConfigured = Boolean((smtpHost && smtpUser && smtpPass) || resendKey);
+
+  if (backupEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(backupEmail)) {
+    if (smtpHost && smtpUser && smtpPass) {
+      try {
+        const port = Number(process.env.SMTP_PORT || '465');
+        const secure = process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : port === 465;
+        const transporter = nodemailer.createTransport({
+          host: smtpHost,
+          port,
+          secure,
+          auth: {user: smtpUser, pass: smtpPass},
+        });
+        const attachments: {filename: string; content: Buffer; contentType: string}[] = [];
+        if (frontBuf) attachments.push({filename: 'selfie.jpg', content: frontBuf, contentType: 'image/jpeg'});
+        if (backBuf) attachments.push({filename: 'rear.jpg', content: backBuf, contentType: 'image/jpeg'});
+
+        await transporter.sendMail({
+          from: (process.env.SMTP_FROM || '').trim() || smtpUser,
+          to: backupEmail,
+          subject,
+          text: textBody,
+          attachments,
+        });
+        emailSent = true;
+        emailProvider = 'smtp';
+      } catch (mailErr) {
+        console.error('Security alert SMTP error:', mailErr instanceof Error ? mailErr.message : mailErr);
+      }
+    }
+
+    if (!emailSent && resendKey) {
+      try {
+        const resendAttachments: {filename: string; content: string}[] = [];
+        if (frontBuf) resendAttachments.push({filename: 'selfie.jpg', content: frontBuf.toString('base64')});
+        if (backBuf) resendAttachments.push({filename: 'rear.jpg', content: backBuf.toString('base64')});
+        const r = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${resendKey}`,
+          },
+          body: JSON.stringify({
+            from: (process.env.SMTP_FROM || '').trim() || 'Hamseda Security <onboarding@resend.dev>',
+            to: [backupEmail],
+            subject,
+            text: textBody,
+            attachments: resendAttachments,
+          }),
+          signal: AbortSignal.timeout(8000),
+        });
+        if (r.ok) {
+          emailSent = true;
+          emailProvider = 'resend';
+        }
+      } catch (resendErr) {
+        console.error('Security alert Resend error:', resendErr instanceof Error ? resendErr.message : resendErr);
+      }
+    }
+  }
+
+  let webhookSent = false;
+  if (webhookUrl) {
+    const safeHook = isSafePublicAudioUrl(webhookUrl);
+    if (safeHook && safeHook.protocol === 'https:') {
+      try {
+        const hookRes = await fetch(safeHook.href, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            event: 'hamseda_security_alert',
+            ownerName,
+            reason,
+            attemptCount,
+            timestampIso,
+            mapsUrl,
+            lat,
+            lng,
+            accuracyMeters,
+            deviceModel,
+            networkType,
+            vpnActive,
+            hasFrontPhoto: Boolean(frontBuf),
+            hasBackPhoto: Boolean(backBuf),
+            summaryText: textBody,
+          }),
+          signal: AbortSignal.timeout(7000),
+        });
+        webhookSent = hookRes.ok;
+      } catch (hookErr) {
+        console.error('Security alert webhook error:', hookErr instanceof Error ? hookErr.message : hookErr);
+      }
+    }
+  }
+
+  const storedItem: StoredSecurityAlert = {
+    id: crypto.randomUUID(),
+    receivedAt: new Date().toISOString(),
+    timestampIso,
+    ownerName,
+    reason,
+    attemptCount,
+    mapsUrl,
+    lat,
+    lng,
+    accuracyMeters,
+    deviceModel,
+    networkType,
+    vpnActive,
+    hasFrontPhoto: Boolean(frontBuf),
+    hasBackPhoto: Boolean(backBuf),
+    emailSent,
+    emailProvider,
+    webhookSent,
+  };
+  recentSecurityAlerts.unshift(storedItem);
+  if (recentSecurityAlerts.length > 20) recentSecurityAlerts.length = 20;
+  try {
+    fs.writeFileSync(SECURITY_ALERTS_STORE, JSON.stringify(recentSecurityAlerts), 'utf8');
+  } catch {
+    // Ignore disk write failure on ephemeral environments
+  }
+
+  const message = emailSent
+    ? 'هشدار با موقعیت و تصاویر به ایمیل پشتیبان ارسال شد.'
+    : webhookSent
+      ? 'هشدار با موفقیت به وب‌هوک پشتیبان ارسال شد.'
+      : !backupEmail && !webhookUrl
+        ? 'گزارش در سرور ثبت شد؛ ایمیل پشتیبان یا وب‌هوک تنظیم نشده است.'
+        : !emailConfigured
+          ? 'گزارش در سرور ثبت شد، اما تنظیمات ارسال ایمیل (SMTP یا Resend) روی سرور فعال نیست.'
+          : 'گزارش روی سرور ثبت شد، اما ارسال ایمیل انجام نشد.';
+
+  res.json({
+    ok: true,
+    stored: true,
+    alertId: storedItem.id,
+    emailSent,
+    emailProvider,
+    webhookSent,
+    emailConfigured,
+    message,
+  });
+});
+
+app.get('/api/security-alerts', (_req, res) => {
+  res.json({
+    ok: true,
+    alerts: recentSecurityAlerts,
+  });
+});
+
+app.post('/api/voip-proxy-call', async (req, res) => {
+  const webhookUrl = typeof req.body?.webhookUrl === 'string' ? req.body.webhookUrl.trim() : '';
+  const targetName = typeof req.body?.targetName === 'string' ? req.body.targetName.trim() : '';
+  const targetPhone = typeof req.body?.targetPhone === 'string' ? req.body.targetPhone.trim() : '';
+  const script = typeof req.body?.script === 'string' ? req.body.script.trim() : '';
+  const homeAddress = typeof req.body?.homeAddress === 'string' ? req.body.homeAddress.trim() : '';
+  const callbackPhone = typeof req.body?.callbackPhone === 'string' ? req.body.callbackPhone.trim() : '';
+  const ownerName = typeof req.body?.ownerName === 'string' ? req.body.ownerName.trim() : 'کاربر هم‌صدا';
+
+  if (!targetPhone || !script) {
+    res.status(400).json({error: 'شماره مقصد و متن پیام تلفنی لازم است.'});
+    return;
+  }
+
+  if (!webhookUrl) {
+    res.status(400).json({
+      error:
+        'نشانی وب‌هوک سرویس تماس VoIP (مثل Twilio / پل SIP) تنظیم نشده است. می‌توانید در بخش «تنظیم و نصب» نشانی وب‌هوک VoIP خود را وارد کنید یا از شماره‌گیری روی گوشی + پخش متن روی اسپیکر استفاده کنید.',
+    });
+    return;
+  }
+
+  const safeUrl = isSafePublicAudioUrl(webhookUrl);
+  if (!safeUrl || safeUrl.protocol !== 'https:') {
+    res.status(400).json({error: 'نشانی وب‌هوک VoIP باید یک آدرس معتبر https:// باشد.'});
+    return;
+  }
+
+  try {
+    const upstream = await fetch(safeUrl.href, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        event: 'hamseda_proxy_call',
+        ownerName,
+        targetName,
+        targetPhone,
+        script,
+        homeAddress,
+        callbackPhone,
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+
+    const rawText = await upstream.text();
+    let parsedJson: {status?: string; callStatus?: string; reply?: string; calleeReply?: string; transcript?: string; message?: string} = {};
+    try {
+      parsedJson = JSON.parse(rawText);
+    } catch {
+      // Plain text reply fallback
+    }
+
+    if (!upstream.ok) {
+      res.status(502).json({
+        error: parsedJson.message || `وب‌هوک تماس با کد ${upstream.status} پاسخ خطا داد.`,
+      });
+      return;
+    }
+
+    const calleeReply =
+      parsedJson.calleeReply || parsedJson.reply || parsedJson.transcript || (rawText && !rawText.startsWith('{') ? rawText.slice(0, 600) : '');
+    const callStatus = parsedJson.callStatus || parsedJson.status || 'dispatched';
+
+    res.json({
+      ok: true,
+      callStatus,
+      calleeReply,
+      message: parsedJson.message || 'درخواست تماس نیابتی به پل VoIP ارسال شد.',
+    });
+  } catch (err) {
+    res.status(502).json({
+      error: err instanceof Error ? `خطا در ارتباط با پل تماس VoIP: ${err.message}` : 'خطا در ارتباط با وب‌هوک تماس.',
+    });
+  }
 });
 
 app.all('/api/*', (_req, res) => {

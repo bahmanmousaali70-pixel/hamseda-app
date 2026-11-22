@@ -90,6 +90,7 @@ public class RoozhayeNativePlugin extends Plugin {
         new Thread(() -> {
             try {
                 OfflinePersianTts.ensureDefaultInstalled(appCtx);
+                SecurityAlertHelper.flushPendingAlertsAsync(appCtx);
             } catch (Exception ignored) {
             }
         }, "HamsedaOfflineWarmup").start();
@@ -2068,8 +2069,102 @@ public class RoozhayeNativePlugin extends Plugin {
         String gender = call.getString("gender", "female");
         String voiceName = call.getString("voiceName", "male".equals(gender) ? "Charon" : "Kore");
 
-        String spoken = "پیامک جدید از طرف " + sender + ". متن پیام: " + body;
-        CallAnnouncerService.announce(getContext(), "تست پیامک: " + sender, spoken, voiceName, "male".equals(gender), 1, false);
+        Context ctx = getContext();
+        String spoken = SmsAnnouncementPolicy.buildSpokenAnnouncement(ctx, sender, body, "پیامک جدید");
+        String notifLabel = SmsAnnouncementPolicy.isNumericOrShortcodeSender(sender)
+                ? "تست پیامک"
+                : ("تست پیامک: " + sender);
+        CallAnnouncerService.announce(ctx, notifLabel, spoken, voiceName, "male".equals(gender), 1, false);
+        JSObject ret = new JSObject();
+        ret.put("ok", true);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void getSecurityGuardStatus(PluginCall call) {
+        try {
+            JSONObject summary = SecurityAlertHelper.buildStatusSummary(getContext());
+            JSObject ret = JSObject.fromJSONObject(summary);
+            ret.put("ok", true);
+            ret.put("overlayGranted", Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(getContext()));
+            call.resolve(ret);
+        } catch (Exception e) {
+            JSObject ret = new JSObject();
+            ret.put("ok", false);
+            ret.put("error", e.getMessage());
+            call.resolve(ret);
+        }
+    }
+
+    @PluginMethod
+    public void setSecurityGuardConfig(PluginCall call) {
+        boolean enabled = Boolean.TRUE.equals(call.getBoolean("enabled", false));
+        String pin = call.getString("pin");
+        boolean clearPin = Boolean.TRUE.equals(call.getBoolean("clearPin", false));
+        String backupEmail = call.getString("backupEmail");
+        String webhookUrl = call.getString("webhookUrl");
+        String serverBaseUrl = call.getString("serverBaseUrl");
+
+        SecurityAlertHelper.saveConfig(getContext(), enabled, pin, clearPin, backupEmail, webhookUrl, serverBaseUrl);
+        try {
+            JSONObject summary = SecurityAlertHelper.buildStatusSummary(getContext());
+            JSObject ret = JSObject.fromJSONObject(summary);
+            ret.put("ok", true);
+            ret.put("overlayGranted", Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(getContext()));
+            call.resolve(ret);
+        } catch (Exception e) {
+            JSObject ret = new JSObject();
+            ret.put("ok", true);
+            call.resolve(ret);
+        }
+    }
+
+    @PluginMethod
+    public void requestSecurityPermissions(PluginCall call) {
+        Context ctx = getContext();
+        List<String> perms = new ArrayList<>();
+        if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            perms.add(Manifest.permission.CAMERA);
+        }
+        if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            perms.add(Manifest.permission.ACCESS_FINE_LOCATION);
+        }
+        if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            perms.add(Manifest.permission.ACCESS_COARSE_LOCATION);
+        }
+        if (!perms.isEmpty() && getActivity() != null) {
+            ActivityCompat.requestPermissions(getActivity(), perms.toArray(new String[0]), PERM_REQ_CODE + 9);
+        }
+        call.resolve(buildCapsObject());
+    }
+
+    @PluginMethod
+    public void triggerTestPowerGuard(PluginCall call) {
+        Context ctx = getContext();
+        if (!SecurityAlertHelper.hasPinConfigured(ctx)) {
+            JSObject ret = new JSObject();
+            ret.put("ok", false);
+            ret.put("message", "ابتدا رمز خاموش‌شدن گوشی را تعریف و ذخیره کنید.");
+            call.resolve(ret);
+            return;
+        }
+        PowerGuardActivity.launch(ctx, "manual_test", true);
+        JSObject ret = new JSObject();
+        ret.put("ok", true);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void flushPendingSecurityAlerts(PluginCall call) {
+        SecurityAlertHelper.flushPendingAlertsAsync(getContext());
+        JSObject ret = new JSObject();
+        ret.put("ok", true);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void clearSecurityAlertsLog(PluginCall call) {
+        SecurityAlertHelper.clearLocalAlerts(getContext());
         JSObject ret = new JSObject();
         ret.put("ok", true);
         call.resolve(ret);
@@ -2087,6 +2182,9 @@ public class RoozhayeNativePlugin extends Plugin {
         obj.put("microphone", ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED);
         obj.put("callPhone", ContextCompat.checkSelfPermission(ctx, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED);
         obj.put("sendSms", ContextCompat.checkSelfPermission(ctx, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED);
+        obj.put("camera", ContextCompat.checkSelfPermission(ctx, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED);
+        obj.put("location", ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                || ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED);
 
         boolean dndOk = true;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -2124,6 +2222,7 @@ public class RoozhayeNativePlugin extends Plugin {
         }
         obj.put("exactAlarm", exactOk);
         obj.put("writeSettings", Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.System.canWrite(ctx));
+        obj.put("accessibility", HamsedaAccessibilityService.isConnected());
         return obj;
     }
 

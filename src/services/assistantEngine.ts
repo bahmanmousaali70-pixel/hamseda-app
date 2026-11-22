@@ -16,12 +16,14 @@ import {
   normalizeAssistantText,
 } from '../utils/deviceIdentity';
 import {apiUrl, safeReadJsonResponse} from './apiConfig';
+import {loadPersonalCallProfile} from '../utils/personalProfile';
 
 export interface PendingAssistantIntent {
   type: 'awaiting_sms_body' | 'awaiting_sms_recipient' | 'awaiting_sms_confirmation' | 'awaiting_call_confirmation';
   targetName?: string;
   targetPhone?: string;
   smsBody?: string;
+  callScript?: string;
 }
 
 export interface AssistantEngineContext {
@@ -33,6 +35,8 @@ export interface AssistantEngineContext {
   callers: CallerContact[];
   morningMessage: MorningMessage;
   pendingIntent: PendingAssistantIntent | null;
+  homeAddress?: string;
+  callbackPhone?: string;
 }
 
 function persianDigitsToAscii(input: string): string {
@@ -190,14 +194,77 @@ function extractRecipientAndSmsBody(command: string): {targetRaw: string; bodyRa
   return {targetRaw, bodyRaw};
 }
 
-function extractCallTarget(command: string): string {
-  return command
+function extractCallTargetAndMessage(command: string): {
+  targetRaw: string;
+  messageRaw: string;
+  wantsOrderOrAddress: boolean;
+} {
+  let cleaned = command
     .replace(/^(لطفاً|لطفا|میشه|می‌شه|می شه)\s+/i, '')
+    .trim();
+
+  let messageRaw = '';
+  const msgMatch = cleaned.match(
+    /(?:(?:و\s+)?(?:این پیام(?:\s*(?:رو|را))?\s*(?:بهش|به او)?\s*)?(?:بگو|بهش بگو|پیام بده که|پیام را بگو)|(?:و\s+)?(?:یک |یه )?(?:سفارش بده|سفارش بگیر|بگو بفرسته|بفرستن))\s*(?:که\s+)?(.+)?$/i
+  );
+  if (msgMatch && msgMatch.index !== undefined) {
+    const matchedPhrase = msgMatch[0].trim();
+    const afterClause = (msgMatch[1] || '').trim();
+    if (/سفارش/.test(matchedPhrase) && !/^بگو/.test(matchedPhrase)) {
+      messageRaw = matchedPhrase.replace(/^و\s+/, '').trim();
+    } else {
+      messageRaw = afterClause;
+    }
+    cleaned = cleaned.slice(0, msgMatch.index).trim();
+  } else {
+    const simpleOrderMatch = cleaned.match(/(?:یک|یه)\s+([^،,]+?)\s+سفارش\s+بده.*$/i);
+    if (simpleOrderMatch && simpleOrderMatch.index !== undefined) {
+      messageRaw = `لطفاً یک ${simpleOrderMatch[1].trim()} ارسال کنید`;
+      cleaned = cleaned.slice(0, simpleOrderMatch.index).trim();
+    }
+  }
+
+  const targetRaw = cleaned
     .replace(/^(با|به)\s+/i, '')
     .replace(/\s*(تماس بگیر|زنگ بزن|شماره بگیر|شماره‌گیری کن|تلفن بزن|تلفن کن).*$/i, '')
     .replace(/^(تماس بگیر|زنگ بزن|شماره بگیر|شماره‌گیری کن|تلفن بزن|تلفن کن)\s*(با|به)?\s*/i, '')
     .replace(/\s*(رو بگیر|را بگیر)$/i, '')
     .trim();
+
+  const wantsOrderOrAddress =
+    /(سفارش|پیتزا|غذا|رستوران|فست‌فود|فست فود|ساندویچ|پیک|ارسال کن|بفرست|آدرس|نشانی|تلفن|شماره من|شماره‌ام)/.test(
+      command
+    );
+
+  return {targetRaw, messageRaw, wantsOrderOrAddress};
+}
+
+function buildProxyCallScript(
+  messageRaw: string,
+  wantsOrderOrAddress: boolean,
+  homeAddress: string,
+  callbackPhone: string,
+  selfName: string
+): {script: string; missingAddressWarning: boolean} {
+  const cleanMsg = messageRaw.trim();
+  if (!cleanMsg && !wantsOrderOrAddress) {
+    return {script: '', missingAddressWarning: false};
+  }
+  const parts: string[] = [];
+  parts.push(`سلام، وقت بخیر. از طرف ${selfName} تماس می‌گیرم.`);
+  if (cleanMsg) {
+    parts.push(cleanMsg.endsWith('.') || cleanMsg.endsWith('؟') ? cleanMsg : `${cleanMsg}.`);
+  }
+  let missingAddressWarning = false;
+  if (wantsOrderOrAddress) {
+    if (homeAddress || callbackPhone) {
+      if (homeAddress) parts.push(`نشانی ارسال: ${homeAddress}.`);
+      if (callbackPhone) parts.push(`شماره تماس هماهنگی: ${callbackPhone}.`);
+    } else {
+      missingAddressWarning = true;
+    }
+  }
+  return {script: parts.join(' '), missingAddressWarning};
 }
 
 export function parseOfflineAssistantCommand(
@@ -233,7 +300,15 @@ export function parseOfflineAssistantCommand(
   }
   if (ctx.pendingIntent?.type === 'awaiting_call_confirmation') {
     if (/^(تایید|تأیید|بله|آره|اره|درسته|درست است|تماس بگیر|زنگ بزن|اوکی|باشه|تایید تماس|تأیید تماس|تایید و برقراری تماس|تأیید و برقراری تماس)$/.test(norm)) {
-      return {action: 'make_call', targetName: ctx.pendingIntent.targetName, targetPhone: ctx.pendingIntent.targetPhone, replyText: 'تأیید شد؛ شماره‌گیر را باز می‌کنم.'};
+      return {
+        action: 'make_call',
+        targetName: ctx.pendingIntent.targetName,
+        targetPhone: ctx.pendingIntent.targetPhone,
+        callScript: ctx.pendingIntent.callScript,
+        replyText: ctx.pendingIntent.callScript
+          ? 'تأیید شد؛ شماره‌گیر باز می‌شود و متن پیام هم آماده خواندن روی اسپیکر است.'
+          : 'تأیید شد؛ شماره‌گیر را باز می‌کنم.',
+      };
     }
     return {action: 'answer', replyText: 'تماس هنوز برقرار نشده. برای تماس بگو «تأیید» و برای انصراف بگو «لغو کن».'};
   }
@@ -606,13 +681,13 @@ export function parseOfflineAssistantCommand(
     };
   }
 
-  // 8. Make Phone Call
+  // 8. Make Phone Call (with optional proxy message & auto delivery address/phone)
   if (/(تماس بگیر|زنگ بزن|شماره بگیر|شماره‌گیری|تلفن بزن|تلفن کن)/.test(norm)) {
-    const targetRaw = extractCallTarget(commandRaw);
+    const {targetRaw, messageRaw, wantsOrderOrAddress} = extractCallTargetAndMessage(commandRaw);
     if (!targetRaw) {
       return {
         action: 'answer',
-        replyText: 'نام شخص مورد نظر برای تماس را نفرمودید. با چه کسی تماس بگیرم؟',
+        replyText: 'نام شخص یا شماره مورد نظر برای تماس را نفرمودید. با چه کسی تماس بگیرم؟',
       };
     }
     const contact = findBestContactMatch(
@@ -625,14 +700,30 @@ export function parseOfflineAssistantCommand(
     if (!contact || !contact.phone) {
       return {
         action: 'answer',
-        replyText: `شماره «${targetRaw}» در دفترچه تلفن همگام‌شده پیدا نشد. لطفاً در تب تماس و پیامک دکمه همگام‌سازی دفترچه تلفن را بزنید.`,
+        replyText: `شماره «${targetRaw}» در دفترچه تلفن همگام‌شده پیدا نشد. لطفاً در تب تماس و پیامک دکمه همگام‌سازی دفترچه تلفن را بزنید یا شماره را مستقیم در دستور بنویسید.`,
       };
     }
+    const storedProfile = loadPersonalCallProfile();
+    const homeAddress = (ctx.homeAddress ?? storedProfile.homeAddress).trim();
+    const callbackPhone = (ctx.callbackPhone ?? storedProfile.callbackPhone).trim();
+    const {script, missingAddressWarning} = buildProxyCallScript(
+      messageRaw,
+      wantsOrderOrAddress,
+      homeAddress,
+      callbackPhone,
+      selfName
+    );
     return {
       action: 'make_call',
       targetName: contact.name,
       targetPhone: contact.phone,
-      replyText: `در حال شماره‌گیری برای ${contact.name} هستم.`,
+      callScript: script || undefined,
+      includeAddressAndPhone: wantsOrderOrAddress,
+      replyText: missingAddressWarning
+        ? `شماره ${contact.name} آماده است؛ اما هنوز نشانی و تلفن هماهنگی را در بخش «نشانی و تلفن تماس» ثبت نکرده‌اید تا به متن سفارش اضافه شود.`
+        : script
+          ? `متن پیام تماس با ${contact.name} آماده شد.`
+          : `در حال شماره‌گیری برای ${contact.name} هستم.`,
     };
   }
 
@@ -913,6 +1004,9 @@ export async function processAssistantUtterance(
   // Try the real API; the catch below preserves a graceful offline fallback.
 
   const {timeStr, dateStr} = getCurrentPersianTimeAndDate();
+  const storedProfile = loadPersonalCallProfile();
+  const homeAddress = (ctx.homeAddress ?? storedProfile.homeAddress).trim();
+  const callbackPhone = (ctx.callbackPhone ?? storedProfile.callbackPhone).trim();
   try {
     const commandController = new AbortController();
     const commandTimer = setTimeout(() => commandController.abort(), 35000);
@@ -930,6 +1024,8 @@ export async function processAssistantUtterance(
           partnerName: ctx.settings.partnerName,
           localTimeText: timeStr,
           jalaliDate: dateStr,
+          homeAddress,
+          callbackPhone,
           contacts: ctx.syncedContacts.slice(0, 80),
         }),
       });
@@ -946,17 +1042,31 @@ export async function processAssistantUtterance(
     // Calls and SMS are high-impact: never trust an AI-guessed phone number.
     // Always resolve the recipient locally, even if the server supplied a number.
     if (result.action === 'make_call') {
-      const match = result.targetName
-        ? findBestContactMatch(result.targetName, ctx.syncedContacts, ctx.callers, ctx.settings, ctx.deviceOwner)
+      const lookupQuery = result.targetName || result.targetPhone || '';
+      const match = lookupQuery
+        ? findBestContactMatch(lookupQuery, ctx.syncedContacts, ctx.callers, ctx.settings, ctx.deviceOwner)
         : null;
       if (!match?.phone) {
         return {
           action: 'answer',
-          replyText: `برای اینکه با شخص اشتباهی تماس نگیرم، مخاطب را دقیق پیدا نکردم. گفتی «${result.targetName || cleanedUtterance}». لطفاً اسم مخاطب را دوباره و واضح بگو.`,
+          replyText: `برای اینکه با شخص اشتباهی تماس نگیرم، مخاطب را دقیق پیدا نکردم. گفتی «${result.targetName || cleanedUtterance}». لطفاً اسم مخاطب یا شماره دقیق را دوباره بگو.`,
         };
       }
       result.targetName = match.name;
       result.targetPhone = match.phone;
+      if (result.includeAddressAndPhone && result.callScript && (homeAddress || callbackPhone)) {
+        const hasAddr = !homeAddress || result.callScript.includes(homeAddress);
+        const hasPhone = !callbackPhone || result.callScript.includes(callbackPhone);
+        if (!hasAddr || !hasPhone) {
+          result.callScript = [
+            result.callScript,
+            !hasAddr && homeAddress ? `نشانی: ${homeAddress}` : '',
+            !hasPhone && callbackPhone ? `تلفن: ${callbackPhone}` : '',
+          ]
+            .filter(Boolean)
+            .join(' · ');
+        }
+      }
     } else if (result.action === 'send_sms' || result.action === 'ask_sms_body') {
       const match = result.targetName
         ? findBestContactMatch(result.targetName, ctx.syncedContacts, ctx.callers, ctx.settings, ctx.deviceOwner)

@@ -2,6 +2,7 @@ import React, {useEffect, useRef, useState} from 'react';
 import {
   Bell,
   BellOff,
+  Camera,
   Check,
   Clock,
   Cloud,
@@ -10,14 +11,17 @@ import {
   ExternalLink,
   FileAudio,
   Link2,
+  Lock,
   LogIn,
   LogOut,
+  MapPin,
   Moon,
   Play,
   Plus,
   Radio,
   RefreshCw,
   Share2,
+  ShieldAlert,
   ShieldCheck,
   Smartphone,
   Sun,
@@ -31,15 +35,24 @@ import {usePWAInstall} from '../hooks/usePWAInstall';
 import {getCloudApiBaseUrl, safeReadJsonResponse, setCloudApiBaseUrl} from '../services/apiConfig';
 import type {CoupleSpaceInfo} from '../services/coupleSyncService';
 import {
+  clearSecurityAlertsLogNative,
+  flushPendingSecurityAlertsNative,
+  getSecurityGuardStatusNative,
   isNativeAndroid,
+  openAccessibilitySettingsNative,
   openBatteryAndAutostartSettingsNative,
   pickJsonFileNative,
+  requestSecurityPermissionsNative,
   requestSmsPermissionsOnlyNative,
   saveBackupJsonNative,
   saveSmsAnnouncementPolicyNative,
+  setSecurityGuardConfigNative,
   syncServerBaseUrlToNative,
+  triggerTestPowerGuardNative,
   type NativeCapabilities,
+  type SecurityGuardStatus,
 } from '../services/nativeAndroidBridge';
+import {loadPersonalCallProfile, savePersonalCallProfile} from '../utils/personalProfile';
 import type {
   AppSettings,
   BillReminderItem,
@@ -240,6 +253,43 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
   const [newVoice, setNewVoice] = useState<VoiceName>(settings.defaultVoice);
   const [newCustomText, setNewCustomText] = useState('');
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
+  // Anti-Theft Power-Off Guard & Personal Address/VoIP Profile
+  const initialCallProfile = loadPersonalCallProfile();
+  const [securityStatus, setSecurityStatus] = useState<SecurityGuardStatus | null>(null);
+  const [guardEnabledDraft, setGuardEnabledDraft] = useState(false);
+  const [powerPinInput, setPowerPinInput] = useState('');
+  const [backupSecurityEmail, setBackupSecurityEmail] = useState(initialCallProfile.backupSecurityEmail);
+  const [securityWebhookUrl, setSecurityWebhookUrl] = useState(initialCallProfile.securityWebhookUrl);
+  const [savingSecurity, setSavingSecurity] = useState(false);
+  const [testingGuard, setTestingGuard] = useState(false);
+
+  const [homeAddressDraft, setHomeAddressDraft] = useState(initialCallProfile.homeAddress);
+  const [callbackPhoneDraft, setCallbackPhoneDraft] = useState(initialCallProfile.callbackPhone);
+  const [voipWebhookDraft, setVoipWebhookDraft] = useState(initialCallProfile.voipWebhookUrl);
+
+  const refreshSecurityStatus = async () => {
+    if (!isNativeAndroid()) return;
+    const status = await getSecurityGuardStatusNative();
+    setSecurityStatus(status);
+    setGuardEnabledDraft(status.enabled);
+    if (status.backupEmail && !backupSecurityEmail) setBackupSecurityEmail(status.backupEmail);
+    if (status.webhookUrl && !securityWebhookUrl) setSecurityWebhookUrl(status.webhookUrl);
+  };
+
+  useEffect(() => {
+    void refreshSecurityStatus();
+    const onProfileUpdated = () => {
+      const p = loadPersonalCallProfile();
+      setHomeAddressDraft(p.homeAddress);
+      setCallbackPhoneDraft(p.callbackPhone);
+      setVoipWebhookDraft(p.voipWebhookUrl);
+      setBackupSecurityEmail(p.backupSecurityEmail);
+      setSecurityWebhookUrl(p.securityWebhookUrl);
+    };
+    window.addEventListener('hamseda:profile-updated', onProfileUpdated);
+    return () => window.removeEventListener('hamseda:profile-updated', onProfileUpdated);
+  }, []);
 
   const exportPayload = JSON.stringify(
     {
@@ -1009,6 +1059,346 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
         <p className="text-[11px] leading-5 text-slate-500 dark:text-slate-400">
           سکوت موقت فقط اعلام خودکار پیامک را متوقف می‌کند؛ دستیار و سایر قابلیت‌ها فعال می‌مانند. تشخیص تبلیغ بر پایه فرستنده و کلمات کلیدی است و ممکن است نیاز به تنظیم دستی داشته باشد.
         </p>
+      </section>
+
+      {/* Anti-Theft Power-Off PIN Guard & Evidence Capture */}
+      <section className="rounded-2xl bg-white dark:bg-[#121E1C] border border-slate-200/80 dark:border-emerald-950/70 p-6 sm:p-8 space-y-5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+              <ShieldAlert className="w-4 h-4" />
+              <span>محافظت ضدسرقت اختصاصی · رمز مستقل برای خاموش‌شدن گوشی</span>
+            </div>
+            <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white">
+              قفل خاموش کردن گوشی + ارسال مخفی سلفی، دوربین پشت و لوکیشن
+            </h2>
+            <p className="text-xs sm:text-sm leading-6 text-slate-600 dark:text-slate-300 max-w-3xl">
+              یک رمز اختصاصی (مجزا از قفل صفحه و رمز برنامه) تعریف کنید. هنگام باز شدن منوی خاموش کردن/راه‌اندازی مجدد، هم‌صدا منو را می‌بندد و رمز می‌خواهد؛ با اولین رمز اشتباه (یا بستن پنجره)، عکس سلفی + عکس دوربین پشت + مختصات GPS ثبت و به ایمیل پشتیبان ارسال می‌شود.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setGuardEnabledDraft((prev) => !prev)}
+            className={`min-h-[48px] px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold inline-flex items-center gap-2 transition-colors cursor-pointer shrink-0 ${
+              guardEnabledDraft
+                ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
+                : 'bg-slate-200 dark:bg-[#0B1312] border border-slate-300 dark:border-emerald-900 text-slate-800 dark:text-slate-200'
+            }`}
+          >
+            <Lock className="w-4 h-4" />
+            <span>{guardEnabledDraft ? 'قفل خاموش‌شدن: فعال' : 'قفل خاموش‌شدن: غیرفعال'}</span>
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+              رمز خاموش کردن گوشی {securityStatus?.hasPin ? '(رمز قبلی ذخیره است)' : '(حداقل ۴ کاراکتر)'}
+            </label>
+            <input
+              type="password"
+              value={powerPinInput}
+              onChange={(e) => setPowerPinInput(e.target.value)}
+              placeholder={securityStatus?.hasPin ? 'برای تغییر رمز جدید بنویسید...' : 'مثلاً 8492 یا رمز دلخواه...'}
+              className="w-full min-h-[44px] px-3.5 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50/70 dark:bg-[#0B1312] text-sm text-slate-900 dark:text-white"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+              ایمیل پشتیبان دریافت هشدار و تصاویر
+            </label>
+            <input
+              type="email"
+              dir="ltr"
+              value={backupSecurityEmail}
+              onChange={(e) => setBackupSecurityEmail(e.target.value)}
+              placeholder="security.backup@gmail.com"
+              className="w-full min-h-[44px] px-3.5 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50/70 dark:bg-[#0B1312] text-xs font-mono-num text-slate-900 dark:text-white"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+              وب‌هوک پشتیبان HTTPS (اختیاری — تلگرام/سرور)
+            </label>
+            <input
+              type="url"
+              dir="ltr"
+              value={securityWebhookUrl}
+              onChange={(e) => setSecurityWebhookUrl(e.target.value)}
+              placeholder="https://your-relay.example.com/alert"
+              className="w-full min-h-[44px] px-3.5 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50/70 dark:bg-[#0B1312] text-xs font-mono-num text-slate-900 dark:text-white"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            type="button"
+            disabled={savingSecurity}
+            onClick={async () => {
+              const trimmedPin = powerPinInput.trim();
+              if (guardEnabledDraft && !securityStatus?.hasPin && trimmedPin.length < 4) {
+                onStatusToast('برای فعال کردن قفل خاموش‌شدن، ابتدا یک رمز حداقل ۴ کاراکتری وارد کنید.');
+                return;
+              }
+              if (trimmedPin.length > 0 && trimmedPin.length < 4) {
+                onStatusToast('رمز امنیتی باید حداقل ۴ کاراکتر یا عدد باشد.');
+                return;
+              }
+              setSavingSecurity(true);
+              try {
+                savePersonalCallProfile({
+                  backupSecurityEmail: backupSecurityEmail.trim(),
+                  securityWebhookUrl: securityWebhookUrl.trim(),
+                });
+                if (isNativeAndroid()) {
+                  const res = await setSecurityGuardConfigNative({
+                    enabled: guardEnabledDraft,
+                    pin: trimmedPin || undefined,
+                    backupEmail: backupSecurityEmail.trim(),
+                    webhookUrl: securityWebhookUrl.trim(),
+                    serverBaseUrl: getCloudApiBaseUrl(),
+                  });
+                  if (res) {
+                    setSecurityStatus(res);
+                    setPowerPinInput('');
+                  }
+                  onStatusToast('تنظیمات قفل ضدسرقت روی گوشی ذخیره شد.');
+                } else {
+                  onStatusToast('ایمیل و وب‌هوک پشتیبان ذخیره شد. قفل سخت‌افزاری خاموش‌شدن در APK اندروید فعال است.');
+                }
+              } finally {
+                setSavingSecurity(false);
+              }
+            }}
+            className="min-h-[44px] px-5 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white text-xs sm:text-sm font-semibold cursor-pointer"
+          >
+            {savingSecurity ? 'در حال ذخیره...' : 'ذخیره رمز و تنظیمات ضدسرقت'}
+          </button>
+
+          {nativeCaps.isNative && (
+            <>
+              <button
+                type="button"
+                onClick={async () => {
+                  await requestSecurityPermissionsNative();
+                  await refreshSecurityStatus();
+                  onStatusToast('وضعیت مجوز دوربین و موقعیت مکانی بررسی شد.');
+                }}
+                className="min-h-[44px] px-4 rounded-xl bg-slate-900 dark:bg-emerald-800 text-white text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                <Camera className="w-4 h-4" />
+                <span>مجوز دوربین و لوکیشن</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void openAccessibilitySettingsNative()}
+                className="min-h-[44px] px-4 rounded-xl border border-slate-200 dark:border-emerald-900 bg-white dark:bg-[#0B1312] text-slate-700 dark:text-slate-200 text-xs font-semibold cursor-pointer"
+              >
+                فعال‌سازی سرویس دسترس‌پذیری (Accessibility)
+              </button>
+
+              <button
+                type="button"
+                disabled={testingGuard}
+                onClick={async () => {
+                  setTestingGuard(true);
+                  try {
+                    const res = await triggerTestPowerGuardNative();
+                    if (!res.ok) {
+                      onStatusToast(res.message || 'ابتدا رمز خاموش‌شدن را ذخیره کنید.');
+                    } else {
+                      onStatusToast('صفحه قفل آزمایشی باز شد. برای تست ثبت هشدار یک رمز اشتباه وارد کنید.');
+                    }
+                    await refreshSecurityStatus();
+                  } finally {
+                    setTestingGuard(false);
+                  }
+                }}
+                className="min-h-[44px] px-4 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 text-xs font-semibold cursor-pointer"
+              >
+                آزمایش صفحه قفل و ثبت هشدار
+              </button>
+            </>
+          )}
+        </div>
+
+        {nativeCaps.isNative && securityStatus && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+              {[
+                {label: 'دوربین سلفی و پشت', ok: securityStatus.cameraGranted},
+                {label: 'موقعیت مکانی GPS', ok: securityStatus.locationGranted},
+                {label: 'دسترس‌پذیری پاور', ok: securityStatus.accessibilityEnabled},
+                {label: 'نمایش روی صفحه قفل', ok: securityStatus.overlayGranted},
+                {
+                  label: `شبکه (${securityStatus.networkType})${securityStatus.vpnActive ? ' + VPN' : ''}`,
+                  ok: securityStatus.networkConnected,
+                },
+                {
+                  label: `صف ارسال آفلاین: ${toPersianDigits(securityStatus.queuedAlertsCount)}`,
+                  ok: securityStatus.queuedAlertsCount === 0,
+                },
+              ].map((tile) => (
+                <div
+                  key={tile.label}
+                  className={`rounded-xl border px-3 py-2 text-xs font-semibold ${
+                    tile.ok
+                      ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+                      : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200'
+                  }`}
+                >
+                  {tile.label}
+                </div>
+              ))}
+            </div>
+
+            {securityStatus.recentAlerts.length > 0 && (
+              <div className="rounded-xl border border-slate-200 dark:border-emerald-900/70 bg-slate-50/70 dark:bg-[#0B1312] p-4 space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-slate-900 dark:text-white">
+                    آخرین هشدارهای امنیتی ثبت‌شده روی گوشی
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await flushPendingSecurityAlertsNative();
+                        await refreshSecurityStatus();
+                        onStatusToast('صف هشدارهای امنیتی بررسی و ارسال شد.');
+                      }}
+                      className="min-h-[36px] px-3 rounded-lg bg-emerald-700 text-white text-[11px] font-semibold cursor-pointer"
+                    >
+                      ارسال مجدد صف
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await clearSecurityAlertsLogNative();
+                        await refreshSecurityStatus();
+                        onStatusToast('گزارش‌های محلی هشدار پاک شد.');
+                      }}
+                      className="min-h-[36px] px-3 rounded-lg border border-slate-200 dark:border-emerald-900 text-[11px] text-slate-600 dark:text-slate-300 cursor-pointer"
+                    >
+                      پاک کردن لیست
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {securityStatus.recentAlerts.map((al) => (
+                    <div
+                      key={al.id}
+                      className="rounded-lg bg-white dark:bg-[#121E1C] border border-slate-200/70 dark:border-emerald-950 px-3 py-2 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                    >
+                      <div className="space-y-0.5">
+                        <div className="font-semibold text-slate-900 dark:text-white">
+                          {al.reason} (تلاش {toPersianDigits(al.attemptCount)})
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                          {al.timestampIso} · سلفی: {al.hasFrontPhoto ? 'ثبت شد' : 'خیر'} · پشت: {al.hasBackPhoto ? 'ثبت شد' : 'خیر'} · {al.dispatchStatus || (al.sent ? 'ارسال‌شده' : 'در صف')}
+                        </div>
+                      </div>
+                      {al.mapsUrl && (
+                        <a
+                          href={al.mapsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 hover:underline shrink-0"
+                        >
+                          مشاهده روی نقشه گوگل
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="rounded-xl bg-amber-50/70 dark:bg-amber-950/25 border border-amber-200/80 dark:border-amber-900/60 p-4 text-xs leading-6 text-amber-950 dark:text-amber-100/90 space-y-1.5">
+          <div className="font-bold">نکات مهم و محدودیت‌های واقعی اندروید / شیائومی (صادقانه):</div>
+          <ul className="list-disc list-inside space-y-1">
+            <li>نگه‌داشتن ۱۰ ثانیه‌ای دکمه پاور در سطح سخت‌افزار گوشی انجام می‌شود و هیچ اپلیکیشنی امکان مسدود کردن قطع برق تراشه را ندارد؛ اما منوی عادی خاموش/ری‌استارت با سرویس دسترس‌پذیری متوقف می‌شود.</li>
+            <li>روی گوشی‌های HyperOS / MIUI حتماً از تنظیمات گوشی گزینه <strong>غیرفعال کردن کنترل‌سنتر و منوی پاور در صفحه قفل</strong> را روشن کنید تا سارق نتواند در حالت قفل اینترنت را ببندد.</li>
+            <li>اندروید به برنامه‌های عادی اجازه روشن کردن خودکار دیتای موبایل، GPS یا اپلیکیشن VPN دیگر را نمی‌دهد؛ اما به محض برقراری اینترنت، عکس سلفی، عکس پشت و لوکیشن از صف آفلاین گوشی ارسال می‌شوند.</li>
+          </ul>
+        </div>
+      </section>
+
+      {/* Saved Address, Callback Phone & Proxy Calling Bridge */}
+      <section className="rounded-2xl bg-white dark:bg-[#121E1C] border border-slate-200/80 dark:border-emerald-950/70 p-6 sm:p-8 space-y-4">
+        <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+          <MapPin className="w-4 h-4" />
+          <span>اطلاعات ثابت سفارش و تماس نیابتی</span>
+        </div>
+        <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+          نشانی تحویل، شماره بازگشت و پل تماس VoIP خودکار
+        </h2>
+        <p className="text-xs leading-6 text-slate-600 dark:text-slate-300">
+          یک‌بار آدرس و شماره تماس را ذخیره کنید تا در فرمان‌هایی مثل «به پیتزافروشی زنگ بزن سفارش بده با آدرسم»، متن آماده تماس با نشانی شما ساخته شود.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="md:col-span-2">
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+              نشانی کامل تحویل سفارش
+            </label>
+            <input
+              type="text"
+              value={homeAddressDraft}
+              onChange={(e) => setHomeAddressDraft(e.target.value)}
+              placeholder="تهران، خیابان ... کوچه ... پلاک ... واحد ..."
+              className="w-full min-h-[44px] px-3.5 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50/70 dark:bg-[#0B1312] text-sm text-slate-900 dark:text-white"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+              شماره تماس هماهنگی
+            </label>
+            <input
+              type="tel"
+              dir="ltr"
+              value={callbackPhoneDraft}
+              onChange={(e) => setCallbackPhoneDraft(e.target.value)}
+              placeholder="0912..."
+              className="w-full min-h-[44px] px-3.5 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50/70 dark:bg-[#0B1312] text-sm font-mono-num text-slate-900 dark:text-white"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+            نشانی وب‌هوک VoIP / SIP ابری برای تماس خودکار دوطرفه (اختیاری - HTTPS)
+          </label>
+          <input
+            type="url"
+            dir="ltr"
+            value={voipWebhookDraft}
+            onChange={(e) => setVoipWebhookDraft(e.target.value)}
+            placeholder="https://your-voip-bridge.example.com/call"
+            className="w-full min-h-[44px] px-3.5 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50/70 dark:bg-[#0B1312] text-xs font-mono-num text-slate-900 dark:text-white"
+          />
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            savePersonalCallProfile({
+              homeAddress: homeAddressDraft.trim(),
+              callbackPhone: callbackPhoneDraft.trim(),
+              voipWebhookUrl: voipWebhookDraft.trim(),
+            });
+            onStatusToast('نشانی تحویل، تلفن تماس و وب‌هوک VoIP ذخیره شد.');
+          }}
+          className="min-h-[44px] px-5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs sm:text-sm font-semibold cursor-pointer"
+        >
+          ذخیره نشانی و تنظیمات تماس
+        </button>
       </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

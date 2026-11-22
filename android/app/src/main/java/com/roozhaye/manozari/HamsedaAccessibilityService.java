@@ -2,21 +2,26 @@ package com.roozhaye.manozari;
 
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
+import android.os.Build;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
-import android.os.Build;
+import android.view.accessibility.AccessibilityWindowInfo;
+
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * User-enabled accessibility bridge for safe, explicit UI actions.
- * It only clicks a camera shutter after the user issued a take-photo command.
+ * User-enabled accessibility bridge for safe, explicit UI actions and
+ * optional Anti-Theft Power-Off Menu interception.
  */
 public class HamsedaAccessibilityService extends AccessibilityService {
     private static volatile HamsedaAccessibilityService instance;
     private static final AtomicBoolean CAMERA_SHUTTER_ARMED = new AtomicBoolean(false);
+    private static volatile long lastPowerGuardTriggeredAtMs = 0L;
 
-    @Override public void onServiceConnected() {
+    @Override
+    public void onServiceConnected() {
         super.onServiceConnected();
         instance = this;
         AccessibilityServiceInfo info = getServiceInfo();
@@ -32,15 +37,115 @@ public class HamsedaAccessibilityService extends AccessibilityService {
         }
     }
 
-    @Override public void onAccessibilityEvent(AccessibilityEvent event) {
-        if (event == null || !CAMERA_SHUTTER_ARMED.get()) return;
+    @Override
+    public void onAccessibilityEvent(AccessibilityEvent event) {
+        if (event == null) return;
         int type = event.getEventType();
         if (type != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
                 && type != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
-                && type != AccessibilityEvent.TYPE_WINDOWS_CHANGED) return;
-        AccessibilityNodeInfo root = getRootInActiveWindow();
-        if (root == null) return;
-        if (clickCameraShutter(root)) CAMERA_SHUTTER_ARMED.set(false);
+                && type != AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
+            return;
+        }
+
+        // 1. Optional Anti-Theft Power-Off Menu Guard
+        CharSequence pkgCs = event.getPackageName();
+        String pkg = pkgCs != null ? pkgCs.toString().toLowerCase(Locale.ROOT) : "";
+        if (!getPackageName().equals(pkg)
+                && !"com.android.settings".equals(pkg)
+                && SecurityAlertHelper.isEnabledAndConfigured(this)
+                && !SecurityAlertHelper.isInUnlockGraceWindow(this)) {
+            if (isSystemPowerMenuVisible(pkg)) {
+                long now = System.currentTimeMillis();
+                if (now - lastPowerGuardTriggeredAtMs > 2800L) {
+                    lastPowerGuardTriggeredAtMs = now;
+                    performGlobalAction(GLOBAL_ACTION_BACK);
+                    PowerGuardActivity.launch(this, "power_menu_intercept", false);
+                    return;
+                }
+            }
+        }
+
+        // 2. Explicit Camera Shutter Trigger
+        if (CAMERA_SHUTTER_ARMED.get()) {
+            AccessibilityNodeInfo root = getRootInActiveWindow();
+            if (root != null && clickCameraShutter(root)) {
+                CAMERA_SHUTTER_ARMED.set(false);
+            }
+        }
+    }
+
+    private boolean isSystemPowerMenuVisible(String eventPackage) {
+        boolean isSystemOverlayPkg = eventPackage.isEmpty()
+                || "android".equals(eventPackage)
+                || eventPackage.contains("systemui")
+                || eventPackage.contains("power")
+                || eventPackage.contains("miui")
+                || eventPackage.contains("globalactions");
+        if (!isSystemOverlayPkg) return false;
+
+        AccessibilityNodeInfo activeRoot = getRootInActiveWindow();
+        if (activeRoot != null && containsPowerMenuAction(activeRoot, 0)) {
+            return true;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            try {
+                List<AccessibilityWindowInfo> windows = getWindows();
+                if (windows != null) {
+                    for (AccessibilityWindowInfo win : windows) {
+                        AccessibilityNodeInfo root = win.getRoot();
+                        if (root != null) {
+                            CharSequence winPkgCs = root.getPackageName();
+                            String winPkg = winPkgCs != null ? winPkgCs.toString().toLowerCase(Locale.ROOT) : "";
+                            if (!getPackageName().equals(winPkg) && !"com.android.settings".equals(winPkg)) {
+                                if (containsPowerMenuAction(root, 0)) {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return false;
+    }
+
+    private boolean containsPowerMenuAction(AccessibilityNodeInfo node, int depth) {
+        if (node == null || depth > 7) return false;
+        CharSequence t = node.getText();
+        CharSequence d = node.getContentDescription();
+        String label = ((t == null ? "" : t.toString()) + " " + (d == null ? "" : d.toString()))
+                .toLowerCase(Locale.ROOT)
+                .replace('ي', 'ی')
+                .replace('ك', 'ک')
+                .trim();
+
+        if (!label.isEmpty() && node.isVisibleToUser()) {
+            boolean isPowerOff = label.contains("power off")
+                    || label.contains("poweroff")
+                    || label.contains("turn off")
+                    || label.contains("shut down")
+                    || label.contains("shutdown")
+                    || label.contains("خاموش کردن")
+                    || label.equals("خاموش")
+                    || label.contains("توقف کار");
+            boolean isReboot = label.equals("restart")
+                    || label.contains("reboot")
+                    || label.contains("راه‌اندازی مجدد")
+                    || label.contains("راه اندازی مجدد")
+                    || label.contains("شروع مجدد");
+            if (isPowerOff || isReboot) {
+                return true;
+            }
+        }
+
+        int childCount = Math.min(20, node.getChildCount());
+        for (int i = 0; i < childCount; i++) {
+            if (containsPowerMenuAction(node.getChild(i), depth + 1)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean clickCameraShutter(AccessibilityNodeInfo node) {
@@ -108,7 +213,6 @@ public class HamsedaAccessibilityService extends AccessibilityService {
         return false;
     }
 
-
     public static boolean setTextInFocusedField(String value) {
         HamsedaAccessibilityService s = instance;
         if (s == null || value == null) return false;
@@ -135,8 +239,6 @@ public class HamsedaAccessibilityService extends AccessibilityService {
         AccessibilityNodeInfo root = s.getRootInActiveWindow();
         if (scrollRecursive(root, down)) return true;
 
-        // Some apps (including many WebViews) expose no scrollable accessibility
-        // node. Fall back to a user-requested swipe gesture in the active window.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             android.util.DisplayMetrics metrics = s.getResources().getDisplayMetrics();
             float x = metrics.widthPixels * 0.5f;
@@ -164,8 +266,11 @@ public class HamsedaAccessibilityService extends AccessibilityService {
         return false;
     }
 
-    @Override public void onInterrupt() { }
-    @Override public void onDestroy() {
+    @Override
+    public void onInterrupt() {}
+
+    @Override
+    public void onDestroy() {
         if (instance == this) instance = null;
         super.onDestroy();
     }
