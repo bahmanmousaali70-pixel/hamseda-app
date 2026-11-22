@@ -4,6 +4,7 @@ import {AssistantView} from './components/AssistantView';
 import {CallerAnnouncerView} from './components/CallerAnnouncerView';
 import {DriveModeModal} from './components/DriveModeModal';
 import {GratitudeView} from './components/GratitudeView';
+import {FamilyLifeSuite} from './components/FamilyLifeSuite';
 import {advanceDateKey} from './components/LifeToolsView';
 import {NightAndMessagesView} from './components/NightAndMessagesView';
 import {SyncSettingsView} from './components/SyncSettingsView';
@@ -2069,6 +2070,8 @@ export default function App() {
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-28 lg:pb-12">
+        {activeTab === 'family' && <FamilyLifeSuite />}
+
         {activeTab === 'today' && (
           <TodayView
             goals={goals}
