@@ -11,6 +11,7 @@ const ICE_CONFIG: RTCConfiguration = {
 interface CallsViewProps {
   displayName: string;
   visible: boolean;
+  onOpenCalls: () => void;
 }
 
 interface ActiveCall {
@@ -28,7 +29,7 @@ function readContacts(): VoiceContact[] {
   }
 }
 
-export const CallsView: React.FC<CallsViewProps> = ({displayName, visible}) => {
+export const CallsView: React.FC<CallsViewProps> = ({displayName, visible, onOpenCalls}) => {
   const [identity, setIdentity] = useState<VoiceIdentity | null>(null);
   const [nameDraft, setNameDraft] = useState(displayName || '');
   const [contacts, setContacts] = useState<VoiceContact[]>(readContacts);
@@ -42,6 +43,8 @@ export const CallsView: React.FC<CallsViewProps> = ({displayName, visible}) => {
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [messageToSay, setMessageToSay] = useState('');
+  const [requestedCall, setRequestedCall] = useState<{targetName: string; script: string} | null>(null);
   const [muted, setMuted] = useState(false);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -337,6 +340,39 @@ export const CallsView: React.FC<CallsViewProps> = ({displayName, visible}) => {
     }
   };
 
+  useEffect(() => {
+    const onInternetCallRequest = (event: Event) => {
+      const detail = (event as CustomEvent<{targetName?: string; script?: string}>).detail;
+      if (!detail?.targetName) return;
+      setRequestedCall({targetName: detail.targetName, script: detail.script || ''});
+      setMessageToSay(detail.script || '');
+      setError('');
+      onOpenCalls();
+    };
+    window.addEventListener('hamseda-internet-call', onInternetCallRequest);
+    return () => window.removeEventListener('hamseda-internet-call', onInternetCallRequest);
+  }, [onOpenCalls]);
+
+  useEffect(() => {
+    if (!requestedCall || !identity || busy || activeCall) return;
+    const normalize = (value: string) => value.toLocaleLowerCase('fa-IR')
+      .replace(/[\\s\\u200c\\u200f\\u200e]/g, '')
+      .replace(/ي/g, 'ی')
+      .replace(/ك/g, 'ک');
+    const target = normalize(requestedCall.targetName);
+    const matches = contacts.filter((contact) => {
+      const name = normalize(contact.displayName);
+      return name === target || name.includes(target) || target.includes(name);
+    });
+    setRequestedCall(null);
+    if (matches.length === 1) {
+      void startOutgoingCall(matches[0]);
+    } else if (matches.length === 0) {
+      setError('مخاطب «' + requestedCall.targetName + '» در فهرست تماس هم‌صدا نیست. ابتدا کد دعوت او را اضافه کن.');
+    } else {
+      setError('چند مخاطب با نام «' + requestedCall.targetName + '» پیدا شد؛ نام مخاطب را دقیق‌تر بگو.');
+    }
+  }, [requestedCall, identity, busy, activeCall, contacts, startOutgoingCall]);
   const removeContact = (uid: string) => {
     const next = contacts.filter((item) => item.uid !== uid);
     setContacts(next);
@@ -449,6 +485,7 @@ export const CallsView: React.FC<CallsViewProps> = ({displayName, visible}) => {
       )}
 
       {error && <div className="rounded-xl bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 p-3 text-xs leading-6">{error}</div>}
+      {messageToSay && <div className="rounded-xl bg-blue-50 dark:bg-blue-950/30 text-blue-800 dark:text-blue-200 p-3 text-xs leading-6">پیامی که گفتی: «{messageToSay}» — پس از وصل تماس، آن را با صدای خودت بگو.</div>}
       <div className="text-xs text-slate-500 dark:text-slate-400">{callStatus}</div>
       <p className="text-[11px] leading-6 text-slate-500 dark:text-slate-400">نکته: این نسخه برای آزمایش تماس وقتی برنامه روی گوشی باز است طراحی شده. پاسخ خودکار در پس‌زمینه، اعلان تماس هنگام بسته‌بودن برنامه و عبور از شبکه‌هایی که ارتباط مستقیم را مسدود می‌کنند، هنوز به سرویس و تنظیمات تکمیلی نیاز دارد.</p>
     </section>
