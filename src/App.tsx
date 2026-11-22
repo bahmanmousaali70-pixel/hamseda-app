@@ -2,6 +2,7 @@ import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {WifiOff, X} from 'lucide-react';
 import {AssistantView} from './components/AssistantView';
 import {CallerAnnouncerView} from './components/CallerAnnouncerView';
+import {CallsView} from './components/CallsView';
 import {DriveModeModal} from './components/DriveModeModal';
 import {GratitudeView} from './components/GratitudeView';
 import {FamilyLifeSuite} from './components/FamilyLifeSuite';
@@ -2299,6 +2300,8 @@ export default function App() {
             onStatusToast={showToast}
           />
         )}
+
+        <CallsView displayName={getSelfName(settings, deviceOwner)} visible={activeTab === 'caller'} />
 
         {activeTab === 'sync' && (
           <SyncSettingsView
