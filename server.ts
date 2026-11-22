@@ -1596,6 +1596,12 @@ function buildFallbackMusicQueries(persianMood: string): {
   radioTag: string;
 } {
   const m = persianMood.toLowerCase();
+  if (m.includes('آریان') || m.includes('arian')) {
+    return {audiusQuery: 'Arian Band', archiveQuery: '"Arian" OR "Arian Band" OR "گروه آریان"', radioTag: 'persian'};
+  }
+  if (m.includes('کالکشن') || m.includes('قدیمی') || m.includes('نوستالژی') || m.includes('خاطره')) {
+    return {audiusQuery: 'Persian oldies', archiveQuery: '"Persian oldies" OR "Iranian oldies" OR "Persian pop classics"', radioTag: 'persian'};
+  }
   if (m.includes('شجریان') || m.includes('سنتی') || m.includes('همایون')) {
     return {audiusQuery: 'shajarian', archiveQuery: 'shajarian OR santoor', radioTag: 'persian'};
   }
@@ -1613,7 +1619,7 @@ function buildFallbackMusicQueries(persianMood: string): {
 
 async function fetchArchiveFullTracks(query: string): Promise<ServerMusicTrack[]> {
   try {
-    const searchUrl = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(`(${query}) AND mediatype:(audio)`)}&fl[]=identifier,title,creator&sort[]=downloads+desc&rows=7&output=json`;
+    const searchUrl = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(`(${query}) AND mediatype:(audio)`)}&fl[]=identifier,title,creator&sort[]=downloads+desc&rows=14&output=json`;
     const searchRes = await fetch(searchUrl, {signal: AbortSignal.timeout(5500)});
     if (!searchRes.ok) return [];
     const searchJson = (await searchRes.json()) as {
@@ -1623,7 +1629,7 @@ async function fetchArchiveFullTracks(query: string): Promise<ServerMusicTrack[]
     if (docs.length === 0) return [];
 
     const metaResults = await Promise.allSettled(
-      docs.slice(0, 5).map(async (doc) => {
+      docs.slice(0, 8).map(async (doc) => {
         if (!doc.identifier) return [];
         const mRes = await fetch(`https://archive.org/metadata/${encodeURIComponent(doc.identifier)}/files`, {
           signal: AbortSignal.timeout(4500),
@@ -1638,7 +1644,7 @@ async function fetchArchiveFullTracks(query: string): Promise<ServerMusicTrack[]
           return (name.endsWith('.mp3') || name.endsWith('.ogg')) && (!Number.isFinite(secs) || secs === 0 || secs >= 60);
         });
         const tracksForDoc: ServerMusicTrack[] = [];
-        for (const f of files.slice(0, 2)) {
+        for (const f of files.slice(0, 3)) {
           if (!f.name) continue;
           const secsRaw = parseFloat(String(f.length || '0'));
           const durationSec = Number.isFinite(secsRaw) && secsRaw >= 60 ? Math.round(secsRaw) : undefined;
@@ -1668,56 +1674,50 @@ async function fetchArchiveFullTracks(query: string): Promise<ServerMusicTrack[]
   }
 }
 
-async function fetchPlayableMusicPlaylist(moodOrGenre: string, ai: GoogleGenAI | null): Promise<ServerMusicTrack[]> {
-  let {audiusQuery, archiveQuery} = buildFallbackMusicQueries(moodOrGenre);
+async function fetchPlayableMusicPlaylist(moodOrGenre: string, _ai: GoogleGenAI | null): Promise<ServerMusicTrack[]> {
+  const rawQuery = moodOrGenre.trim().slice(0, 180);
+  const fallback = buildFallbackMusicQueries(rawQuery);
+  const normalized = rawQuery.toLowerCase().replace(/[يى]/g, 'ی').replace(/ك/g, 'ک');
 
-  if (ai && moodOrGenre) {
-    try {
-      const qRes = await ai.models.generateContent({
-        model: 'gemini-4-hydrogen',
-        contents: `کاربر این نام خواننده، سبک یا حال‌وهوای موسیقی را جستجو کرده است: "${moodOrGenre}".
-دو عبارت جستجوی دقیق (به خط انگلیسی برای سرویس‌های موسیقی رایگان کامل مثل Audius و Internet Archive) برگردان تا فقط قطعات موسیقی کامل (بالای ۲ دقیقه، نه ایستگاه رادیویی) پیدا شوند.`,
-        config: {
-          thinkingConfig: {thinkingLevel: ThinkingLevel.LOW},
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              audiusQuery: {type: Type.STRING, description: 'English keywords or artist name for Audius full tracks search'},
-              archiveQuery: {type: Type.STRING, description: 'English query for Archive.org full audio tracks'},
-            },
-            required: ['audiusQuery', 'archiveQuery'],
-          },
-        },
-      });
-      const parsed = JSON.parse((qRes.text ?? '{}').trim()) as {
-        audiusQuery?: string;
-        archiveQuery?: string;
-      };
-      if (parsed.audiusQuery?.trim()) audiusQuery = parsed.audiusQuery.trim();
-      if (parsed.archiveQuery?.trim()) archiveQuery = parsed.archiveQuery.trim();
-    } catch {
-      // Keep smart fallback keywords
-    }
+  // Expand common Persian artist / collection wording into source-friendly aliases.
+  // We search the user's exact phrase as well, so arbitrary artist names are not discarded.
+  let audiusQueries = [fallback.audiusQuery, rawQuery];
+  let archiveQueries = [fallback.archiveQuery, rawQuery];
+  if (/(آریان|arian)/i.test(normalized)) {
+    audiusQueries = ['Arian Band', 'Arian Iranian pop', rawQuery];
+    archiveQueries = ['"Arian" OR "Arian Band" OR "گروه آریان"', '"Arian Iranian band"', rawQuery];
+  } else if (/(کالکشن|مجموعه|قدیمی|نوستالژی|خاطره)/.test(normalized)) {
+    audiusQueries = ['Persian oldies', 'Iranian pop classics', 'Persian classic pop'];
+    archiveQueries = ['"Persian oldies" OR "Iranian oldies"', '"Persian pop classics"', 'Iranian old music collection'];
+  } else if (/^[a-z0-9\s&'-]+$/i.test(rawQuery)) {
+    audiusQueries = [rawQuery, fallback.audiusQuery];
+    archiveQueries = [`"${rawQuery}"`, fallback.archiveQuery];
   }
+  const unique = (items: string[]) => [...new Set(items.map((v) => v.trim()).filter(Boolean))].slice(0, 3);
+  audiusQueries = unique(audiusQueries);
+  archiveQueries = unique(archiveQueries);
+
+  const [audiusResults, archiveResults] = await Promise.all([
+    Promise.allSettled(audiusQueries.map(async (query) => {
+      const response = await fetch(
+        `https://api.audius.co/v1/tracks/search?query=${encodeURIComponent(query)}&limit=18&app_name=roozhaye`,
+        {signal: AbortSignal.timeout(7000)}
+      );
+      if (!response.ok) return [];
+      const payload = await response.json();
+      return Array.isArray(payload?.data) ? payload.data : [];
+    })),
+    Promise.allSettled(archiveQueries.map((query) => fetchArchiveFullTracks(query))),
+  ]);
 
   const tracks: ServerMusicTrack[] = [];
   const seenIds = new Set<string>();
-
-  // Pure music tracks ONLY (Audius + Internet Archive) — NEVER mix live radio stations into the Music playlist!
-  const [audiusRes, archiveTracks] = await Promise.allSettled([
-    fetch(
-      `https://api.audius.co/v1/tracks/search?query=${encodeURIComponent(audiusQuery)}&limit=14&app_name=roozhaye`,
-      {signal: AbortSignal.timeout(6500)}
-    ).then((r) => (r.ok ? r.json() : null)),
-    fetchArchiveFullTracks(archiveQuery),
-  ]);
-
-  if (audiusRes.status === 'fulfilled' && Array.isArray(audiusRes.value?.data)) {
-    for (const item of audiusRes.value.data) {
+  for (const result of audiusResults) {
+    if (result.status !== 'fulfilled') continue;
+    for (const item of result.value) {
       if (!item?.id || !item?.title) continue;
-      const dur = typeof item.duration === 'number' ? item.duration : 0;
-      if (dur > 0 && dur < 60) continue;
+      const duration = typeof item.duration === 'number' ? item.duration : 0;
+      if (duration > 0 && duration < 60) continue;
       const id = `audius_${item.id}`;
       if (seenIds.has(id)) continue;
       seenIds.add(id);
@@ -1727,59 +1727,24 @@ async function fetchPlayableMusicPlaylist(moodOrGenre: string, ai: GoogleGenAI |
         artist: String(item.user?.name || item.user?.handle || 'Audius Artist'),
         artworkUrl: item.artwork?.['150x150'] || item.artwork?.['480x480'] || undefined,
         streamUrl: `https://api.audius.co/v1/tracks/${encodeURIComponent(item.id)}/stream?app_name=roozhaye`,
-        durationSec: dur >= 60 ? dur : undefined,
+        durationSec: duration >= 60 ? duration : undefined,
         source: 'audius',
         externalUrl: item.permalink ? `https://audius.co${item.permalink}` : undefined,
       });
     }
   }
-
-  if (archiveTracks.status === 'fulfilled' && Array.isArray(archiveTracks.value)) {
-    for (const t of archiveTracks.value) {
-      if (seenIds.has(t.id)) continue;
-      seenIds.add(t.id);
-      tracks.push(t);
+  for (const result of archiveResults) {
+    if (result.status !== 'fulfilled') continue;
+    for (const track of result.value) {
+      if (seenIds.has(track.id)) continue;
+      seenIds.add(track.id);
+      tracks.push(track);
     }
   }
 
-  // Fallback pure music search if initial query returned too few tracks
-  if (tracks.length < 3) {
-    try {
-      const extraRes = await fetch(
-        `https://api.audius.co/v1/tracks/search?query=${encodeURIComponent('persian instrumental chill')}&limit=8&app_name=roozhaye`,
-        {signal: AbortSignal.timeout(5000)}
-      );
-      if (extraRes.ok) {
-        const extraJson = await extraRes.json();
-        if (Array.isArray(extraJson?.data)) {
-          for (const item of extraJson.data) {
-            if (!item?.id || !item?.title) continue;
-            const dur = typeof item.duration === 'number' ? item.duration : 0;
-            if (dur > 0 && dur < 60) continue;
-            const id = `audius_${item.id}`;
-            if (seenIds.has(id)) continue;
-            seenIds.add(id);
-            tracks.push({
-              id,
-              title: String(item.title),
-              artist: String(item.user?.name || item.user?.handle || 'Audius Artist'),
-              artworkUrl: item.artwork?.['150x150'] || item.artwork?.['480x480'] || undefined,
-              streamUrl: `https://api.audius.co/v1/tracks/${encodeURIComponent(item.id)}/stream?app_name=roozhaye`,
-              durationSec: dur >= 60 ? dur : undefined,
-              source: 'audius',
-              externalUrl: item.permalink ? `https://audius.co${item.permalink}` : undefined,
-            });
-          }
-        }
-      }
-    } catch {
-      // ignore fallback search errors
-    }
-  }
-
-  return tracks.slice(0, 18);
+  // Never pad a failed artist search with unrelated music: return only actual matches.
+  return tracks.slice(0, 30);
 }
-
 app.post('/api/radio-stations', async (req, res) => {
   const category = typeof req.body?.category === 'string' ? req.body.category : 'iran';
   const rawQuery = typeof req.body?.query === 'string' ? req.body.query.trim() : '';
@@ -2746,82 +2711,86 @@ function unwrapSearchUrl(rawUrl: string, base: string): string {
 async function searchPublicWeb(query: string): Promise<PublicSearchResult[]> {
   const cleanQuery = query.trim().slice(0, 240);
   if (!cleanQuery) return [];
+
   const engines = [
-    {
-      url: 'https://html.duckduckgo.com/html/?q=' + encodeURIComponent(cleanQuery),
-      kind: 'duckduckgo' as const,
-      base: 'https://html.duckduckgo.com',
-    },
-    {
-      url: 'https://www.google.com/search?hl=fa&num=8&q=' + encodeURIComponent(cleanQuery),
-      kind: 'google' as const,
-      base: 'https://www.google.com',
-    },
+    {kind: 'bing' as const, url: 'https://www.bing.com/search?q=' + encodeURIComponent(cleanQuery)},
+    {kind: 'duckduckgo' as const, url: 'https://html.duckduckgo.com/html/?q=' + encodeURIComponent(cleanQuery)},
+    {kind: 'google' as const, url: 'https://www.google.com/search?hl=fa&num=10&q=' + encodeURIComponent(cleanQuery)},
   ];
-  for (const engine of engines) {
-    try {
-      const response = await fetch(engine.url, {
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36',
-          Accept: 'text/html,application/xhtml+xml',
-          'Accept-Language': 'fa-IR,fa;q=0.9,en;q=0.8',
-        },
-        signal: AbortSignal.timeout(4500),
-      });
-      if (!response.ok) continue;
-      const html = await response.text();
-      const found: PublicSearchResult[] = [];
-      const seen = new Set<string>();
-      const anchors = [...html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)];
-      if (engine.kind === 'duckduckgo') {
-        const resultLinks = anchors.filter((m) => /\bresult__a\b/i.test(m[1]));
-        for (let i = 0; i < resultLinks.length; i++) {
-          const match = resultLinks[i];
-          const rawHref = (match[1].match(/\bhref=["']([^"']+)["']/i)?.[1] || '').replace(/&amp;/g, '&');
-          const url = unwrapSearchUrl(rawHref, engine.base);
-          const title = decodeSearchHtml(match[2]);
-          if (!url || !title || seen.has(url)) continue;
-          seen.add(url);
-          const sliceStart = (match.index ?? 0) + match[0].length;
-          const sliceEnd = resultLinks[i + 1]?.index ?? Math.min(html.length, sliceStart + 2500);
-          const block = html.slice(sliceStart, sliceEnd);
-          const snippetMatch = block.match(/<a\b[^>]*\bresult__snippet\b[^>]*>([\s\S]*?)<\/a>/i);
-          const snippet = snippetMatch ? decodeSearchHtml(snippetMatch[1]) : '';
-          found.push({title: title.slice(0, 140), url, snippet: snippet.slice(0, 420)});
-          if (found.length >= 7) break;
-        }
-      } else {
-        const googleAnchors = [
-          ...html.matchAll(/<a\b([^>]*)>([\s\S]*?<h3\b[\s\S]*?<\/h3>[\s\S]*?)<\/a>/gi),
-        ];
-        for (let i = 0; i < googleAnchors.length; i++) {
-          const match = googleAnchors[i];
-          const href = match[1].match(/\bhref=["']([^"']+)["']/i)?.[1] || '';
-          const url = unwrapSearchUrl(href, engine.base);
-          const title = decodeSearchHtml(match[2]);
-          if (!url || !title || seen.has(url)) continue;
-          seen.add(url);
-          const nextIndex =
-            googleAnchors[i + 1]?.index ?? Math.min(html.length, (match.index ?? 0) + 4200);
-          const snippet = decodeSearchHtml(
-            html.slice((match.index ?? 0) + match[0].length, nextIndex)
-          );
-          found.push({title: title.slice(0, 140), url, snippet: snippet.slice(0, 420)});
-          if (found.length >= 7) break;
-        }
+
+  const parseResults = (html: string, kind: 'bing' | 'duckduckgo' | 'google'): PublicSearchResult[] => {
+    const found: PublicSearchResult[] = [];
+    const seen = new Set<string>();
+    const add = (rawHref: string, rawTitle: string, rawSnippet: string) => {
+      const href = rawHref.replace(/&amp;/g, '&').replace(/&quot;/g, '"');
+      const url = unwrapSearchUrl(href, kind === 'duckduckgo' ? 'https://html.duckduckgo.com' : kind === 'bing' ? 'https://www.bing.com' : 'https://www.google.com');
+      const title = decodeSearchHtml(rawTitle).replace(/\s+/g, ' ').trim();
+      const snippet = decodeSearchHtml(rawSnippet).replace(/\s+/g, ' ').trim();
+      if (!url || !title || seen.has(url) || !/^https?:\/\//i.test(url)) return;
+      seen.add(url);
+      found.push({title: title.slice(0, 160), url, snippet: snippet.slice(0, 500)});
+    };
+
+    if (kind === 'bing') {
+      const blocks = [...html.matchAll(/<li\b[^>]*class=["'][^"']*\bb_algo\b[^"']*["'][^>]*>([\s\S]*?)<\/li>/gi)];
+      for (const block of blocks) {
+        const anchor = block[1].match(/<h2\b[^>]*>\s*<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/i);
+        if (!anchor) continue;
+        const snippet = block[1].match(/<p\b[^>]*>([\s\S]*?)<\/p>/i)?.[1] || '';
+        add(anchor[1], anchor[2], snippet);
+        if (found.length >= 8) break;
       }
-      if (found.length) return found;
-    } catch (error) {
-      console.info(
-        'Public web search ' + engine.kind + ' skipped:',
-        error instanceof Error ? error.message : error
-      );
+    } else if (kind === 'duckduckgo') {
+      const anchors = [...html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)]
+        .filter((match) => /\bresult__a\b/i.test(match[1]));
+      for (let i = 0; i < anchors.length; i++) {
+        const match = anchors[i];
+        const href = match[1].match(/\bhref=["']([^"']+)["']/i)?.[1] || '';
+        const start = (match.index ?? 0) + match[0].length;
+        const end = anchors[i + 1]?.index ?? Math.min(html.length, start + 2600);
+        const block = html.slice(start, end);
+        const snippet = block.match(/<(?:a|div)\b[^>]*class=["'][^"']*result__snippet[^"']*["'][^>]*>([\s\S]*?)<\/(?:a|div)>/i)?.[1] || '';
+        add(href, match[2], snippet);
+        if (found.length >= 8) break;
+      }
+    } else {
+      const anchors = [...html.matchAll(/<a\b([^>]*)>([\s\S]*?<h3\b[\s\S]*?<\/h3>[\s\S]*?)<\/a>/gi)];
+      for (let i = 0; i < anchors.length; i++) {
+        const match = anchors[i];
+        const href = match[1].match(/\bhref=["']([^"']+)["']/i)?.[1] || '';
+        const next = anchors[i + 1]?.index ?? Math.min(html.length, (match.index ?? 0) + 4200);
+        add(href, match[2], html.slice((match.index ?? 0) + match[0].length, next));
+        if (found.length >= 8) break;
+      }
+    }
+    return found;
+  };
+
+  const attempts = await Promise.allSettled(engines.map(async (engine) => {
+    const response = await fetch(engine.url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml',
+        'Accept-Language': 'fa-IR,fa;q=0.9,en;q=0.8',
+      },
+      signal: AbortSignal.timeout(6500),
+    });
+    if (!response.ok) return [];
+    return parseResults(await response.text(), engine.kind);
+  }));
+
+  const merged: PublicSearchResult[] = [];
+  const seen = new Set<string>();
+  for (const attempt of attempts) {
+    if (attempt.status !== 'fulfilled') continue;
+    for (const result of attempt.value) {
+      if (seen.has(result.url)) continue;
+      seen.add(result.url);
+      merged.push(result);
     }
   }
-  return [];
+  return merged.slice(0, 10);
 }
-
 async function fetchPublicPageContent(rawUrl: string): Promise<string> {
   const safe = isSafePublicAudioUrl(rawUrl);
   if (!safe) return '';
