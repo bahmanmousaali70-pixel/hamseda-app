@@ -159,7 +159,8 @@ function formatTrackClock(seconds: number): string {
 
 function sourceLabel(track: MusicTrack): string {
   if (track.isLiveStream || track.source === 'radio') return 'رادیو زنده';
-  if (track.source === 'archive') return 'پخش کامل (آرشیو موسیقی)';
+  if (!track.streamUrl) return 'مشاهده در سایت منبع';
+  if (track.source === 'archive') return 'پخش مستقیم از منبع';
   return 'پخش کامل';
 }
 
@@ -469,6 +470,16 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
       return;
     }
 
+    const selectedTrack = tracks[index];
+    if (selectedTrack && !selectedTrack.streamUrl) {
+      if (selectedTrack.externalUrl) {
+        window.open(selectedTrack.externalUrl, '_blank', 'noopener,noreferrer');
+        onStatusToast('این سایت پخش مستقیم داخل هم‌صدا ارائه نمی‌کند؛ صفحه اثر در سایت منبع باز شد.');
+      } else {
+        onStatusToast('برای این نتیجه لینک پخش مستقیم در دسترس نیست.');
+      }
+      return;
+    }
     const el = musicAudioRef.current;
     if (!el) return;
     if (currentMusicIndex === index) {
@@ -1464,6 +1475,19 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
           </div>
 
           <div className="lg:col-span-7">
+          {mediaTab === 'tracks' && (nightMusicResult?.links?.length ?? 0) > 0 && (
+            <div className="mb-4 rounded-xl border border-slate-200 dark:border-emerald-900/60 p-3 space-y-2">
+              <div className="text-xs font-bold text-slate-700 dark:text-slate-200">صفحه‌های پیدا شده در سایت‌های موسیقی</div>
+              <div className="flex flex-wrap gap-2">
+                {nightMusicResult!.links.slice(0, 12).map((link, index) => (
+                  <a key={link.url + index} href={link.url} target="_blank" rel="noopener noreferrer"
+                    className="text-xs rounded-lg px-3 py-2 bg-slate-100 dark:bg-[#0B1312] text-emerald-800 dark:text-emerald-300 hover:underline break-all">
+                    {link.title}
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
           {/* Playable Tracklist or Radio Stations (Visual Cover Grid or Compact List) */}
           {(mediaTab === 'radio' ? radioStations : tracks).length > 0 ? (
             <div className="space-y-3">
