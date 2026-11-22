@@ -462,7 +462,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Practical Daily Workspace Switcher (5 clean sections) */}
+      {/* Practical Daily Workspace Switcher (6 clean sections) */}
       <div className="luxury-card p-2 grid grid-cols-2 lg:grid-cols-6 gap-1.5">
         <button
           type="button"
@@ -492,7 +492,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
 
         <button
           type="button"
-          onClick={() => onChangeSubSection('shopping_meals')
+          onClick={() => onChangeSubSection('shopping_meals')}
           className={`min-h-[46px] px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
             activeSubSection === 'shopping_meals'
               ? 'bg-emerald-800 text-white shadow-xs'
