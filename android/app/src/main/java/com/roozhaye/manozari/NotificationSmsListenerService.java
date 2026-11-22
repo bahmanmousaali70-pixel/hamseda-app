@@ -68,7 +68,7 @@ public class NotificationSmsListenerService extends NotificationListenerService 
             }
         }
 
-        if (title.isEmpty() || body.isEmpty()) {
+        if (body.isEmpty()) {
             return;
         }
 
@@ -81,22 +81,28 @@ public class NotificationSmsListenerService extends NotificationListenerService 
             return;
         }
 
-        if (body.length() > 240) {
-            body = body.substring(0, 240);
-        }
-
         if (IncomingSmsReceiver.shouldSkipDuplicateSms(title, body)) {
             return;
         }
         if (!SmsAnnouncementPolicy.shouldAnnounce(getApplicationContext(), title, title, body)) {
             return;
         }
-        body = SmsAnnouncementPolicy.spokenBody(getApplicationContext(), body);
+        String knownSender = SmsLinkAnnouncementHelper.resolveKnownSenderName(getApplicationContext(), title);
+        String spokenSender = knownSender != null
+                ? FinglishPhoneticHelper.resolveSenderDisplayName(getApplicationContext(), knownSender) : "";
+        String spokenLink = SmsLinkAnnouncementHelper.spokenLinks(body);
 
         boolean isMale = "male".equals(prefs.getString("default_voice_gender", "female"));
         String voiceName = prefs.getString("default_voice_name", isMale ? "Charon" : "Kore");
-        String spokenSender = FinglishPhoneticHelper.resolveSenderDisplayName(getApplicationContext(), title);
-        String spoken = "پیام جدید از طرف " + spokenSender + ". متن پیام: " + body;
+        String spoken;
+        if (!spokenLink.isEmpty()) {
+            spoken = (!spokenSender.isEmpty() ? "پیام جدید از طرف " + spokenSender + ". " : "")
+                    + "لینک: " + spokenLink;
+        } else {
+            String spokenBody = SmsAnnouncementPolicy.spokenBody(getApplicationContext(), body);
+            spoken = (!spokenSender.isEmpty() ? "پیام جدید از طرف " + spokenSender + ". " : "")
+                    + "متن پیام: " + spokenBody;
+        }
 
         CallAnnouncerService.announce(
                 getApplicationContext(),
