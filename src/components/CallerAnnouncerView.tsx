@@ -708,7 +708,7 @@ export const CallerAnnouncerView: React.FC<CallerAnnouncerViewProps> = ({
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      onStatusToast(`فایل زنگ اختصاصی «${caller.name}» آماده شد. در مخاطبین Mi 10T Pro به‌عنوان آهنگ زنگ تنظیم کنید.`);
+      onStatusToast(`فایل زنگ اختصاصی «${caller.name}» آماده شد. در مخاطبین گوشی به‌عنوان آهنگ زنگ تنظیم کنید.`);
     } catch (err) {
       onStatusToast(err instanceof Error ? err.message : 'خطا در ساخت فایل زنگ تماس');
     } finally {
