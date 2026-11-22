@@ -111,6 +111,13 @@ public final class SmsLinkAnnouncementHelper {
         return FinglishPhoneticHelper.transliterateToPersianPhonetic(part);
     }
 
+    public static String spokenSenderName(Context context, String sender) {
+        if (sender == null || sender.trim().isEmpty()) return "";
+        String prepared = sender.replaceAll("(?i)tap\\s*nfc", "تَپ اِن‌اِف‌سی")
+                .replaceAll("(?i)nfc", "اِن‌اِف‌سی");
+        return FinglishPhoneticHelper.resolveSenderDisplayName(context, prepared);
+    }
+
     /** Resolve a real display name; numeric sender IDs are never returned as spoken names. */
     public static String resolveKnownSenderName(Context context, String sender) {
         if (sender == null) return null;
