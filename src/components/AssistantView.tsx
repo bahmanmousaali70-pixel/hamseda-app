@@ -404,6 +404,23 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
     async (rawUtterance: string, speakReply = true) => {
       const cleaned = rawUtterance.trim();
       if (!cleaned) return;
+      if (
+        pendingIntent?.type === 'awaiting_call_confirmation' &&
+        /^(?:تأیید|تایید|بله|آره|درسته|انجام بده)(?: تماس| و برقراری تماس)?[.!؟]?$/i.test(cleaned)
+      ) {
+        appendMessage('user', cleaned);
+        window.dispatchEvent(new CustomEvent('hamseda-internet-call', {
+          detail: {
+            targetName: pendingIntent.targetName,
+            script: (pendingIntent.callScript || '').trim(),
+          },
+        }));
+        setPendingIntent(null);
+        const callReply = `درخواست تماس اینترنتی با ${pendingIntent.targetName} به بخش تماس هم‌صدا فرستاده شد. اگر مخاطب در فهرست هم‌صدا باشد، تماس برقرار می‌شود.`;
+        appendMessage('assistant', callReply, {action: 'make_call'});
+        if (speakReply && autoSpeakReplies) onSpeakText(callReply, `پاسخ ${assistantName}`, 'custom');
+        return;
+      }
       if (processingRef.current) {
         utteranceQueueRef.current.push({text: cleaned, speak: speakReply});
         return;
