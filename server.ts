@@ -2026,11 +2026,13 @@ app.post('/api/night-discover', async (req, res) => {
 
   if (mode === 'music') {
     try {
-      const discovery = await fetchPlayableMusicPlaylist(moodOrGenre || 'پیانو و موسیقی آرامش‌بخش ایرانی', ai ?? betaAi);\n      const tracks = discovery.tracks;
-      const links = tracks
-        .filter((t) => t.externalUrl)
-        .slice(0, 6)
-        .map((t) => ({title: `${t.title} — ${t.artist}`, url: t.externalUrl!}));
+      const discovery = await fetchPlayableMusicPlaylist(moodOrGenre || 'پیانو و موسیقی آرامش‌بخش ایرانی', ai ?? betaAi);
+      const tracks = discovery.tracks;
+      const links = [
+        ...tracks.filter((t) => t.externalUrl).slice(0, 6)
+          .map((t) => ({title: `${t.title} — ${t.artist}`, url: t.externalUrl!})),
+        ...discovery.links.filter((item) => !tracks.some((track) => track.externalUrl === item.url)).slice(0, 12),
+      ];
 
       const summaryList = tracks
         .slice(0, 5)
@@ -2041,9 +2043,11 @@ app.post('/api/night-discover', async (req, res) => {
         mode: 'music',
         title: `پلی‌لیست آماده پخش: ${moodOrGenre || 'آرامش شبانه'}`,
         markdownText:
-          tracks.length > 0
-            ? `${tracks.length} قطعه و ایستگاه آماده پخش پیدا شد. روی هر آهنگ بزنید تا مستقیماً پخش شود.`
-            : 'قطعه‌ای برای این عبارت پیدا نشد؛ عبارت دیگری (مثل شجریان، پیانو، یا آرامش) را امتحان کنید.',
+          tracks.some((track) => track.streamUrl)
+            ? `${tracks.filter((track) => track.streamUrl).length} قطعه با لینک پخش مستقیم و ${discovery.links.length} صفحه از منابع موسیقی پیدا شد.`
+            : discovery.links.length > 0
+              ? `از سایت‌های موسیقی ${discovery.links.length} صفحه مرتبط پیدا شد؛ برای مواردی که پخش مستقیم در دسترس نیست، صفحه منبع را باز کنید.`
+              : 'در منابع قابل دسترس نتیجه‌ای پیدا نشد؛ نام خواننده، آلبوم یا سبک را با املای دیگری هم امتحان کنید.',
         spokenSummary: summaryList
           ? `پلی‌لیست امشب شامل ${summaryList}`
           : 'پلی‌لیست موسیقی آماده است.',
