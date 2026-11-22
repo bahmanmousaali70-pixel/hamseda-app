@@ -211,7 +211,7 @@ export interface HomeChoreItem {
 
 export type PersonalityFocusId = 'analytical' | 'creative' | 'sensitive' | 'active' | 'calm_leader';
 
-export type TodaySubSection = 'planner' | 'shopping_meals' | 'finance_bills' | 'health_vault' | 'growth_lab';
+export type TodaySubSection = 'planner' | 'reminders' | 'shopping_meals' | 'finance_bills' | 'health_vault' | 'growth_lab';
 
 export interface AppSettings {
   theme: 'light' | 'dark';
