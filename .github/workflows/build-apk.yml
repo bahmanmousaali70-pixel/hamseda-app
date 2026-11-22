@@ -6,7 +6,7 @@ concurrency:
 
 on:
   push:
-    branches: [main, master, release/assistant-final-upgrade]
+    branches: [main, master, release/assistant-final-upgrade, feature/family-life-suite-design]
   workflow_dispatch:
 
 permissions:
