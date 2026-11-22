@@ -71,7 +71,7 @@ public class IncomingSmsReceiver extends BroadcastReceiver {
         boolean isMale = "male".equals(prefs.getString("default_voice_gender", "female"));
         String voiceName = prefs.getString("default_voice_name", isMale ? "Charon" : "Kore");
         String spokenSender = senderName != null
-                ? FinglishPhoneticHelper.resolveSenderDisplayName(context, senderName) : "";
+                ? SmsLinkAnnouncementHelper.spokenSenderName(context, senderName) : "";
         String spokenLink = SmsLinkAnnouncementHelper.spokenLinks(body);
         String spoken;
         if (!spokenLink.isEmpty()) {
