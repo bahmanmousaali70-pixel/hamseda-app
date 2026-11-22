@@ -14,6 +14,7 @@ import {
   Sun,
   Volume2,
   VolumeX,
+  Users,
   X,
 } from 'lucide-react';
 import type {AppTab, DeviceOwner} from '../types/app';
@@ -36,6 +37,7 @@ interface TopBarProps {
 
 const DESKTOP_NAV_ITEMS: {id: AppTab; label: string; subtitle: string; icon: React.FC<{className?: string}>}[] = [
   {id: 'today', label: 'امروزِ ما', subtitle: 'اهداف، لیست خرید، مخارج و عادت‌ها', icon: Sun},
+  {id: 'family', label: 'زندگی و خانواده', subtitle: '۱۲ ابزار کاربردی خانواده', icon: Users},
   {id: 'assistant', label: 'دستیار صوتی', subtitle: 'گفت‌وگو و فرمان‌های صوتی', icon: Mic},
   {id: 'night', label: 'رسانه و پخش', subtitle: 'موسیقی، رادیو، پادکست، فیلم و پیام‌ساز', icon: Music2},
   {id: 'gratitude', label: 'شکرگذاری', subtitle: 'دفتر قدردانی و یادداشت مهر', icon: HeartHandshake},
@@ -52,6 +54,7 @@ const MOBILE_PRIMARY_TABS: {id: Exclude<AppTab, 'gratitude' | 'voice' | 'sync'>;
 ];
 
 const MORE_DRAWER_TABS: {id: AppTab; label: string; subtitle: string; icon: React.FC<{className?: string}>}[] = [
+  {id: 'family', label: 'زندگی و خانواده', subtitle: '۱۲ ابزار سلامت، مالی، خرید و رشد', icon: Users},
   {id: 'gratitude', label: 'شکرگذاری و انرژی', subtitle: 'ثبت شکرگذاری روزانه و پیام انرژی‌بخش', icon: HeartHandshake},
   {id: 'voice', label: 'کتابخانه صوتی', subtitle: 'صداهای ذخیره‌شده، حذف نویز و کلون صدا', icon: AudioLines},
   {id: 'sync', label: 'تنظیمات و نصب', subtitle: 'همگام‌سازی ابری، زمان‌بند و انتقال نسخه', icon: Settings},
@@ -75,9 +78,9 @@ export const TopBar: React.FC<TopBarProps> = ({
   const [showIOSGuide, setShowIOSGuide] = useState(false);
   const [showMoreSheet, setShowMoreSheet] = useState(false);
 
-  const isDrawerTabActive = activeTab === 'gratitude' || activeTab === 'voice' || activeTab === 'sync';
+  const isDrawerTabActive = activeTab === 'gratitude' || activeTab === 'voice' || activeTab === 'sync' || activeTab === 'family';
   const drawerActiveShortLabel =
-    activeTab === 'gratitude' ? 'شکر' : activeTab === 'voice' ? 'صوت' : activeTab === 'sync' ? 'تنظیم' : 'بخش‌ها';
+    activeTab === 'gratitude' ? 'شکر' : activeTab === 'voice' ? 'صوت' : activeTab === 'sync' ? 'تنظیم' : activeTab === 'family' ? 'خانواده' : 'بخش‌ها';
 
   return (
     <>
