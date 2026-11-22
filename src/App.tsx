@@ -221,6 +221,7 @@ function readJsonStorage<T>(key: string, fallback: T): T {
 export default function App() {
   const isOnline = useOnlineStatus();
   const [activeTab, setActiveTab] = useState<AppTab>('today');
+  const openCallsTab = useCallback(() => setActiveTab('caller'), []);
   const [todaySubSection, setTodaySubSection] = useState<TodaySubSection>('planner');
   const [driveModeOpen, setDriveModeOpen] = useState(false);
   const [pendingAssistantQuery, setPendingAssistantQuery] = useState<{text: string; nonce: number} | null>(null);
@@ -2301,7 +2302,7 @@ export default function App() {
           />
         )}
 
-        <CallsView displayName={getSelfName(settings, deviceOwner)} visible={activeTab === 'caller'} onOpenCalls={() => setActiveTab('caller')} />
+        <CallsView displayName={getSelfName(settings, deviceOwner)} visible={activeTab === 'caller'} onOpenCalls={openCallsTab} />
 
         {activeTab === 'sync' && (
           <SyncSettingsView
