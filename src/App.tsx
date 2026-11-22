@@ -2301,7 +2301,7 @@ export default function App() {
           />
         )}
 
-        <CallsView displayName={getSelfName(settings, deviceOwner)} visible={activeTab === 'caller'} />
+        <CallsView displayName={getSelfName(settings, deviceOwner)} visible={activeTab === 'caller'} onOpenCalls={() => setActiveTab('caller')} />
 
         {activeTab === 'sync' && (
           <SyncSettingsView
