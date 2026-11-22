@@ -56,15 +56,10 @@ public class IncomingSmsReceiver extends BroadcastReceiver {
         }
 
         String body = fullBody.toString().trim();
-        if (body.length() > 240) {
-            body = body.substring(0, 240);
-        }
-
         String senderName = lookupContactName(context, originatingAddress);
-        if (senderName == null || senderName.trim().isEmpty()) {
-            senderName = (originatingAddress != null && !originatingAddress.trim().isEmpty())
-                    ? originatingAddress.trim()
-                    : "فرستنده ناشناس";
+        if (senderName == null || senderName.trim().isEmpty()
+                || senderName.matches("[+0-9()\\-\\s.]+")) {
+            senderName = null;
         }
 
         if (shouldSkipDuplicateSms(senderName, body)) {
@@ -73,12 +68,20 @@ public class IncomingSmsReceiver extends BroadcastReceiver {
         if (!SmsAnnouncementPolicy.shouldAnnounce(context, originatingAddress, senderName, body)) {
             return;
         }
-        body = SmsAnnouncementPolicy.spokenBody(context, body);
-
         boolean isMale = "male".equals(prefs.getString("default_voice_gender", "female"));
         String voiceName = prefs.getString("default_voice_name", isMale ? "Charon" : "Kore");
-        String spokenSender = FinglishPhoneticHelper.resolveSenderDisplayName(context, senderName);
-        String spoken = "پیامک جدید از طرف " + spokenSender + ". متن پیام: " + (body.isEmpty() ? "بدون متن" : body);
+        String spokenSender = senderName != null
+                ? SmsLinkAnnouncementHelper.spokenSenderName(context, senderName) : "";
+        String spokenLink = SmsLinkAnnouncementHelper.spokenLinks(body);
+        String spoken;
+        if (!spokenLink.isEmpty()) {
+            spoken = (!spokenSender.isEmpty() ? "پیامک از طرف " + spokenSender + ". " : "")
+                    + "لینک: " + spokenLink;
+        } else {
+            String spokenBody = SmsAnnouncementPolicy.spokenBody(context, body);
+            spoken = (!spokenSender.isEmpty() ? "پیامک جدید از طرف " + spokenSender + ". " : "پیامک جدید. ")
+                    + "متن پیام: " + (spokenBody.isEmpty() ? "بدون متن" : spokenBody);
+        }
 
         CallAnnouncerService.announce(
                 context.getApplicationContext(),
