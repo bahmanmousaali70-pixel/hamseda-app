@@ -1674,44 +1674,118 @@ async function fetchArchiveFullTracks(query: string): Promise<ServerMusicTrack[]
   }
 }
 
-async function fetchPlayableMusicPlaylist(moodOrGenre: string, _ai: GoogleGenAI | null): Promise<ServerMusicTrack[]> {
-  const rawQuery = moodOrGenre.trim().slice(0, 180);
-  const fallback = buildFallbackMusicQueries(rawQuery);
-  const normalized = rawQuery.toLowerCase().replace(/[يى]/g, 'ی').replace(/ك/g, 'ک');
+const IRANIAN_MUSIC_SEARCH_HOSTS = [
+  'radiojavan.com', 'radiojavan.top', 'navahang.com', 'avayeirani.com',
+  'iranimusic.com', 'donyayeahang.ir', 'sonalos.com', 'iranibeat.ir',
+  'iromusic.live', 'hailymusic.ir', 'biya2ahang.ir', 'music.iranseda.ir',
+  'beeptunes.com', 'navaak.com',
+] as const;
 
-  // Expand common Persian artist / collection wording into source-friendly aliases.
-  // We search the user's exact phrase as well, so arbitrary artist names are not discarded.
-  let audiusQueries = [fallback.audiusQuery, rawQuery];
-  let archiveQueries = [fallback.archiveQuery, rawQuery];
-  if (/(آریان|arian)/i.test(normalized)) {
-    audiusQueries = ['Arian Band', 'Arian Iranian pop', rawQuery];
-    archiveQueries = ['"Arian" OR "Arian Band" OR "گروه آریان"', '"Arian Iranian band"', rawQuery];
-  } else if (/(کالکشن|مجموعه|قدیمی|نوستالژی|خاطره)/.test(normalized)) {
-    audiusQueries = ['Persian oldies', 'Iranian pop classics', 'Persian classic pop'];
-    archiveQueries = ['"Persian oldies" OR "Iranian oldies"', '"Persian pop classics"', 'Iranian old music collection'];
-  } else if (/^[a-z0-9\s&'-]+$/i.test(rawQuery)) {
-    audiusQueries = [rawQuery, fallback.audiusQuery];
-    archiveQueries = [`"${rawQuery}"`, fallback.archiveQuery];
+function musicQueryVariants(raw: string): string[] {
+  const q = raw.replace(/[يى]/g, 'ی').replace(/ك/g, 'ک').replace(/\s+/g, ' ').trim();
+  const cleaned = q.replace(/^(?:لطفا\s*)?(?:آهنگ|موزیک|موسیقی)\s+/,'').trim();
+  const variants = [q, cleaned];
+  const artist = cleaned.replace(/\b(?:آلبوم|آلبوم‌های|آلبومهای|کالکشن|کالکشن‌های|مجموعه|آهنگ|آهنگ‌های|ترانه|گروه|خواننده|سبک|موزیک|موسیقی)\b/gi, ' ').replace(/\s+/g, ' ').trim();
+  if (artist && artist !== cleaned) variants.push(artist);
+  if (/(آریان|arian)/i.test(q)) variants.push('Arian', 'Arian Band', 'گروه آریان آلبوم');
+  if (/(قدیمی|نوستالژی|خاطره|کالکشن|مجموعه)/.test(q)) variants.push('آهنگ های قدیمی ایرانی آلبوم', 'Persian oldies album');
+  return [...new Set(variants.filter((v) => v.length >= 2))].slice(0, 5);
+}
+
+async function extractPublicMusicPage(result: PublicSearchResult): Promise<ServerMusicTrack | null> {
+  const page = isSafePublicAudioUrl(result.url);
+  if (!page || !IRANIAN_MUSIC_SEARCH_HOSTS.some((host) => page.hostname === host || page.hostname.endsWith('.' + host))) return null;
+  try {
+    const response = await fetch(page.href, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml',
+        'Accept-Language': 'fa-IR,fa;q=0.9,en;q=0.8',
+      },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) return null;
+    const html = (await response.text()).slice(0, 2_000_000);
+    const decode = (v: string) => decodeSearchHtml(v.replace(/\\\//g, '/').replace(/\\u0026/g, '&'));
+    const candidates = new Set<string>();
+    const add = (raw: string) => {
+      const value = decode(raw).replace(/&amp;/g, '&').trim();
+      if (!value || /^(?:blob:|data:|javascript:)/i.test(value)) return;
+      try {
+        const u = new URL(value, response.url || page.href);
+        if (isSafePublicAudioUrl(u.href) && /\.(?:mp3|m4a|aac|ogg|oga|wav|flac)(?:$|[?#])/i.test(u.href)) candidates.add(u.href);
+      } catch {}
+    };
+    for (const match of html.matchAll(/<(?:audio|source)\b[^>]*?src=["']([^"']+)["']/gi)) add(match[1]);
+    for (const match of html.matchAll(/<meta\b[^>]*(?:property|name)=["'](?:og:audio|music:song|twitter:player:stream)["'][^>]*content=["']([^"']+)["']/gi)) add(match[1]);
+    for (const match of html.matchAll(/(?:contentUrl|audioUrl|streamUrl|download_url)\s*["']?\s*:\s*["'](https?:[^"']+)["']/gi)) add(match[1]);
+    for (const match of html.matchAll(/https?:[^\s"'<>]+?\.(?:mp3|m4a|aac|ogg|oga|wav|flac)(?:\?[^\s"'<>]*)?/gi)) add(match[0].replace(/\\/g, ''));
+    const stream = [...candidates][0] || '';
+    const title = decode(html.match(/<meta\b[^>]*property=["']og:title["'][^>]*content=["']([^"']+)/i)?.[1] || html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || result.title).slice(0, 160);
+    const artist = decode(html.match(/<meta\b[^>]*name=["']author["'][^>]*content=["']([^"']+)/i)?.[1] || '');
+    const album = decode(html.match(/<meta\b[^>]*property=["']music:album["'][^>]*content=["']([^"']+)/i)?.[1] || '');
+    return {
+      id: 'web_' + Buffer.from(result.url).toString('base64url').slice(0, 32),
+      title,
+      artist: artist || 'منبع موسیقی ایرانی',
+      album: album || undefined,
+      streamUrl: stream,
+      source: 'archive',
+      externalUrl: result.url,
+    };
+  } catch {
+    return null;
   }
-  const unique = (items: string[]) => [...new Set(items.map((v) => v.trim()).filter(Boolean))].slice(0, 3);
-  audiusQueries = unique(audiusQueries);
-  archiveQueries = unique(archiveQueries);
+}
 
-  const [audiusResults, archiveResults] = await Promise.all([
-    Promise.allSettled(audiusQueries.map(async (query) => {
+async function searchIranianMusicWeb(query: string): Promise<{tracks: ServerMusicTrack[]; links: {title: string; url: string}[]}> {
+  const variants = musicQueryVariants(query);
+  const hostGroups = [
+    ['radiojavan.com', 'radiojavan.top', 'navahang.com', 'navaak.com'],
+    ['avayeirani.com', 'iranimusic.com', 'donyayeahang.ir', 'sonalos.com'],
+    ['iranibeat.ir', 'iromusic.live', 'hailymusic.ir', 'biya2ahang.ir'],
+    ['music.iranseda.ir', 'beeptunes.com'],
+  ];
+  const searches = await Promise.allSettled(hostGroups.map((hosts, index) => {
+    const q = variants[index % variants.length] || query;
+    return searchPublicWeb(`(${hosts.map((h) => 'site:' + h).join(' OR ')}) "${q}"`);
+  }));
+  const found: PublicSearchResult[] = [];
+  const seen = new Set<string>();
+  for (const result of searches) {
+    if (result.status !== 'fulfilled') continue;
+    for (const item of result.value) {
+      if (seen.has(item.url)) continue;
+      seen.add(item.url);
+      found.push(item);
+    }
+  }
+  const pageTracks = await Promise.all(found.slice(0, 18).map((item) => extractPublicMusicPage(item)));
+  return {
+    tracks: pageTracks.filter((item): item is ServerMusicTrack => item !== null).slice(0, 40),
+    links: found.slice(0, 16).map((item) => ({title: item.title, url: item.url})),
+  };
+}
+
+async function fetchPlayableMusicPlaylist(moodOrGenre: string, _ai: GoogleGenAI | null): Promise<{tracks: ServerMusicTrack[]; links: {title: string; url: string}[]}> {
+  const rawQuery = moodOrGenre.trim().slice(0, 180);
+  if (!rawQuery) return {tracks: [], links: []};
+  const [iranian, audiusResults, archiveResults] = await Promise.all([
+    searchIranianMusicWeb(rawQuery),
+    Promise.allSettled(musicQueryVariants(rawQuery).slice(0, 3).map(async (query) => {
       const response = await fetch(
-        `https://api.audius.co/v1/tracks/search?query=${encodeURIComponent(query)}&limit=18&app_name=roozhaye`,
-        {signal: AbortSignal.timeout(7000)}
+        `https://api.audius.co/v1/tracks/search?query=${encodeURIComponent(query)}&limit=15&app_name=roozhaye`,
+        {signal: AbortSignal.timeout(6500)}
       );
       if (!response.ok) return [];
       const payload = await response.json();
       return Array.isArray(payload?.data) ? payload.data : [];
     })),
-    Promise.allSettled(archiveQueries.map((query) => fetchArchiveFullTracks(query))),
+    Promise.allSettled([buildFallbackMusicQueries(rawQuery).archiveQuery, ...musicQueryVariants(rawQuery).slice(0, 2)].map((query) => fetchArchiveFullTracks(query))),
   ]);
-
-  const tracks: ServerMusicTrack[] = [];
-  const seenIds = new Set<string>();
+  const tracks: ServerMusicTrack[] = [...iranian.tracks];
+  const seen = new Set(tracks.map((track) => track.id));
   for (const result of audiusResults) {
     if (result.status !== 'fulfilled') continue;
     for (const item of result.value) {
@@ -1719,16 +1793,13 @@ async function fetchPlayableMusicPlaylist(moodOrGenre: string, _ai: GoogleGenAI 
       const duration = typeof item.duration === 'number' ? item.duration : 0;
       if (duration > 0 && duration < 60) continue;
       const id = `audius_${item.id}`;
-      if (seenIds.has(id)) continue;
-      seenIds.add(id);
+      if (seen.has(id)) continue;
+      seen.add(id);
       tracks.push({
-        id,
-        title: String(item.title),
-        artist: String(item.user?.name || item.user?.handle || 'Audius Artist'),
+        id, title: String(item.title), artist: String(item.user?.name || item.user?.handle || 'Audius Artist'),
         artworkUrl: item.artwork?.['150x150'] || item.artwork?.['480x480'] || undefined,
         streamUrl: `https://api.audius.co/v1/tracks/${encodeURIComponent(item.id)}/stream?app_name=roozhaye`,
-        durationSec: duration >= 60 ? duration : undefined,
-        source: 'audius',
+        durationSec: duration >= 60 ? duration : undefined, source: 'audius',
         externalUrl: item.permalink ? `https://audius.co${item.permalink}` : undefined,
       });
     }
@@ -1736,16 +1807,13 @@ async function fetchPlayableMusicPlaylist(moodOrGenre: string, _ai: GoogleGenAI 
   for (const result of archiveResults) {
     if (result.status !== 'fulfilled') continue;
     for (const track of result.value) {
-      if (seenIds.has(track.id)) continue;
-      seenIds.add(track.id);
+      if (seen.has(track.id)) continue;
+      seen.add(track.id);
       tracks.push(track);
     }
   }
-
-  // Never pad a failed artist search with unrelated music: return only actual matches.
-  return tracks.slice(0, 30);
-}
-app.post('/api/radio-stations', async (req, res) => {
+  return {tracks: tracks.slice(0, 50), links: iranian.links};
+}app.post('/api/radio-stations', async (req, res) => {
   const category = typeof req.body?.category === 'string' ? req.body.category : 'iran';
   const rawQuery = typeof req.body?.query === 'string' ? req.body.query.trim() : '';
 
@@ -1954,7 +2022,7 @@ app.post('/api/night-discover', async (req, res) => {
 
   if (mode === 'music') {
     try {
-      const tracks = await fetchPlayableMusicPlaylist(moodOrGenre || 'پیانو و موسیقی آرامش‌بخش ایرانی', ai ?? betaAi);
+      const discovery = await fetchPlayableMusicPlaylist(moodOrGenre || 'پیانو و موسیقی آرامش‌بخش ایرانی', ai ?? betaAi);\n      const tracks = discovery.tracks;
       const links = tracks
         .filter((t) => t.externalUrl)
         .slice(0, 6)
