@@ -485,8 +485,8 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
         }
         if (result.action === 'make_call' && pendingIntent?.type !== 'awaiting_call_confirmation') {
           finalReply = result.callScript
-            ? `تماس با ${result.targetName} (${result.targetPhone}) با پیام آماده «${result.callScript}» تنظیم شد. اگر درست است بگو تأیید؛ برای انصراف بگو لغو کن.`
-            : `با ${result.targetName} به شماره ${result.targetPhone} تماس بگیرم؟ اگر درست است بگو تأیید؛ برای انصراف بگو لغو کن.`;
+            ? `تماس اینترنتی هم‌صدا با ${result.targetName} با پیام «${result.callScript}» آماده شد. اگر درست است بگو تأیید؛ برای انصراف بگو لغو کن.`
+            : `با ${result.targetName} از طریق تماس اینترنتی هم‌صدا ارتباط برقرار کنم؟ اگر درست است بگو تأیید؛ برای انصراف بگو لغو کن.`;
         }
 
         // Execute Android Hardware/OS Action if applicable
@@ -1294,9 +1294,9 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
             <div className="text-sm text-amber-950 dark:text-amber-100 flex-1 space-y-2">
               {pendingIntent.type === 'awaiting_call_confirmation' ? (
                 <>
-                  <strong>بررسی نهایی تماس تلفنی</strong>
-                  <div>مخاطب: <b>{pendingIntent.targetName}</b></div>
-                  <div className="break-words">شماره: <b dir="ltr">{pendingIntent.targetPhone || 'نامشخص'}</b></div>
+                  <strong>بررسی نهایی تماس اینترنتی هم‌صدا</strong>
+                  <div>مخاطب هم‌صدا: <b>{pendingIntent.targetName}</b></div>
+                  {pendingIntent.targetPhone && <div className="break-words">شماره ذخیره‌شده: <b dir="ltr">{pendingIntent.targetPhone}</b></div>}
                   <div className="pt-1 space-y-1.5">
                     <label className="block text-xs font-semibold">
                       متن پیام یا سفارش برای گفتن حین تماس (اختیاری):
@@ -1373,7 +1373,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
                     onClick={() => executeUtterance('تأیید تماس', false)}
                     className="min-h-[44px] px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold cursor-pointer"
                   >
-                    تأیید و برقراری تماس
+                    تأیید و برقراری تماس اینترنتی
                   </button>
                   {callProfile.voipWebhookUrl.trim() && (pendingIntent.callScript || '').trim() && (
                     <button
