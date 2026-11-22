@@ -55,6 +55,12 @@ interface NightAndMessagesViewProps {
   onStopSpeech: () => void;
   onStatusToast: (msg: string) => void;
   assistantMediaTrigger?: {tab: 'tracks' | 'radio' | 'podcasts' | 'stop'; query?: string; nonce: number} | null;
+  messagePrefill?: {
+    occasion?: OccasionId;
+    recipient?: string;
+    details?: string;
+    nonce: number;
+  } | null;
 }
 
 type OccasionId = 'birthday' | 'anniversary' | 'apology' | 'thanks' | 'encouragement' | 'custom';
@@ -170,6 +176,7 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
   onStopSpeech,
   onStatusToast,
   assistantMediaTrigger,
+  messagePrefill,
 }) => {
   const selfName = getSelfName(settings, deviceOwner);
   const partnerOtherName = getPartnerNameForDevice(settings, deviceOwner);
@@ -197,8 +204,21 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
     }
   }, [deviceOwner, partnerOtherName, selfName, occasion]);
 
-  // Completely Separated Online Music Playlist, Live Iran/World Radio, Podcasts & GTA 6 Streams
-  const [mediaTab, setMediaTab] = useState<'tracks' | 'radio' | 'podcasts' | 'gta6'>('tracks');
+  // Completely Separated Music Playlist, Live Radio, Podcasts, Night Movies, Message Builder & GTA 6 Streams
+  const [mediaTab, setMediaTab] = useState<'tracks' | 'radio' | 'podcasts' | 'movies' | 'messages' | 'gta6'>('tracks');
+
+  useEffect(() => {
+    if (!messagePrefill?.nonce) return;
+    const nextOccasion = messagePrefill.occasion ?? 'birthday';
+    const nextRecipient = messagePrefill.recipient?.trim() || `${partnerOtherName} جان`;
+    setMediaTab('messages');
+    setOccasion(nextOccasion);
+    setRecipient(nextRecipient);
+    recipientEditedRef.current = true;
+    setDetails(messagePrefill.details?.trim() || '');
+    const tmpl = OCCASIONS.find((o) => o.id === nextOccasion) ?? OCCASIONS[0];
+    setMsgResult(tmpl.offlineTemplate(nextRecipient, selfName));
+  }, [messagePrefill, partnerOtherName, selfName]);
   const [mediaViewMode, setMediaViewMode] = useState<'grid' | 'list'>('grid');
   const [musicMood, setMusicMood] = useState('سنتی آرام و شجریان');
   const [musicBusy, setMusicBusy] = useState(false);
@@ -865,331 +885,381 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
         onError={handleRadioError}
       />
 
-      {/* Section 1: Special Occasion Message Builder */}
-      <section className="rounded-2xl bg-white dark:bg-[#121E1C] border border-slate-200/80 dark:border-emerald-950/70 p-6 sm:p-8 space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* Top-Level Luxury Media Category Header */}
+      <section className="luxury-card p-5 sm:p-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-              <MessageSquareHeart className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
-              <span>ساخت متن و پیام صوتی مناسبتی (آنلاین و آفلاین)</span>
+            <div className="flex items-center gap-2 text-xs font-semibold text-emerald-800 dark:text-amber-300">
+              <Music2 className="w-4 h-4" />
+              <span>مرکز چندرسانه‌ای و پیام هم‌صدا</span>
             </div>
-            <h1 className="mt-2 text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white text-balance">
-              پیام‌ساز مناسبتی و متن‌های خاص
+            <h1 className="mt-1 text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white text-balance">
+              موسیقی، رادیو زنده، پادکست، پیشنهاد فیلم و پیام‌ساز
             </h1>
-            <p className="mt-1.5 text-sm leading-7 text-slate-600 dark:text-slate-300 max-w-3xl">
-              برای تبریک تولد، سالگرد، تشکر، دلجویی یا هر مناسبت دلخواه متن صمیمی و زیبا بسازید، کپی کنید یا با صدای گوینده خانم/آقا گوش دهید.
-            </p>
           </div>
+          {isAnyAudioPlaying && (
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-800 text-white text-xs font-semibold shrink-0">
+              <Disc3 className="w-3.5 h-3.5 animate-spin text-amber-300" />
+              <span>در حال پخش: {currentTabActiveItem?.title || 'صدا'}</span>
+            </div>
+          )}
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {OCCASIONS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setOccasion(item.id)}
-              className={`min-h-[40px] px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-colors cursor-pointer whitespace-nowrap ${
-                occasion === item.id
-                  ? 'bg-emerald-700 text-white'
-                  : 'bg-slate-100 dark:bg-[#0B1312] text-slate-700 dark:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-emerald-950/50'
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
+        {/* 6 Clear Professional Categories */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+          <button
+            type="button"
+            onClick={() => setMediaTab('tracks')}
+            className={`min-h-[48px] px-3 py-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all ${
+              mediaTab === 'tracks'
+                ? 'bg-emerald-800 border-emerald-800 text-white shadow-sm'
+                : 'luxury-surface-subtle text-slate-700 dark:text-slate-200 hover:border-emerald-600/40'
+            }`}
+          >
+            <Music2 className={`w-4 h-4 shrink-0 ${mediaTab === 'tracks' ? 'text-amber-300' : 'text-emerald-700 dark:text-emerald-400'}`} />
+            <span className="whitespace-nowrap">موسیقی کامل</span>
+          </button>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <div className="lg:col-span-5 space-y-3.5">
-            {occasion === 'custom' && (
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
-                  موضوع یا مناسبت دلخواه
-                </label>
-                <input
-                  type="text"
-                  value={customOccasionText}
-                  onChange={(e) => setCustomOccasionText(e.target.value)}
-                  placeholder="مثلاً: تبریک خانه نو، عید نوروز، قبولی آزمون..."
-                  className="w-full min-h-[44px] px-3.5 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50/70 dark:bg-[#0B1312] text-sm text-slate-900 dark:text-white"
-                />
-              </div>
-            )}
+          <button
+            type="button"
+            onClick={() => {
+              setMediaTab('radio');
+              if (radioStations.length === 0 && !radioBusy && isOnline) {
+                handleFetchRadio('iran');
+              }
+            }}
+            className={`min-h-[48px] px-3 py-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all ${
+              mediaTab === 'radio'
+                ? 'bg-emerald-800 border-emerald-800 text-white shadow-sm'
+                : 'luxury-surface-subtle text-slate-700 dark:text-slate-200 hover:border-emerald-600/40'
+            }`}
+          >
+            <Radio className={`w-4 h-4 shrink-0 ${mediaTab === 'radio' ? 'text-amber-300' : 'text-emerald-700 dark:text-emerald-400'}`} />
+            <span className="whitespace-nowrap">رادیو زنده</span>
+          </button>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
-                  برای چه کسی؟
-                </label>
-                <input
-                  type="text"
-                  value={recipient}
-                  onChange={(e) => {
-                    recipientEditedRef.current = true;
-                    setRecipient(e.target.value);
-                  }}
-                  placeholder={`مثلاً: ${defaultRecipient}، مادرم، علی آقا`}
-                  className="w-full min-h-[44px] px-3.5 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50/70 dark:bg-[#0B1312] text-sm text-slate-900 dark:text-white"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
-                  لحن متن
-                </label>
-                <select
-                  value={tone}
-                  onChange={(e) => setTone(e.target.value)}
-                  className="w-full min-h-[44px] px-3 rounded-xl border border-slate-200 dark:border-emerald-900 bg-white dark:bg-[#0B1312] text-xs sm:text-sm text-slate-800 dark:text-slate-100"
-                >
-                  {TONES.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
+          <button
+            type="button"
+            onClick={() => setMediaTab('podcasts')}
+            className={`min-h-[48px] px-3 py-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all ${
+              mediaTab === 'podcasts'
+                ? 'bg-emerald-800 border-emerald-800 text-white shadow-sm'
+                : 'luxury-surface-subtle text-slate-700 dark:text-slate-200 hover:border-emerald-600/40'
+            }`}
+          >
+            <Podcast className={`w-4 h-4 shrink-0 ${mediaTab === 'podcasts' ? 'text-amber-300' : 'text-emerald-700 dark:text-emerald-400'}`} />
+            <span className="whitespace-nowrap">پادکست و کتاب</span>
+          </button>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
-                نکته یا اشاره خاص (اختیاری)
-              </label>
-              <textarea
-                rows={2}
-                value={details}
-                onChange={(e) => setDetails(e.target.value)}
-                placeholder="مثلاً: یادآوری سفر شمال یا تشکر بابت صبوری‌های امسال..."
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50/70 dark:bg-[#0B1312] text-sm text-slate-900 dark:text-white"
-              />
-            </div>
+          <button
+            type="button"
+            onClick={() => setMediaTab('movies')}
+            className={`min-h-[48px] px-3 py-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all ${
+              mediaTab === 'movies'
+                ? 'bg-emerald-800 border-emerald-800 text-white shadow-sm'
+                : 'luxury-surface-subtle text-slate-700 dark:text-slate-200 hover:border-emerald-600/40'
+            }`}
+          >
+            <Film className={`w-4 h-4 shrink-0 ${mediaTab === 'movies' ? 'text-amber-300' : 'text-emerald-700 dark:text-emerald-400'}`} />
+            <span className="whitespace-nowrap">فیلم و سریال امشب</span>
+          </button>
 
-            <button
-              type="button"
-              onClick={handleGenerateSpecialMessage}
-              disabled={msgBusy}
-              className="w-full min-h-[46px] rounded-xl bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
-            >
-              {msgBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-              <span>{isOnline ? 'تولید پیام خاص هوشمند' : 'ساخت پیام با قالب آماده آفلاین'}</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setMediaTab('messages')}
+            className={`min-h-[48px] px-3 py-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all ${
+              mediaTab === 'messages'
+                ? 'bg-emerald-800 border-emerald-800 text-white shadow-sm'
+                : 'luxury-surface-subtle text-slate-700 dark:text-slate-200 hover:border-emerald-600/40'
+            }`}
+          >
+            <MessageSquareHeart className={`w-4 h-4 shrink-0 ${mediaTab === 'messages' ? 'text-amber-300' : 'text-amber-600 dark:text-amber-400'}`} />
+            <span className="whitespace-nowrap">پیام‌ساز</span>
+          </button>
 
-          <div className="lg:col-span-7 rounded-xl bg-slate-50/80 dark:bg-[#0B1312] border border-slate-200/80 dark:border-emerald-900/70 p-5 flex flex-col justify-between gap-4">
-            {msgResult ? (
-              <>
-                <div className="space-y-3">
-                  <div className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">
-                    {msgResult.occasion} · {msgResult.title}
-                  </div>
-                  <p className="text-sm sm:text-base leading-8 text-slate-800 dark:text-slate-100">
-                    {msgResult.text}
-                  </p>
-                  <div className="pt-3 border-t border-slate-200/70 dark:border-emerald-950/60">
-                    <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                      نسخه کوتاه برای پیامک:
-                    </div>
-                    <p className="mt-1 text-xs sm:text-sm leading-7 text-slate-700 dark:text-slate-300">
-                      {msgResult.shortVersion}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2.5 pt-2">
-                  {isSpeaking ? (
-                    <button
-                      type="button"
-                      onClick={onStopSpeech}
-                      className="min-h-[44px] px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs sm:text-sm font-semibold flex items-center gap-2 cursor-pointer"
-                    >
-                      <Square className="w-4 h-4" />
-                      <span>توقف پخش</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => onSpeakText(msgResult.text, msgResult.title, 'custom')}
-                      className="min-h-[44px] px-4 rounded-xl bg-slate-900 dark:bg-emerald-700 hover:bg-slate-800 text-white text-xs sm:text-sm font-semibold flex items-center gap-2 cursor-pointer"
-                    >
-                      <Volume2 className="w-4 h-4" />
-                      <span>شنیدن پیام با صدای گوینده</span>
-                    </button>
-                  )}
-
-                  <select
-                    value={msgVoice}
-                    onChange={(e) => {
-                      const v = e.target.value as VoiceName;
-                      setMsgVoice(v);
-                      onUpdateSettings({defaultVoice: v});
-                    }}
-                    aria-label="گوینده پیام مناسبتی"
-                    className="min-h-[44px] px-3 rounded-xl border border-slate-200 dark:border-emerald-900 bg-white dark:bg-[#121E1C] text-xs text-slate-700 dark:text-slate-200"
-                  >
-                    {VOICE_PERSONAS.map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.label}
-                      </option>
-                    ))}
-                  </select>
-
-                  <button
-                    type="button"
-                    onClick={() => handleCopyMessage(msgResult.text)}
-                    className="min-h-[44px] px-4 rounded-xl border border-slate-200 dark:border-emerald-900 bg-white dark:bg-[#121E1C] text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-medium flex items-center gap-2 cursor-pointer"
-                  >
-                    {copiedMsg ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-                    <span>کپی متن کامل</span>
-                  </button>
-                </div>
-              </>
-            ) : (
-              <div className="py-12 text-center text-sm text-slate-500">
-                مناسبت و نام مخاطب را انتخاب کنید تا متن اختصاصی آماده شود.
-              </div>
-            )}
-          </div>
+          <button
+            type="button"
+            onClick={() => setMediaTab('gta6')}
+            className={`min-h-[48px] px-3 py-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all ${
+              mediaTab === 'gta6'
+                ? 'bg-emerald-800 border-emerald-800 text-white shadow-sm'
+                : 'luxury-surface-subtle text-slate-700 dark:text-slate-200 hover:border-emerald-600/40'
+            }`}
+          >
+            <Gamepad2 className={`w-4 h-4 shrink-0 ${mediaTab === 'gta6' ? 'text-amber-300' : 'text-violet-700 dark:text-violet-400'}`} />
+            <span className="whitespace-nowrap">استریم GTA 6</span>
+          </button>
         </div>
       </section>
 
-      {/* Top-Level Media Switcher: Music | Radio | Podcasts & Audiobooks | GTA 6 */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-emerald-950/60">
-        <button
-          type="button"
-          onClick={() => setMediaTab('tracks')}
-          className={`min-h-[42px] rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
-            mediaTab === 'tracks'
-              ? 'bg-white dark:bg-[#172724] text-slate-900 dark:text-white shadow-xs'
-              : 'text-slate-600 dark:text-slate-300'
-          }`}
-        >
-          <Music2 className="w-4 h-4" />
-          <span>موسیقی</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setMediaTab('radio');
-            if (radioStations.length === 0 && !radioBusy && isOnline) {
-              handleFetchRadio('iran');
-            }
-          }}
-          className={`min-h-[42px] rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
-            mediaTab === 'radio'
-              ? 'bg-white dark:bg-[#172724] text-emerald-800 dark:text-emerald-300 shadow-xs'
-              : 'text-slate-600 dark:text-slate-300'
-          }`}
-        >
-          <Radio className="w-4 h-4" />
-          <span>رادیو</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setMediaTab('podcasts')}
-          className={`min-h-[42px] rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
-            mediaTab === 'podcasts'
-              ? 'bg-white dark:bg-[#172724] text-emerald-800 dark:text-emerald-300 shadow-xs'
-              : 'text-slate-600 dark:text-slate-300'
-          }`}
-        >
-          <Podcast className="w-4 h-4" />
-          <span>پادکست و کتاب صوتی</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setMediaTab('gta6')}
-          className={`min-h-[42px] rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
-            mediaTab === 'gta6'
-              ? 'bg-white dark:bg-[#172724] text-violet-800 dark:text-violet-300 shadow-xs'
-              : 'text-slate-600 dark:text-slate-300'
-          }`}
-        >
-          <Gamepad2 className="w-4 h-4" />
-          <span>GTA 6</span>
-        </button>
-      </div>
-
-      {/* Section 2 & 3: Real Playable Online Music Playlist + Live Radio + High-Rated Dubbed Movies/Series */}
-      <section className={mediaTab === 'podcasts' || mediaTab === 'gta6' ? 'hidden' : 'grid grid-cols-1 lg:grid-cols-12 gap-6'}>
-        {/* Real Online Music Playlist + Live Iran & World Radio */}
-        <div className="lg:col-span-5 rounded-2xl bg-white dark:bg-[#121E1C] border border-slate-200/80 dark:border-emerald-950/70 p-6 space-y-5">
-          <div className="flex items-start justify-between gap-2">
+      {/* Section: Special Occasion Message Builder (dedicated Messages category) */}
+      {mediaTab === 'messages' && (
+        <section className="luxury-card p-6 sm:p-8 space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                {mediaTab === 'radio' ? (
-                  <Globe className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
-                ) : (
-                  <Music2 className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
-                )}
-                <span>
-                  {mediaTab === 'radio'
-                    ? 'اتصال زنده به رادیوهای ایران، فارسی و برترین ایستگاه‌های جهان'
-                    : 'پخش مستقیم آنلاین آهنگ‌های کامل با تایمر خواب'}
-                </span>
+                <MessageSquareHeart className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
+                <span>ساخت متن و پیام صوتی مناسبتی (آنلاین و آفلاین)</span>
               </div>
-              <h2 className="mt-1.5 text-lg font-bold text-slate-900 dark:text-white">
-                {mediaTab === 'radio' ? 'رادیوهای ایران و جهان (پخش زنده)' : 'پلی‌لیست موسیقی و آهنگ‌های واقعی'}
+              <h2 className="mt-2 text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white text-balance">
+                پیام‌ساز مناسبتی و متن‌های خاص
               </h2>
+              <p className="mt-1.5 text-sm leading-7 text-slate-600 dark:text-slate-300 max-w-3xl">
+                برای تبریک تولد، سالگرد، تشکر، دلجویی یا هر مناسبت دلخواه متن صمیمی و زیبا بسازید، کپی کنید یا با صدای گوینده خانم/آقا گوش دهید.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {OCCASIONS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setOccasion(item.id)}
+                className={`min-h-[42px] px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                  occasion === item.id
+                    ? 'bg-emerald-800 text-white'
+                    : 'luxury-surface-subtle text-slate-700 dark:text-slate-200 hover:border-emerald-600/40'
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div className="lg:col-span-5 space-y-3.5">
+              {occasion === 'custom' && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                    موضوع یا مناسبت دلخواه
+                  </label>
+                  <input
+                    type="text"
+                    value={customOccasionText}
+                    onChange={(e) => setCustomOccasionText(e.target.value)}
+                    placeholder="مثلاً: تبریک خانه نو، عید نوروز، قبولی آزمون..."
+                    className="w-full min-h-[44px] px-3.5 rounded-xl border border-[#DFDBD0] dark:border-emerald-900 bg-[#FAF9F6] dark:bg-[#0B1312] text-sm text-slate-900 dark:text-white"
+                  />
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                    برای چه کسی؟
+                  </label>
+                  <input
+                    type="text"
+                    value={recipient}
+                    onChange={(e) => {
+                      recipientEditedRef.current = true;
+                      setRecipient(e.target.value);
+                    }}
+                    placeholder={`مثلاً: ${defaultRecipient}، مادرم، علی آقا`}
+                    className="w-full min-h-[44px] px-3.5 rounded-xl border border-[#DFDBD0] dark:border-emerald-900 bg-[#FAF9F6] dark:bg-[#0B1312] text-sm text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                    لحن متن
+                  </label>
+                  <select
+                    value={tone}
+                    onChange={(e) => setTone(e.target.value)}
+                    className="w-full min-h-[44px] px-3 rounded-xl border border-[#DFDBD0] dark:border-emerald-900 bg-white dark:bg-[#0B1312] text-xs sm:text-sm text-slate-800 dark:text-slate-100"
+                  >
+                    {TONES.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                  نکته یا اشاره خاص (اختیاری)
+                </label>
+                <textarea
+                  rows={2}
+                  value={details}
+                  onChange={(e) => setDetails(e.target.value)}
+                  placeholder="مثلاً: یادآوری سفر شمال یا تشکر بابت صبوری‌های امسال..."
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#DFDBD0] dark:border-emerald-900 bg-[#FAF9F6] dark:bg-[#0B1312] text-sm text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleGenerateSpecialMessage}
+                disabled={msgBusy}
+                className="w-full min-h-[46px] rounded-xl bg-emerald-800 hover:bg-emerald-900 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+              >
+                {msgBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                <span>{isOnline ? 'تولید پیام خاص هوشمند' : 'ساخت پیام با قالب آماده آفلاین'}</span>
+              </button>
             </div>
 
-            <div className="flex items-center gap-1.5 text-xs shrink-0">
-              <Clock className="w-3.5 h-3.5 text-slate-400" />
-              <select
-                value={sleepMinutes}
-                onChange={(e) => {
-                  const val = Number(e.target.value);
-                  setSleepMinutes(val);
-                  if (isAnyAudioPlaying) {
-                    setSleepRemainingSec(val > 0 ? val * 60 : null);
-                  }
-                }}
-                aria-label="تایمر خواب"
-                className="min-h-[36px] px-2 py-1 rounded-lg border border-slate-200 dark:border-emerald-900 bg-slate-50 dark:bg-[#0B1312] text-xs"
-              >
-                <option value={15}>۱۵ دقیقه</option>
-                <option value={30}>۳۰ دقیقه</option>
-                <option value={45}>۴۵ دقیقه</option>
-                <option value={0}>پیوسته</option>
-              </select>
-              {sleepClock && (
-                <span className="font-mono-num text-emerald-700 dark:text-emerald-400 font-semibold">
-                  {sleepClock}
-                </span>
+            <div className="lg:col-span-7 rounded-xl luxury-surface-subtle p-5 flex flex-col justify-between gap-4">
+              {msgResult ? (
+                <>
+                  <div className="space-y-3">
+                    <div className="text-xs font-semibold text-emerald-800 dark:text-amber-300">
+                      {msgResult.occasion} · {msgResult.title}
+                    </div>
+                    <p className="text-sm sm:text-base leading-8 text-slate-800 dark:text-slate-100">
+                      {msgResult.text}
+                    </p>
+                    <div className="pt-3 border-t border-[#E6E2D8] dark:border-emerald-950/60">
+                      <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                        نسخه کوتاه برای پیامک:
+                      </div>
+                      <p className="mt-1 text-xs sm:text-sm leading-7 text-slate-700 dark:text-slate-300">
+                        {msgResult.shortVersion}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2.5 pt-2">
+                    {isSpeaking ? (
+                      <button
+                        type="button"
+                        onClick={onStopSpeech}
+                        className="min-h-[44px] px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs sm:text-sm font-semibold flex items-center gap-2 cursor-pointer"
+                      >
+                        <Square className="w-4 h-4" />
+                        <span>توقف پخش</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => onSpeakText(msgResult.text, msgResult.title, 'custom')}
+                        className="min-h-[44px] px-4 rounded-xl bg-slate-900 dark:bg-emerald-700 hover:bg-slate-800 text-white text-xs sm:text-sm font-semibold flex items-center gap-2 cursor-pointer"
+                      >
+                        <Volume2 className="w-4 h-4" />
+                        <span>شنیدن پیام با صدای گوینده</span>
+                      </button>
+                    )}
+
+                    <select
+                      value={msgVoice}
+                      onChange={(e) => {
+                        const v = e.target.value as VoiceName;
+                        setMsgVoice(v);
+                        onUpdateSettings({defaultVoice: v});
+                      }}
+                      aria-label="گوینده پیام مناسبتی"
+                      className="min-h-[44px] px-3 rounded-xl border border-[#DFDBD0] dark:border-emerald-900 bg-white dark:bg-[#121E1C] text-xs text-slate-700 dark:text-slate-200"
+                    >
+                      {VOICE_PERSONAS.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.label}
+                        </option>
+                      ))}
+                    </select>
+
+                    <button
+                      type="button"
+                      onClick={() => handleCopyMessage(msgResult.text)}
+                      className="min-h-[44px] px-4 rounded-xl border border-[#DFDBD0] dark:border-emerald-900 bg-white dark:bg-[#121E1C] text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-medium flex items-center gap-2 cursor-pointer"
+                    >
+                      {copiedMsg ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                      <span>کپی متن کامل</span>
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="py-12 text-center text-sm text-slate-500">
+                  مناسبت و نام مخاطب را انتخاب کنید تا متن اختصاصی آماده شود.
+                </div>
               )}
             </div>
           </div>
+        </section>
+      )}
 
-          {/* Sub-Tabs: Full Songs vs Live Radio Iran & World */}
-          <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-emerald-950/60">
-            <button
-              type="button"
-              onClick={() => setMediaTab('tracks')}
-              className={`min-h-[40px] rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
-                mediaTab === 'tracks'
-                  ? 'bg-white dark:bg-[#172724] text-slate-900 dark:text-white shadow-xs'
-                  : 'text-slate-600 dark:text-slate-300'
-              }`}
-            >
-              <Music2 className="w-3.5 h-3.5" />
-              <span>آهنگ‌های کامل</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setMediaTab('radio');
-                if (radioStations.length === 0 && !radioBusy && isOnline) {
-                  handleFetchRadio('iran');
-                }
-              }}
-              className={`min-h-[40px] rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
-                mediaTab === 'radio'
-                  ? 'bg-white dark:bg-[#172724] text-emerald-800 dark:text-emerald-300 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-300'
-              }`}
-            >
-              <Radio className="w-3.5 h-3.5" />
-              <span>رادیوهای ایران و جهان</span>
-            </button>
-          </div>
+      {/* Section: Music & Live Radio (full-width balanced luxury player + artwork grid) */}
+      {(mediaTab === 'tracks' || mediaTab === 'radio') && (
+        <section className="luxury-card p-6 sm:p-7 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          <div className="lg:col-span-5 space-y-5">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                  {mediaTab === 'radio' ? (
+                    <Globe className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
+                  ) : (
+                    <Music2 className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
+                  )}
+                  <span>
+                    {mediaTab === 'radio'
+                      ? 'اتصال زنده به رادیوهای ایران، فارسی و برترین ایستگاه‌های جهان'
+                      : 'پخش مستقیم آنلاین آهنگ‌های کامل با تایمر خواب'}
+                  </span>
+                </div>
+                <h2 className="mt-1.5 text-lg font-bold text-slate-900 dark:text-white">
+                  {mediaTab === 'radio' ? 'رادیوهای ایران و جهان (پخش زنده)' : 'پلی‌لیست موسیقی و آهنگ‌های واقعی'}
+                </h2>
+              </div>
+
+              <div className="flex items-center gap-1.5 text-xs shrink-0">
+                <Clock className="w-3.5 h-3.5 text-slate-400" />
+                <select
+                  value={sleepMinutes}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    setSleepMinutes(val);
+                    if (isAnyAudioPlaying) {
+                      setSleepRemainingSec(val > 0 ? val * 60 : null);
+                    }
+                  }}
+                  aria-label="تایمر خواب"
+                  className="min-h-[36px] px-2 py-1 rounded-lg border border-[#DFDBD0] dark:border-emerald-900 bg-[#FAF9F6] dark:bg-[#0B1312] text-xs"
+                >
+                  <option value={15}>۱۵ دقیقه</option>
+                  <option value={30}>۳۰ دقیقه</option>
+                  <option value={45}>۴۵ دقیقه</option>
+                  <option value={0}>پیوسته</option>
+                </select>
+                {sleepClock && (
+                  <span className="font-mono-num text-emerald-700 dark:text-emerald-400 font-semibold">
+                    {sleepClock}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl luxury-surface-subtle">
+              <button
+                type="button"
+                onClick={() => setMediaTab('tracks')}
+                className={`min-h-[40px] rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                  mediaTab === 'tracks'
+                    ? 'bg-white dark:bg-[#172724] text-slate-900 dark:text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300'
+                }`}
+              >
+                <Music2 className="w-3.5 h-3.5" />
+                <span>آهنگ‌های کامل</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMediaTab('radio');
+                  if (radioStations.length === 0 && !radioBusy && isOnline) {
+                    handleFetchRadio('iran');
+                  }
+                }}
+                className={`min-h-[40px] rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                  mediaTab === 'radio'
+                    ? 'bg-white dark:bg-[#172724] text-emerald-800 dark:text-emerald-300 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300'
+                }`}
+              >
+                <Radio className="w-3.5 h-3.5" />
+                <span>رادیوهای ایران و جهان</span>
+              </button>
+            </div>
 
           {mediaTab === 'tracks' ? (
             <>
@@ -1391,7 +1461,9 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
               </div>
             </div>
           )}
+          </div>
 
+          <div className="lg:col-span-7">
           {/* Playable Tracklist or Radio Stations (Visual Cover Grid or Compact List) */}
           {(mediaTab === 'radio' ? radioStations : tracks).length > 0 ? (
             <div className="space-y-3">
@@ -1563,16 +1635,19 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
               )}
             </div>
           ) : (
-            <div className="rounded-xl border border-dashed border-slate-200 dark:border-emerald-900/70 py-10 px-4 text-center text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+            <div className="rounded-xl border border-dashed border-[#DFDBD0] dark:border-emerald-900/70 py-12 px-4 text-center text-xs sm:text-sm text-slate-500 dark:text-slate-400">
               {mediaTab === 'radio'
                 ? 'ایستگاهی در لیست نیست. روی «رادیوهای ایران و فارسی» بزنید یا نام ایستگاه را جستجو کنید تا دوباره اضافه شوند.'
                 : 'نام خواننده یا حال‌وهوای دلخواه را بنویسید (یا یکی از دکمه‌های بالا را بزنید) تا پلی‌لیست موسیقی واقعی ساخته شود.'}
             </div>
           )}
-        </div>
+          </div>
+        </section>
+      )}
 
-        {/* High-Rated Persian-Dubbed Movies & Series Discovery + Auto Night Notification */}
-        <div className="lg:col-span-7 rounded-2xl bg-white dark:bg-[#121E1C] border border-slate-200/80 dark:border-emerald-950/70 p-6 space-y-5">
+      {/* High-Rated Dubbed Movies & Series Discovery */}
+      {mediaTab === 'movies' && (
+        <section className="luxury-card p-6 sm:p-7 space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
@@ -1718,12 +1793,12 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
               )}
             </div>
           ) : (
-            <div className="rounded-xl border border-dashed border-slate-200 dark:border-emerald-900/70 py-10 px-4 text-center text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+            <div className="rounded-xl border border-dashed border-[#DFDBD0] dark:border-emerald-900/70 py-10 px-4 text-center text-xs sm:text-sm text-slate-500 dark:text-slate-400">
               روی «پیدا کن با دوبله فارسی» بزنید تا جدیدترین فیلم‌ها و سریال‌های دوبله با امتیاز بالای IMDb جستجو و خلاصه شوند.
             </div>
           )}
-        </div>
-      </section>
+        </section>
+      )}
 
       {mediaTab === 'gta6' && <GTA6StreamsView />}
       <div className={mediaTab === 'podcasts' ? '' : 'hidden'}>

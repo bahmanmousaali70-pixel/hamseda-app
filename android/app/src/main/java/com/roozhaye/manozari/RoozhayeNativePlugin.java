@@ -1518,6 +1518,7 @@ public class RoozhayeNativePlugin extends Plugin {
         Integer quietHours = call.getInt("quietHours", 0);
         Boolean summarize = call.getBoolean("summarize", true);
         Boolean filterOperatorPromotions = call.getBoolean("filterOperatorPromotions", true);
+        Boolean skipBankAndOtp = call.getBoolean("skipBankAndOtp", true);
         long quietUntil = quietHours != null && quietHours > 0
                 ? System.currentTimeMillis() + Math.min(24, quietHours) * 60L * 60L * 1000L : 0L;
         SharedPreferences prefs = getContext().getSharedPreferences("rmz_native_prefs", Context.MODE_PRIVATE);
@@ -1527,6 +1528,7 @@ public class RoozhayeNativePlugin extends Plugin {
                 .putString("sms_important_senders", importantSenders != null ? importantSenders : "")
                 .putBoolean("sms_summarize", summarize == null || summarize)
                 .putBoolean("sms_filter_operator_promotions", filterOperatorPromotions == null || filterOperatorPromotions)
+                .putBoolean("sms_skip_bank_and_otp", skipBankAndOtp == null || skipBankAndOtp)
                 .putLong("sms_quiet_until", quietUntil)
                 .apply();
         JSObject ret = new JSObject();

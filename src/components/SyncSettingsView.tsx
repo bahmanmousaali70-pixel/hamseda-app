@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {
   Bell,
   BellOff,
@@ -7,6 +7,7 @@ import {
   Cloud,
   Copy,
   Download,
+  ExternalLink,
   FileAudio,
   Link2,
   LogIn,
@@ -41,14 +42,23 @@ import {
 } from '../services/nativeAndroidBridge';
 import type {
   AppSettings,
+  BillReminderItem,
   CallerContact,
   DeviceOwner,
+  ExpenseEntry,
   GoalItem,
   GratitudeEntry,
   HabitItem,
+  HomeChoreItem,
   LocalVoiceControls,
+  MealPlanEntry,
+  MedicationItem,
+  PackingItem,
+  QuickVaultNote,
   ScheduleTopic,
   ScheduledAnnouncement,
+  ShoppingItem,
+  SpecialEventItem,
   VoiceName,
 } from '../types/app';
 import {getPartnerNameForDevice, getSelfName} from '../utils/deviceIdentity';
@@ -65,6 +75,15 @@ interface SyncSettingsViewProps {
   gratitudes: GratitudeEntry[];
   callers: CallerContact[];
   schedules: ScheduledAnnouncement[];
+  shoppingItems: ShoppingItem[];
+  expenses: ExpenseEntry[];
+  bills: BillReminderItem[];
+  meds: MedicationItem[];
+  meals: MealPlanEntry[];
+  vaultNotes: QuickVaultNote[];
+  packingItems: PackingItem[];
+  specialEvents: SpecialEventItem[];
+  homeChores: HomeChoreItem[];
   notifPermission: NotificationPermission;
   keepAliveActive: boolean;
   isOnline: boolean;
@@ -79,6 +98,16 @@ interface SyncSettingsViewProps {
     habits?: HabitItem[];
     gratitudes?: GratitudeEntry[];
     callers?: CallerContact[];
+    schedules?: ScheduledAnnouncement[];
+    shoppingItems?: ShoppingItem[];
+    expenses?: ExpenseEntry[];
+    bills?: BillReminderItem[];
+    meds?: MedicationItem[];
+    meals?: MealPlanEntry[];
+    vaultNotes?: QuickVaultNote[];
+    packingItems?: PackingItem[];
+    specialEvents?: SpecialEventItem[];
+    homeChores?: HomeChoreItem[];
   }) => void;
   onRequestNotificationPermission: () => void;
   onToggleKeepAlive: (enabled: boolean) => void;
@@ -127,6 +156,15 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
   gratitudes,
   callers,
   schedules,
+  shoppingItems,
+  expenses,
+  bills,
+  meds,
+  meals,
+  vaultNotes,
+  packingItems,
+  specialEvents,
+  homeChores,
   notifPermission,
   keepAliveActive,
   isOnline,
@@ -170,7 +208,23 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
   const [smsFilterOperatorPromotions, setSmsFilterOperatorPromotions] = useState(
     () => localStorage.getItem('rmz_sms_filter_operator_promotions') !== 'false'
   );
+  const [smsSkipBankAndOtp, setSmsSkipBankAndOtp] = useState(
+    () => localStorage.getItem('rmz_sms_skip_bank_and_otp') !== 'false'
+  );
   const [smsPolicySaving, setSmsPolicySaving] = useState(false);
+
+  const [myNameDraft, setMyNameDraft] = useState(settings.myName);
+  const [partnerNameDraft, setPartnerNameDraft] = useState(settings.partnerName);
+  const myNameFocusedRef = useRef(false);
+  const partnerNameFocusedRef = useRef(false);
+
+  useEffect(() => {
+    if (!myNameFocusedRef.current) setMyNameDraft(settings.myName);
+  }, [settings.myName]);
+
+  useEffect(() => {
+    if (!partnerNameFocusedRef.current) setPartnerNameDraft(settings.partnerName);
+  }, [settings.partnerName]);
 
   const [partnerEmailInput, setPartnerEmailInput] = useState(spaceInfo?.partnerEmail ?? '');
   const [joinCodeInput, setJoinCodeInput] = useState('');
@@ -196,6 +250,15 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
       gratitudes,
       callers,
       schedules,
+      shoppingItems,
+      expenses,
+      bills,
+      meds,
+      meals,
+      vaultNotes,
+      packingItems,
+      specialEvents,
+      homeChores,
     },
     null,
     2
@@ -386,7 +449,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
               این برنامه الان روی گوشی چه کسی نصب است؟
             </h2>
             <p className="text-xs sm:text-sm leading-6 text-slate-600 dark:text-slate-300">
-              این انتخاب فقط روی همین گوشی ذخیره می‌شود و با همگام‌سازی ابری تغییر نمی‌کند؛ اگر انتخاب کنید «گوشی {settings.partnerName}»، تمام خطاب‌ها و دستیار صوتی اول {settings.partnerName} را صدا می‌زنند.
+              این انتخاب فقط روی همین گوشی ذخیره می‌شود و با همگام‌سازی ابری تغییر نمی‌کند؛ اگر انتخاب کنید «گوشی {settings.partnerName.trim() || 'همراه'}»، تمام خطاب‌ها و دستیار صوتی اول {settings.partnerName.trim() || 'همراه'} را صدا می‌زنند.
             </p>
             <div className="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <button
@@ -398,9 +461,9 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
                     : 'bg-slate-50/70 dark:bg-[#0B1312] border-slate-200 dark:border-emerald-900 text-slate-800 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
                 }`}
               >
-                <div className="text-sm font-bold">این گوشی {settings.myName} است</div>
+                <div className="text-sm font-bold">این گوشی {settings.myName.trim() || 'من'} است</div>
                 <div className={`text-[11px] mt-0.5 ${deviceOwner === 'man' ? 'text-emerald-100' : 'text-slate-500 dark:text-slate-400'}`}>
-                  خطاب اول با «{settings.myName}» · پیامک پیش‌فرض به {settings.partnerName}
+                  خطاب اول با «{settings.myName.trim() || 'من'}» · پیامک پیش‌فرض به {settings.partnerName.trim() || 'همراه'}
                 </div>
               </button>
 
@@ -413,9 +476,9 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
                     : 'bg-slate-50/70 dark:bg-[#0B1312] border-slate-200 dark:border-emerald-900 text-slate-800 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
                 }`}
               >
-                <div className="text-sm font-bold">این گوشی {settings.partnerName} است</div>
+                <div className="text-sm font-bold">این گوشی {settings.partnerName.trim() || 'همراه'} است</div>
                 <div className={`text-[11px] mt-0.5 ${deviceOwner === 'zari' ? 'text-emerald-100' : 'text-slate-500 dark:text-slate-400'}`}>
-                  خطاب اول با «{settings.partnerName}» · پیامک پیش‌فرض به {settings.myName}
+                  خطاب اول با «{settings.partnerName.trim() || 'همراه'}» · پیامک پیش‌فرض به {settings.myName.trim() || 'من'}
                 </div>
               </button>
             </div>
@@ -423,17 +486,22 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
 
           <div className="lg:col-span-5 rounded-xl bg-slate-50/80 dark:bg-[#0B1312] border border-slate-200/80 dark:border-emerald-900/70 p-4 space-y-3">
             <label className="block text-xs font-bold text-slate-900 dark:text-white">
-              نام اختصاصی دستیار شخصی ({settings.myName} و {settings.partnerName})
+              نام اختصاصی دستیار شخصی ({settings.myName.trim() || 'من'} و {settings.partnerName.trim() || 'همراه'})
             </label>
             <input
               type="text"
-              value={settings.assistantName || 'هم‌صدا'}
+              value={settings.assistantName ?? ''}
               onChange={(e) => onUpdateSettings({assistantName: e.target.value})}
+              onBlur={() =>
+                onUpdateSettings({
+                  assistantName: (settings.assistantName ?? '').trim() || 'هم‌صدا',
+                })
+              }
               placeholder="مثلاً: هم‌صدا، نگار، یاس، همدم..."
               className="w-full min-h-[44px] px-3.5 rounded-xl border border-slate-200 dark:border-emerald-900 bg-white dark:bg-[#121E1C] text-sm font-semibold text-slate-900 dark:text-white"
             />
             <p className="text-[11px] leading-5 text-slate-500 dark:text-slate-400">
-              در تب <strong>دستیار صوتی</strong> وقتی با همین نام صدایش بزنید (مثلاً «{settings.assistantName || 'هم‌صدا'} ساعت چنده؟») جواب می‌دهد و دستورها را اجرا می‌کند.
+              در تب <strong>دستیار صوتی</strong> وقتی با همین نام صدایش بزنید (مثلاً «{(settings.assistantName ?? '').trim() || 'هم‌صدا'} ساعت چنده؟») جواب می‌دهد و دستورها را اجرا می‌کند.
             </p>
           </div>
         </div>
@@ -1230,6 +1298,20 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
             </select>
           </div>
         </div>
+        <label className="flex items-start gap-2 rounded-xl border border-amber-200 dark:border-amber-900/70 bg-amber-50/70 dark:bg-amber-950/25 p-3 text-xs text-slate-700 dark:text-slate-200">
+          <input
+            type="checkbox"
+            checked={smsSkipBankAndOtp}
+            onChange={(e) => setSmsSkipBankAndOtp(e.target.checked)}
+            className="mt-0.5 accent-emerald-700"
+          />
+          <span>
+            <strong>محافظت حریم بانکی: پیامک‌های بانک، مانده حساب، سقف/مرز تراکنش و رمز پویا خوانده نشوند (پیشنهادی)</strong>
+            <span className="block mt-1 leading-5 text-slate-500 dark:text-slate-400">
+              به‌صورت پیش‌فرض روشن است تا موجودی حساب، گردش واریز و برداشت، محدودیت‌ها و رمزهای پویا با صدای بلند پخش نشوند (مگر اینکه خودتان تیک را بردارید).
+            </span>
+          </span>
+        </label>
         <label className="flex items-start gap-2 rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/70 dark:bg-emerald-950/25 p-3 text-xs text-slate-700 dark:text-slate-200">
           <input
             type="checkbox"
@@ -1257,6 +1339,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
             localStorage.setItem('rmz_sms_quiet_hours', smsQuietHours);
             localStorage.setItem('rmz_sms_summarize', String(smsSummarize));
             localStorage.setItem('rmz_sms_filter_operator_promotions', String(smsFilterOperatorPromotions));
+            localStorage.setItem('rmz_sms_skip_bank_and_otp', String(smsSkipBankAndOtp));
             const ok = await saveSmsAnnouncementPolicyNative({
               blockedSenders: smsBlockedSenders,
               blockedKeywords: smsBlockedKeywords,
@@ -1264,6 +1347,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
               quietHours: Number(smsQuietHours),
               summarize: smsSummarize,
               filterOperatorPromotions: smsFilterOperatorPromotions,
+              skipBankAndOtp: smsSkipBankAndOtp,
             });
             setSmsPolicySaving(false);
             onStatusToast(ok ? 'تنظیمات فیلتر پیامک روی گوشی ذخیره شد.' : 'ذخیره تنظیمات ناموفق بود؛ نسخه APK اندروید لازم است.');
@@ -1289,8 +1373,20 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
               </label>
               <input
                 type="text"
-                value={settings.myName}
-                onChange={(e) => onUpdateSettings({myName: e.target.value || 'من'})}
+                value={myNameDraft}
+                onFocus={() => {
+                  myNameFocusedRef.current = true;
+                }}
+                onChange={(e) => setMyNameDraft(e.target.value)}
+                onBlur={() => {
+                  myNameFocusedRef.current = false;
+                  const finalName = myNameDraft.trim() || 'من';
+                  setMyNameDraft(finalName);
+                  if (finalName !== settings.myName) {
+                    onUpdateSettings({myName: finalName});
+                  }
+                }}
+                placeholder="مثلاً: علی، مهدی..."
                 className="w-full min-h-[44px] px-3.5 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50/70 dark:bg-[#0B1312] text-sm text-slate-900 dark:text-white"
               />
             </div>
@@ -1300,8 +1396,20 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
               </label>
               <input
                 type="text"
-                value={settings.partnerName}
-                onChange={(e) => onUpdateSettings({partnerName: e.target.value || 'همراه'})}
+                value={partnerNameDraft}
+                onFocus={() => {
+                  partnerNameFocusedRef.current = true;
+                }}
+                onChange={(e) => setPartnerNameDraft(e.target.value)}
+                onBlur={() => {
+                  partnerNameFocusedRef.current = false;
+                  const finalPartner = partnerNameDraft.trim() || 'همراه';
+                  setPartnerNameDraft(finalPartner);
+                  if (finalPartner !== settings.partnerName) {
+                    onUpdateSettings({partnerName: finalPartner});
+                  }
+                }}
+                placeholder="مثلاً: سارا، زری..."
                 className="w-full min-h-[44px] px-3.5 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50/70 dark:bg-[#0B1312] text-sm text-slate-900 dark:text-white"
               />
             </div>
@@ -1438,6 +1546,27 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
           </form>
         </section>
       </div>
+
+      {/* Free Public Sponsorship Card */}
+      <section className="rounded-2xl luxury-card p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-amber-300/60 dark:border-emerald-800/70">
+        <div>
+          <h2 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
+            نسخه رایگان هم‌صدا برای همه · با حمایت TapNFC.ir
+          </h2>
+          <p className="mt-1 text-xs sm:text-sm leading-6 text-slate-600 dark:text-slate-300">
+            استفاده از امکانات برنامه‌ریزی، دستیار فارسی و همگام‌سازی برای تمامی زوج‌ها و کاربران به‌صورت رایگان با پشتیبانی TapNFC فراهم شده است.
+          </p>
+        </div>
+        <a
+          href="https://tapnfc.ir"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="min-h-[44px] px-4 py-2.5 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white text-xs sm:text-sm font-bold inline-flex items-center justify-center gap-2 shrink-0 whitespace-nowrap"
+        >
+          <span dir="ltr">tapnfc.ir</span>
+          <ExternalLink className="w-4 h-4" />
+        </a>
+      </section>
     </div>
   );
 };

@@ -757,6 +757,11 @@ export const CallerAnnouncerView: React.FC<CallerAnnouncerViewProps> = ({
               <span className="text-xs sm:text-sm font-semibold">خواندن فرستنده و متن پیامک ورودی (SMS)</span>
               <span className="text-xs font-bold">{announceSms ? 'روشن' : 'خاموش'}</span>
             </button>
+
+            <div className="rounded-xl border border-emerald-200/80 dark:border-emerald-900/60 bg-emerald-50/70 dark:bg-emerald-950/25 p-3 text-xs leading-6 text-slate-700 dark:text-slate-300">
+              <strong className="text-emerald-900 dark:text-emerald-200">حریم خصوصی بانکی فعال است:</strong>{' '}
+              پیامک‌های بانک، تراکنش‌ها، مانده حساب، سقف/مرزهای بانکی و رمز پویا به‌صورت پیش‌فرض <strong>خوانده نمی‌شوند</strong>. (قابل تغییر در تب «تنظیم و نصب ← فیلترهای پیامک»)
+            </div>
           </div>
         </div>
 

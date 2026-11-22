@@ -97,6 +97,122 @@ export interface ScheduledAnnouncement {
   lastTriggeredDate?: string;
 }
 
+export type ShoppingCategory = 'grocery' | 'home' | 'health' | 'note';
+
+export interface ShoppingItem {
+  id: string;
+  title: string;
+  note?: string;
+  category: ShoppingCategory;
+  checked: boolean;
+  createdAt: number;
+}
+
+export type ExpenseCategory = 'food' | 'bills' | 'transport' | 'health' | 'family' | 'other';
+export type ExpenseSplitMode = 'shared' | 'personal' | 'for_partner' | 'settlement';
+
+export interface ExpenseEntry {
+  id: string;
+  title: string;
+  amount: number;
+  category: ExpenseCategory;
+  payer: OwnerRole;
+  splitMode?: ExpenseSplitMode;
+  dateKey: string;
+  createdAt: number;
+}
+
+export type BillKind = 'installment' | 'bill' | 'vehicle' | 'subscription';
+export type BillCycle = 'once' | 'monthly' | 'yearly';
+
+export interface BillReminderItem {
+  id: string;
+  title: string;
+  amount: number;
+  kind: BillKind;
+  dueDateKey: string;
+  cycle: BillCycle;
+  paid: boolean;
+  note?: string;
+  createdAt: number;
+}
+
+export type MedicationKind = 'med' | 'appointment';
+
+export interface MedicationItem {
+  id: string;
+  name: string;
+  dosage: string;
+  time: string;
+  owner: OwnerRole;
+  kind: MedicationKind;
+  takenDates: string[];
+  voiceRemind: boolean;
+  enabled: boolean;
+  createdAt: number;
+}
+
+export type WeekdayId = 'sat' | 'sun' | 'mon' | 'tue' | 'wed' | 'thu' | 'fri';
+
+export interface MealPlanEntry {
+  id: WeekdayId;
+  dayLabel: string;
+  lunch: string;
+  dinner: string;
+  ingredients: string;
+}
+
+export type VaultCategory = 'bank' | 'home' | 'ids' | 'note';
+
+export interface QuickVaultNote {
+  id: string;
+  title: string;
+  value: string;
+  category: VaultCategory;
+  owner: OwnerRole;
+  createdAt: number;
+}
+
+export type PackingTemplateId = 'road' | 'flight' | 'camp' | 'custom';
+
+export interface PackingItem {
+  id: string;
+  title: string;
+  template: PackingTemplateId;
+  checked: boolean;
+  owner: OwnerRole;
+  createdAt: number;
+}
+
+export type SpecialEventKind = 'birthday' | 'anniversary' | 'occasion';
+
+export interface SpecialEventItem {
+  id: string;
+  title: string;
+  kind: SpecialEventKind;
+  jalaliMonth: number;
+  jalaliDay: number;
+  jalaliYear?: number;
+  owner: OwnerRole;
+  note?: string;
+  createdAt: number;
+}
+
+export interface HomeChoreItem {
+  id: string;
+  title: string;
+  area: string;
+  intervalDays: number;
+  lastDoneDateKey: string;
+  nextDueDateKey: string;
+  owner: OwnerRole;
+  createdAt: number;
+}
+
+export type PersonalityFocusId = 'analytical' | 'creative' | 'sensitive' | 'active' | 'calm_leader';
+
+export type TodaySubSection = 'planner' | 'shopping_meals' | 'finance_bills' | 'health_vault' | 'growth_lab';
+
 export interface AppSettings {
   theme: 'light' | 'dark';
   defaultVoice: VoiceName;
@@ -211,7 +327,12 @@ export type AssistantActionType =
   | 'play_podcast'
   | 'stop_audio'
   | 'add_goal'
-  | 'add_gratitude';
+  | 'add_gratitude'
+  | 'add_shopping_item'
+  | 'add_expense'
+  | 'daily_briefing'
+  | 'open_drive_mode'
+  | 'daily_english';
 
 export interface AssistantCommandResult {
   action: AssistantActionType;
@@ -220,8 +341,14 @@ export interface AssistantCommandResult {
   targetPhone?: string;
   smsBody?: string;
   tab?: AppTab;
+  todaySection?: TodaySubSection;
   query?: string;
   goalTitle?: string;
+  shoppingItems?: string[];
+  expenseTitle?: string;
+  expenseAmount?: number;
+  expenseCategory?: ExpenseCategory;
+  briefingMode?: 'morning' | 'evening';
   downloadUrl?: string;
   downloadTitle?: string;
   alarmHour?: number;

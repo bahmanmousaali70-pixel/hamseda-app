@@ -17,13 +17,35 @@ public final class SmsAnnouncementPolicy {
         String s = normalize(sender);
         String a = normalize(alternateSender);
         String b = normalize(body);
-        String important = p.getString("sms_important_senders", "");
-        if (containsEntry(important, s) || containsEntry(important, a)) return true;
         String blocked = p.getString("sms_blocked_senders", "");
         if (containsEntry(blocked, s) || containsEntry(blocked, a)) return false;
-        if (p.getBoolean("sms_filter_operator_promotions", true) && isOperatorPromotion(s + " " + a, b)) return false;
         if (containsAny(b, p.getString("sms_blocked_keywords", ""))) return false;
+        if (p.getBoolean("sms_skip_bank_and_otp", true) && isBankOrFinancialSms(s + " " + a, b)) return false;
+        String important = p.getString("sms_important_senders", "");
+        if (containsEntry(important, s) || containsEntry(important, a)) return true;
+        if (p.getBoolean("sms_filter_operator_promotions", true) && isOperatorPromotion(s + " " + a, b)) return false;
         return true;
+    }
+
+    private static boolean isBankOrFinancialSms(String sender, String body) {
+        String senderText = normalize(sender);
+        String bodyText = normalize(body);
+        if (senderText.isEmpty() && bodyText.isEmpty()) return false;
+
+        boolean knownBankSender = containsAny(senderText,
+                "بانک\nbank\nملت\nmellat\nملی\nmelli\nbmi\nصادرات\nsaderat\nتجارت\ntejarat\nسپه\nsepah\nرفاه\nrefah\nکشاورزی\nbki\nمسکن\nmaskan\nسامان\nsaman\nپارسیان\nparsian\nپاسارگاد\npasargad\nاقتصاد نوین\nenbank\nآینده\nayandeh\nسینا\nsina\nشهر\nshahr\nدی\nday\nکارآفرین\nkarafarin\nسرمایه\nsarmayeh\nمهر ایران\nqmb\nرسالت\nresalat\nبلو\nblu\nblubank\nویپاد\nwepod\nشاپرک\nshaparak\nهمراه کارت\nآپ\n724");
+
+        boolean strongFinancialContent = containsAny(bodyText,
+                "واریز\nبرداشت\nمانده\nموجودی\nگردش حساب\nتراکنش\nکسر از حساب\nواریز به حساب\nبرداشت از حساب\nسقف تراکنش\nمرز تراکنش\nسقف کارت\nسقف روزانه\nکارت به کارت\nرمز پویا\nرمز دوم\nرمز یکبار مصرف\nرمز یک بار مصرف\ncvv2\ncvv\notp\nشبا\nساتنا\nپایا\nحساب شماره\nشماره حساب\nمانده کارت\nباقی مانده");
+
+        if (knownBankSender) {
+            return true;
+        }
+        // Even if the bank sends from a generic short code (e.g. 98..., 3000..., +98200...), protect balances/OTPs/limits.
+        if (strongFinancialContent && containsAny(bodyText, "تومان\nریال\nحساب\nکارت\nرمز\nبانک\nمانده\nموجودی\nتراکنش")) {
+            return true;
+        }
+        return containsAny(bodyText, "رمز پویا\nرمز دوم\nرمز یکبار مصرف\nرمز یک بار مصرف\ncvv2\nمانده حساب\nموجودی حساب");
     }
 
     private static boolean isOperatorPromotion(String sender, String body) {
@@ -33,9 +55,9 @@ public final class SmsAnnouncementPolicy {
                 "ایرانسل\nirancell\nmtn\nmtn irancell\nهمراه اول\nhamrah aval\nmci\nرایتل\nrightel");
         if (!knownOperator || bodyText.isEmpty()) return false;
 
-        // Preserve OTP, account/security alerts, balance and service notifications.
+        // Preserve service/account notifications from telecom operators when bank filter didn't exclude them.
         if (containsAny(bodyText,
-                "رمز یکبار مصرف\nرمز پویا\nکد تایید\nکد تأیید\nکد ورود\nرمز ورود\nتراکنش\nبرداشت\nواریز\nمانده حساب\nصورتحساب\nبدهی\nتمدید خودکار بسته\nاتمام اعتبار بسته\nشارژ اضطراری")) {
+                "صورتحساب\nبدهی\nتمدید خودکار بسته\nاتمام اعتبار بسته\nشارژ اضطراری")) {
             return false;
         }
         return containsAny(bodyText,

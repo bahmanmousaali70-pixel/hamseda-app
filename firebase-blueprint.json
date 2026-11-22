@@ -154,6 +154,8 @@
         "speechRate": {"type": "number"},
         "myName": {"type": "string", "minLength": 1, "maxLength": 60},
         "partnerName": {"type": "string", "minLength": 1, "maxLength": 60},
+        "assistantName": {"type": "string", "minLength": 1, "maxLength": 60},
+        "assistantWakeWordEnabled": {"type": "boolean"},
         "backgroundKeepAlive": {"type": "boolean"},
         "announceCalls": {"type": "boolean"},
         "announceSms": {"type": "boolean"},
@@ -164,6 +166,181 @@
         "updatedAt": {"type": "string", "format": "date-time"}
       },
       "required": ["theme", "defaultVoice", "speechRate", "myName", "partnerName", "backgroundKeepAlive", "updatedByUid", "updatedAt"]
+    },
+    "ShoppingRecord": {
+      "title": "ShoppingRecord",
+      "description": "Shared shopping list & urgent household note synced across both devices.",
+      "type": "object",
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "title": {"type": "string", "minLength": 1, "maxLength": 200},
+        "note": {"type": "string", "maxLength": 200},
+        "category": {"type": "string", "enum": ["grocery", "home", "health", "note"]},
+        "checked": {"type": "boolean"},
+        "clientCreatedAt": {"type": "number"},
+        "authorUid": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "updatedByUid": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "updatedAt": {"type": "string", "format": "date-time"}
+      },
+      "required": ["id", "title", "category", "checked", "clientCreatedAt", "authorUid", "updatedByUid", "createdAt", "updatedAt"]
+    },
+    "ExpenseRecord": {
+      "title": "ExpenseRecord",
+      "description": "Household daily expense entry in Toman synced across both devices.",
+      "type": "object",
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "title": {"type": "string", "minLength": 1, "maxLength": 200},
+        "amount": {"type": "number"},
+        "category": {"type": "string", "enum": ["food", "bills", "transport", "health", "family", "other"]},
+        "payer": {"type": "string", "enum": ["man", "zari", "both"]},
+        "splitMode": {"type": "string", "enum": ["shared", "personal", "for_partner", "settlement"]},
+        "dateKey": {"type": "string", "minLength": 8, "maxLength": 20},
+        "clientCreatedAt": {"type": "number"},
+        "authorUid": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "updatedByUid": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "updatedAt": {"type": "string", "format": "date-time"}
+      },
+      "required": ["id", "title", "amount", "category", "payer", "dateKey", "clientCreatedAt", "authorUid", "updatedByUid", "createdAt", "updatedAt"]
+    },
+    "BillRecord": {
+      "title": "BillRecord",
+      "description": "Installment, utility bill, or vehicle service reminder.",
+      "type": "object",
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "title": {"type": "string", "minLength": 1, "maxLength": 200},
+        "amount": {"type": "number"},
+        "kind": {"type": "string", "enum": ["installment", "bill", "vehicle", "subscription"]},
+        "dueDateKey": {"type": "string", "minLength": 8, "maxLength": 20},
+        "cycle": {"type": "string", "enum": ["once", "monthly", "yearly"]},
+        "paid": {"type": "boolean"},
+        "note": {"type": "string", "maxLength": 240},
+        "clientCreatedAt": {"type": "number"},
+        "authorUid": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "updatedByUid": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "updatedAt": {"type": "string", "format": "date-time"}
+      },
+      "required": ["id", "title", "amount", "kind", "dueDateKey", "cycle", "paid", "clientCreatedAt", "authorUid", "updatedByUid", "createdAt", "updatedAt"]
+    },
+    "MedicationRecord": {
+      "title": "MedicationRecord",
+      "description": "Medication, vitamin, or medical appointment reminder with daily tracking.",
+      "type": "object",
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "name": {"type": "string", "minLength": 1, "maxLength": 200},
+        "dosage": {"type": "string", "maxLength": 160},
+        "time": {"type": "string", "pattern": "^\\d{2}:\\d{2}$"},
+        "owner": {"type": "string", "enum": ["man", "zari", "both"]},
+        "kind": {"type": "string", "enum": ["med", "appointment"]},
+        "takenDates": {"type": "array"},
+        "voiceRemind": {"type": "boolean"},
+        "enabled": {"type": "boolean"},
+        "clientCreatedAt": {"type": "number"},
+        "authorUid": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "updatedByUid": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "updatedAt": {"type": "string", "format": "date-time"}
+      },
+      "required": ["id", "name", "dosage", "time", "owner", "kind", "takenDates", "voiceRemind", "enabled", "clientCreatedAt", "authorUid", "updatedByUid", "createdAt", "updatedAt"]
+    },
+    "MealPlanRecord": {
+      "title": "MealPlanRecord",
+      "description": "Day-of-week lunch/dinner meal plan and ingredients.",
+      "type": "object",
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "dayLabel": {"type": "string", "minLength": 1, "maxLength": 40},
+        "lunch": {"type": "string", "maxLength": 200},
+        "dinner": {"type": "string", "maxLength": 200},
+        "ingredients": {"type": "string", "maxLength": 400},
+        "authorUid": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "updatedByUid": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "updatedAt": {"type": "string", "format": "date-time"}
+      },
+      "required": ["id", "dayLabel", "lunch", "dinner", "ingredients", "authorUid", "updatedByUid", "createdAt", "updatedAt"]
+    },
+    "VaultNoteRecord": {
+      "title": "VaultNoteRecord",
+      "description": "Shared household quick-copy reference cards (IBAN, cards, postal codes, bill IDs).",
+      "type": "object",
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "title": {"type": "string", "minLength": 1, "maxLength": 160},
+        "value": {"type": "string", "minLength": 1, "maxLength": 500},
+        "category": {"type": "string", "enum": ["bank", "home", "ids", "note"]},
+        "owner": {"type": "string", "enum": ["man", "zari", "both"]},
+        "clientCreatedAt": {"type": "number"},
+        "authorUid": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "updatedByUid": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "updatedAt": {"type": "string", "format": "date-time"}
+      },
+      "required": ["id", "title", "value", "category", "owner", "clientCreatedAt", "authorUid", "updatedByUid", "createdAt", "updatedAt"]
+    },
+    "PackingRecord": {
+      "title": "PackingRecord",
+      "description": "Travel and moving packing checklist item synced across both devices.",
+      "type": "object",
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "title": {"type": "string", "minLength": 1, "maxLength": 200},
+        "template": {"type": "string", "enum": ["road", "flight", "camp", "custom"]},
+        "checked": {"type": "boolean"},
+        "owner": {"type": "string", "enum": ["man", "zari", "both"]},
+        "clientCreatedAt": {"type": "number"},
+        "authorUid": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "updatedByUid": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "updatedAt": {"type": "string", "format": "date-time"}
+      },
+      "required": ["id", "title", "template", "checked", "owner", "clientCreatedAt", "authorUid", "updatedByUid", "createdAt", "updatedAt"]
+    },
+    "SpecialEventRecord": {
+      "title": "SpecialEventRecord",
+      "description": "Jalali birthday, anniversary, or special event countdown.",
+      "type": "object",
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "title": {"type": "string", "minLength": 1, "maxLength": 180},
+        "kind": {"type": "string", "enum": ["birthday", "anniversary", "occasion"]},
+        "jalaliMonth": {"type": "number"},
+        "jalaliDay": {"type": "number"},
+        "jalaliYear": {"type": "number"},
+        "owner": {"type": "string", "enum": ["man", "zari", "both"]},
+        "note": {"type": "string", "maxLength": 240},
+        "clientCreatedAt": {"type": "number"},
+        "authorUid": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "updatedByUid": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "updatedAt": {"type": "string", "format": "date-time"}
+      },
+      "required": ["id", "title", "kind", "jalaliMonth", "jalaliDay", "owner", "clientCreatedAt", "authorUid", "updatedByUid", "createdAt", "updatedAt"]
+    },
+    "ChoreRecord": {
+      "title": "ChoreRecord",
+      "description": "Recurring home maintenance chore with interval and due date.",
+      "type": "object",
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "title": {"type": "string", "minLength": 1, "maxLength": 200},
+        "area": {"type": "string", "maxLength": 80},
+        "intervalDays": {"type": "number"},
+        "lastDoneDateKey": {"type": "string", "minLength": 8, "maxLength": 20},
+        "nextDueDateKey": {"type": "string", "minLength": 8, "maxLength": 20},
+        "owner": {"type": "string", "enum": ["man", "zari", "both"]},
+        "clientCreatedAt": {"type": "number"},
+        "authorUid": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "updatedByUid": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "updatedAt": {"type": "string", "format": "date-time"}
+      },
+      "required": ["id", "title", "area", "intervalDays", "lastDoneDateKey", "nextDueDateKey", "owner", "clientCreatedAt", "authorUid", "updatedByUid", "createdAt", "updatedAt"]
     }
   },
   "firestore": {
@@ -202,6 +379,42 @@
     "/spaces/{spaceId}/config/{configId}": {
       "schema": {"$ref": "#/entities/SpaceSettings"},
       "description": "Synced couple space preferences and settings."
+    },
+    "/spaces/{spaceId}/shopping/{itemId}": {
+      "schema": {"$ref": "#/entities/ShoppingRecord"},
+      "description": "Synced shopping list and urgent notes."
+    },
+    "/spaces/{spaceId}/expenses/{expenseId}": {
+      "schema": {"$ref": "#/entities/ExpenseRecord"},
+      "description": "Synced daily expenses in Toman."
+    },
+    "/spaces/{spaceId}/bills/{billId}": {
+      "schema": {"$ref": "#/entities/BillRecord"},
+      "description": "Synced installments, utility bills, and vehicle service reminders."
+    },
+    "/spaces/{spaceId}/meds/{medId}": {
+      "schema": {"$ref": "#/entities/MedicationRecord"},
+      "description": "Synced medications, vitamins, and medical appointments."
+    },
+    "/spaces/{spaceId}/meals/{mealId}": {
+      "schema": {"$ref": "#/entities/MealPlanRecord"},
+      "description": "Synced weekly meal plan entries."
+    },
+    "/spaces/{spaceId}/vault/{noteId}": {
+      "schema": {"$ref": "#/entities/VaultNoteRecord"},
+      "description": "Synced household quick-copy reference cards and notes."
+    },
+    "/spaces/{spaceId}/packing/{itemId}": {
+      "schema": {"$ref": "#/entities/PackingRecord"},
+      "description": "Synced travel and moving packing checklist items."
+    },
+    "/spaces/{spaceId}/events/{eventId}": {
+      "schema": {"$ref": "#/entities/SpecialEventRecord"},
+      "description": "Synced Jalali special events, birthdays, and anniversaries."
+    },
+    "/spaces/{spaceId}/chores/{choreId}": {
+      "schema": {"$ref": "#/entities/ChoreRecord"},
+      "description": "Synced recurring home maintenance chores."
     }
   }
 }

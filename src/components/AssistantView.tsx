@@ -3,13 +3,16 @@ import {
   AlarmClock,
   AppWindow,
   BellOff,
+  BookOpen,
   Camera,
+  Car,
   Check,
   Clock,
   Download,
   ExternalLink,
   Flashlight,
   Globe,
+  GraduationCap,
   MessageSquare,
   Mic,
   MicOff,
@@ -53,9 +56,12 @@ import type {
   AssistantActionType,
   CallerContact,
   DeviceOwner,
+  ExpenseCategory,
   GroundingLink,
   MorningMessage,
+  ShoppingCategory,
   SyncedPhoneContact,
+  TodaySubSection,
   VoiceName,
 } from '../types/app';
 import {
@@ -92,8 +98,15 @@ interface AssistantViewProps {
   onSpeakText: (text: string, title: string, category: 'custom' | 'morning' | 'energy' | 'gratitude') => void;
   onStopSpeech: () => void;
   onOpenTab: (tab: AppTab) => void;
+  onOpenTodaySection: (section: TodaySubSection) => void;
   onTriggerMedia: (tab: 'tracks' | 'radio' | 'podcasts' | 'stop', query?: string) => void;
   onAddGoalTitle: (title: string) => void;
+  onAddShoppingItems: (titles: string[], category?: ShoppingCategory, note?: string) => void;
+  onAddExpenseEntry: (title: string, amount: number, category: ExpenseCategory) => void;
+  onBuildDailyBriefing: (mode: 'morning' | 'evening') => Promise<string>;
+  onSpeakDailyEnglish?: () => void;
+  onOpenDriveMode: () => void;
+  pendingAssistantQuery?: {text: string; nonce: number} | null;
   onStatusToast: (msg: string) => void;
 }
 
@@ -153,6 +166,11 @@ const ACTION_LABELS: Partial<Record<AssistantActionType, string>> = {
   play_podcast: 'جستجوی پادکست',
   stop_audio: 'توقف پخش',
   add_goal: 'افزودن هدف امروز',
+  add_shopping_item: 'افزودن به لیست خرید',
+  add_expense: 'ثبت هزینه روزانه',
+  daily_briefing: 'گزارش هوشمند ۳۰ ثانیه‌ای',
+  daily_english: 'مرور ۵ عبارت انگلیسی',
+  open_drive_mode: 'حالت ایمن رانندگی',
 };
 
 const NATIVE_DEVICE_ACTIONS = new Set<AssistantActionType>([
@@ -217,8 +235,15 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
   onSpeakText,
   onStopSpeech,
   onOpenTab,
+  onOpenTodaySection,
   onTriggerMedia,
   onAddGoalTitle,
+  onAddShoppingItems,
+  onAddExpenseEntry,
+  onBuildDailyBriefing,
+  onSpeakDailyEnglish,
+  onOpenDriveMode,
+  pendingAssistantQuery,
   onStatusToast,
 }) => {
   const selfName = getSelfName(settings, deviceOwner);
@@ -258,6 +283,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
   const utteranceQueueRef = useRef<{text: string; speak: boolean}[]>([]);
   // Prevent the wake-loop cleanup from cancelling a manually started recording.
   const manualListenRef = useRef(false);
+  const lastExternalQueryNonceRef = useRef<number>(0);
 
   // Sync draft when settings.assistantName updates
   useEffect(() => {
@@ -441,7 +467,11 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
             }
           }
         } else if (result.action === 'open_tab' && result.tab) {
-          onOpenTab(result.tab);
+          if (result.tab === 'today' && result.todaySection) {
+            onOpenTodaySection(result.todaySection);
+          } else {
+            onOpenTab(result.tab);
+          }
         } else if (result.action === 'play_radio') {
           onOpenTab('night');
           onTriggerMedia('radio', result.query);
@@ -456,6 +486,21 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
           onTriggerMedia('stop');
         } else if (result.action === 'add_goal' && result.goalTitle?.trim()) {
           onAddGoalTitle(result.goalTitle.trim());
+        } else if (result.action === 'add_shopping_item' && result.shoppingItems && result.shoppingItems.length > 0) {
+          onAddShoppingItems(result.shoppingItems, 'grocery');
+        } else if (result.action === 'add_expense' && result.expenseAmount && result.expenseAmount > 0) {
+          onAddExpenseEntry(
+            result.expenseTitle?.trim() || 'هزینه روزانه',
+            result.expenseAmount,
+            result.expenseCategory || 'other'
+          );
+        } else if (result.action === 'daily_briefing') {
+          const mode = result.briefingMode || (new Date().getHours() >= 17 ? 'evening' : 'morning');
+          finalReply = await onBuildDailyBriefing(mode);
+        } else if (result.action === 'daily_english') {
+          onSpeakDailyEnglish?.();
+        } else if (result.action === 'open_drive_mode') {
+          onOpenDriveMode();
         }
 
         appendMessage('assistant', finalReply, {
@@ -470,7 +515,8 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
           speakReply &&
           autoSpeakReplies &&
           result.action !== 'record_audio_start' &&
-          result.action !== 'stop_audio'
+          result.action !== 'stop_audio' &&
+          result.action !== 'daily_english'
         ) {
           // Replace unfinished speech so two replies are never played together.
           onStopSpeech();
@@ -491,8 +537,14 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
       deviceOwner,
       isOnline,
       morningMessage,
+      onAddExpenseEntry,
       onAddGoalTitle,
+      onAddShoppingItems,
+      onBuildDailyBriefing,
+      onOpenDriveMode,
       onOpenTab,
+      onOpenTodaySection,
+      onSpeakDailyEnglish,
       onSpeakText,
       onStatusToast,
       onStopSpeech,
@@ -502,6 +554,17 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
       syncedContacts,
     ]
   );
+
+  useEffect(() => {
+    if (
+      pendingAssistantQuery &&
+      pendingAssistantQuery.nonce > 0 &&
+      pendingAssistantQuery.nonce !== lastExternalQueryNonceRef.current
+    ) {
+      lastExternalQueryNonceRef.current = pendingAssistantQuery.nonce;
+      void executeUtterance(pendingAssistantQuery.text, true);
+    }
+  }, [pendingAssistantQuery, executeUtterance]);
 
   // Android owns the always-on wake-word lifecycle in a microphone foreground service.
   useEffect(() => {
@@ -734,16 +797,24 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
   };
 
   const quickCommands: {label: string; command: string; icon: React.FC<{className?: string}>}[] = [
+    {label: 'گزارش ۳۰ ثانیه‌ای روز', command: 'گزارش شروع روز را بخوان', icon: Sparkles},
+    {label: '۵ عبارت انگلیسی امروز', command: '۵ عبارت انگلیسی امروز را بخوان', icon: GraduationCap},
+    {label: 'خلاصه‌خوان و تمرین رشد', command: 'بخش رشد و خلاصه‌خوان را باز کن', icon: BookOpen},
+    {label: 'حالت رانندگی', command: 'حالت رانندگی را باز کن', icon: Car},
     {label: 'ساعت و تاریخ', command: 'ساعت چنده؟', icon: Clock},
     {label: `پیامک به ${partnerOtherName}`, command: `به ${partnerOtherName} پیامک بده`, icon: MessageSquare},
     {label: `تماس با ${partnerOtherName}`, command: `با ${partnerOtherName} تماس بگیر`, icon: Phone},
     {label: 'قطع تماس', command: 'تماس را قطع کن', icon: PhoneOff},
-    {label: 'جستجو در اینترنت', command: 'آب و هوای امروز تهران چطوره؟', icon: Globe},
+    {label: 'آب‌وهوای امروز', command: 'آب و هوای امروز تهران چطوره؟', icon: Globe},
+    {label: 'قیمت طلا و دلار', command: 'قیمت روز طلا و دلار امروز چنده؟', icon: Globe},
+    {label: 'پادکست آرامش', command: 'پادکست آرامش و روانشناسی پخش کن', icon: Radio},
+    {label: 'رادیو ایران', command: 'رادیو ایران بگذار', icon: Radio},
+    {label: 'موزیک آرام', command: 'موزیک آرام بگذار', icon: Music2},
+    {label: 'آلارم ۷ صبح', command: 'آلارم ساعت ۷ صبح بگذار', icon: AlarmClock},
     {label: 'چراغ قوه روشن', command: 'چراغ قوه را روشن کن', icon: Flashlight},
     {label: 'چراغ قوه خاموش', command: 'چراغ قوه را خاموش کن', icon: Flashlight},
     {label: 'وای‌فای و اینترنت', command: 'وای فای را باز کن', icon: Wifi},
     {label: 'نور صفحه زیاد', command: 'نور صفحه را زیاد کن', icon: Sun},
-    {label: 'آلارم ۷ صبح', command: 'آلارم ساعت ۷ صبح بگذار', icon: AlarmClock},
     {label: 'باز کردن واتساپ', command: 'واتساپ را باز کن', icon: AppWindow},
     {label: 'عکس بگیر', command: 'عکس بگیر', icon: Camera},
     {label: 'فیلم بگیر', command: 'فیلم بگیر', icon: Video},
@@ -756,14 +827,12 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
     {label: 'حالت ویبره', command: 'گوشی را بگذار روی ویبره', icon: VolumeX},
     {label: 'حالت عادی صدا', command: 'گوشی را بگذار روی صدا', icon: Volume2},
     {label: 'صدا زیاد', command: 'صدا را زیاد کن', icon: Volume2},
-    {label: 'رادیو ایران', command: 'رادیو ایران بگذار', icon: Radio},
-    {label: 'موزیک آرام', command: 'موزیک آرام بگذار', icon: Music2},
   ];
 
   return (
     <div className="space-y-6">
       {/* Identity & Name Customization */}
-      <section className="rounded-2xl bg-white dark:bg-[#121E1C] border border-slate-200/80 dark:border-emerald-950/70 p-6 sm:p-8">
+      <section className="luxury-card p-6 sm:p-8">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div>
             <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
@@ -1038,7 +1107,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
       {/* Main Split: Conversation + Quick Commands */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Chat & Command Input */}
-        <section className="lg:col-span-7 rounded-2xl bg-white dark:bg-[#121E1C] border border-slate-200/80 dark:border-emerald-950/70 p-5 sm:p-6 flex flex-col justify-between gap-4">
+        <section className="lg:col-span-7 luxury-card p-5 sm:p-6 flex flex-col justify-between gap-4">
           <div className="flex items-center justify-between border-b border-slate-100 dark:border-emerald-950/60 pb-3">
             <h2 className="text-base font-bold text-slate-900 dark:text-white">
               گفت‌وگو و اجرای دستورات «{assistantName}»
@@ -1183,7 +1252,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
         </section>
 
         {/* Quick Command Buttons */}
-        <section className="lg:col-span-5 rounded-2xl bg-white dark:bg-[#121E1C] border border-slate-200/80 dark:border-emerald-950/70 p-5 sm:p-6 space-y-4">
+        <section className="lg:col-span-5 luxury-card p-5 sm:p-6 space-y-4">
           <div>
             <h2 className="text-base font-bold text-slate-900 dark:text-white">
               دستورهای فوری تک‌ضربه‌ای

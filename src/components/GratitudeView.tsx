@@ -103,7 +103,7 @@ export const GratitudeView: React.FC<GratitudeViewProps> = ({
     <div className="space-y-8">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Composer */}
-        <section className="lg:col-span-7 rounded-2xl bg-white dark:bg-[#121E1C] border border-slate-200/80 dark:border-emerald-950/70 p-6 sm:p-8">
+        <section className="lg:col-span-7 luxury-card p-6 sm:p-8">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <div className="text-xs text-slate-500 dark:text-slate-400">
@@ -214,7 +214,7 @@ export const GratitudeView: React.FC<GratitudeViewProps> = ({
         </section>
 
         {/* Instant Energy Boosters */}
-        <section className="lg:col-span-5 rounded-2xl bg-white dark:bg-[#121E1C] border border-slate-200/80 dark:border-emerald-950/70 p-6">
+        <section className="lg:col-span-5 luxury-card p-6">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-lg font-bold text-slate-900 dark:text-white">بانک انرژی‌بخش فوری</h2>
             {isSpeaking && (
@@ -281,7 +281,7 @@ export const GratitudeView: React.FC<GratitudeViewProps> = ({
       </div>
 
       {/* Gratitude Timeline Archive */}
-      <section className="rounded-2xl bg-white dark:bg-[#121E1C] border border-slate-200/80 dark:border-emerald-950/70 p-6">
+      <section className="luxury-card p-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-100 dark:border-emerald-950/60">
           <div>
             <h2 className="text-lg font-bold text-slate-900 dark:text-white">آرشیو لحظه‌های سپاسگزاری</h2>

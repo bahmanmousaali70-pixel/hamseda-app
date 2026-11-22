@@ -2,23 +2,30 @@ import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {WifiOff, X} from 'lucide-react';
 import {AssistantView} from './components/AssistantView';
 import {CallerAnnouncerView} from './components/CallerAnnouncerView';
+import {DriveModeModal} from './components/DriveModeModal';
 import {GratitudeView} from './components/GratitudeView';
+import {advanceDateKey} from './components/LifeToolsView';
 import {NightAndMessagesView} from './components/NightAndMessagesView';
 import {SyncSettingsView} from './components/SyncSettingsView';
 import {TodayView} from './components/TodayView';
 import {TopBar} from './components/TopBar';
 import {VoiceLibraryView} from './components/VoiceLibraryView';
 import {
+  addDaysKey,
   DEFAULT_CALLERS,
   DEFAULT_GOALS,
   DEFAULT_GRATITUDES,
   DEFAULT_HABITS,
+  DEFAULT_MEAL_PLAN,
   DEFAULT_SCHEDULES,
   formatJalaliFull,
   getDayPart,
+  getTodayEnglishPhrases,
   getTodayKey,
   INSTANT_ENERGY_BOOSTERS,
   OFFLINE_MORNING_MESSAGES,
+  PACKING_TEMPLATES,
+  toPersianDigits,
 } from './data/persianLibrary';
 import {useBackgroundScheduler} from './hooks/useBackgroundScheduler';
 import {useOnlineStatus} from './hooks/usePWAInstall';
@@ -30,24 +37,42 @@ import {
   listAudioClips,
 } from './services/audioLibraryDb';
 import {
+  deleteBillFromCloud,
   deleteCallerFromCloud,
+  deleteExpenseFromCloud,
   deleteGoalFromCloud,
   deleteGratitudeFromCloud,
   deleteHabitFromCloud,
+  deleteHomeChoreFromCloud,
+  deleteMedicationFromCloud,
+  deletePackingFromCloud,
   deleteScheduleFromCloud,
+  deleteShoppingFromCloud,
+  deleteSpecialEventFromCloud,
+  deleteVaultNoteFromCloud,
   ensureUserAndDiscoverSpace,
   invitePartnerEmail,
   joinSpaceByCode,
+  pushBillToCloud,
   pushCallerToCloud,
+  pushExpenseToCloud,
   pushGoalToCloud,
   pushGratitudeToCloud,
   pushHabitToCloud,
+  pushHomeChoreToCloud,
+  pushMealPlanToCloud,
+  pushMedicationToCloud,
+  pushPackingToCloud,
   pushScheduleToCloud,
   pushSettingsToCloud,
+  pushShoppingToCloud,
+  pushSpecialEventToCloud,
+  pushVaultNoteToCloud,
   subscribeToCoupleSpace,
   uploadLocalBundleToSpace,
   type CoupleSpaceInfo,
 } from './services/coupleSyncService';
+import {buildDailyBriefingText, fetchQuickWeatherBrief} from './services/dailyBriefing';
 import {
   auth,
   checkRedirectSignIn,
@@ -64,6 +89,7 @@ import {
   precacheNativeWav,
   requestNativePermissionsAndMiuiSetup,
   saveLearnedPhoneticsNative,
+  saveSmsAnnouncementPolicyNative,
   setDeviceIdentityNative,
   setNativeKeepAliveService,
   syncAnnounceTogglesToNative,
@@ -89,17 +115,32 @@ import type {
   AppSettings,
   AppTab,
   AudioLibraryEntry,
+  BillReminderItem,
   CallerContact,
   DeviceOwner,
+  ExpenseCategory,
+  ExpenseEntry,
   GoalItem,
   GratitudeEntry,
   HabitItem,
+  HomeChoreItem,
   LocalVoiceControls,
+  MealPlanEntry,
+  MedicationItem,
   MorningMessage,
   NightDiscoveryResponse,
   OwnerRole,
+  PackingItem,
+  PackingTemplateId,
+  PersonalityFocusId,
+  QuickVaultNote,
   ScheduledAnnouncement,
+  ShoppingCategory,
+  ShoppingItem,
+  SpecialEventItem,
+  SpecialEventKind,
   SyncedPhoneContact,
+  TodaySubSection,
   VoiceName,
 } from './types/app';
 import {
@@ -126,6 +167,19 @@ const STORAGE_KEYS = {
   nightMovies: 'rmz_night_movies_v1',
   nightMusic: 'rmz_night_music_v1',
   triggeredAuto: 'rmz_triggered_auto_v1',
+  shopping: 'hamseda_shopping_items_v1',
+  expenses: 'hamseda_expenses_v1',
+  monthlyBudget: 'hamseda_monthly_budget_v1',
+  bills: 'hamseda_bills_v1',
+  meds: 'hamseda_meds_v1',
+  meals: 'hamseda_meals_v1',
+  vault: 'hamseda_vault_v1',
+  packing: 'hamseda_packing_v1',
+  events: 'hamseda_events_v1',
+  chores: 'hamseda_chores_v1',
+  englishLearned: 'hamseda_learned_english_v1',
+  personalityFocus: 'hamseda_personality_focus_v1',
+  personalityDone: 'hamseda_personality_done_v1',
 };
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -165,6 +219,9 @@ function readJsonStorage<T>(key: string, fallback: T): T {
 export default function App() {
   const isOnline = useOnlineStatus();
   const [activeTab, setActiveTab] = useState<AppTab>('today');
+  const [todaySubSection, setTodaySubSection] = useState<TodaySubSection>('planner');
+  const [driveModeOpen, setDriveModeOpen] = useState(false);
+  const [pendingAssistantQuery, setPendingAssistantQuery] = useState<{text: string; nonce: number} | null>(null);
 
   const [assistantMediaTrigger, setAssistantMediaTrigger] = useState<{
     tab: 'tracks' | 'radio' | 'podcasts' | 'stop';
@@ -214,6 +271,72 @@ export default function App() {
   const [schedules, setSchedules] = useState<ScheduledAnnouncement[]>(() =>
     readJsonStorage<ScheduledAnnouncement[]>(STORAGE_KEYS.schedules, DEFAULT_SCHEDULES)
   );
+  const [shoppingItems, setShoppingItems] = useState<ShoppingItem[]>(() =>
+    readJsonStorage<ShoppingItem[]>(STORAGE_KEYS.shopping, [])
+  );
+  const [expenses, setExpenses] = useState<ExpenseEntry[]>(() =>
+    readJsonStorage<ExpenseEntry[]>(STORAGE_KEYS.expenses, [])
+  );
+  const [monthlyBudget, setMonthlyBudget] = useState<number>(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.monthlyBudget);
+      const num = Number(raw);
+      return Number.isFinite(num) && num > 0 ? num : 0;
+    } catch {
+      return 0;
+    }
+  });
+  const [bills, setBills] = useState<BillReminderItem[]>(() =>
+    readJsonStorage<BillReminderItem[]>(STORAGE_KEYS.bills, [])
+  );
+  const [meds, setMeds] = useState<MedicationItem[]>(() =>
+    readJsonStorage<MedicationItem[]>(STORAGE_KEYS.meds, [])
+  );
+  const [meals, setMeals] = useState<MealPlanEntry[]>(() => {
+    const saved = readJsonStorage<MealPlanEntry[]>(STORAGE_KEYS.meals, []);
+    if (!Array.isArray(saved) || saved.length === 0) return DEFAULT_MEAL_PLAN;
+    return DEFAULT_MEAL_PLAN.map((def) => saved.find((s) => s.id === def.id) ?? def);
+  });
+  const [vaultNotes, setVaultNotes] = useState<QuickVaultNote[]>(() =>
+    readJsonStorage<QuickVaultNote[]>(STORAGE_KEYS.vault, [])
+  );
+  const [packingItems, setPackingItems] = useState<PackingItem[]>(() =>
+    readJsonStorage<PackingItem[]>(STORAGE_KEYS.packing, [])
+  );
+  const [specialEvents, setSpecialEvents] = useState<SpecialEventItem[]>(() =>
+    readJsonStorage<SpecialEventItem[]>(STORAGE_KEYS.events, [])
+  );
+  const [homeChores, setHomeChores] = useState<HomeChoreItem[]>(() =>
+    readJsonStorage<HomeChoreItem[]>(STORAGE_KEYS.chores, [])
+  );
+  const [learnedEnglishIds, setLearnedEnglishIds] = useState<string[]>(() =>
+    readJsonStorage<string[]>(STORAGE_KEYS.englishLearned, [])
+  );
+  const [personalityFocus, setPersonalityFocus] = useState<PersonalityFocusId>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.personalityFocus);
+      if (saved === 'analytical' || saved === 'creative' || saved === 'sensitive' || saved === 'active' || saved === 'calm_leader') {
+        return saved;
+      }
+    } catch {
+      // ignore
+    }
+    return 'analytical';
+  });
+  const [completedExercisesState, setCompletedExercisesState] = useState<{dateKey: string; ids: string[]}>(() => {
+    const saved = readJsonStorage<{dateKey?: string; ids?: string[]} | null>(STORAGE_KEYS.personalityDone, null);
+    const tk = getTodayKey();
+    if (saved && saved.dateKey === tk && Array.isArray(saved.ids)) {
+      return {dateKey: tk, ids: saved.ids};
+    }
+    return {dateKey: tk, ids: []};
+  });
+  const [nightMessagePrefill, setNightMessagePrefill] = useState<{
+    occasion?: 'birthday' | 'anniversary' | 'apology' | 'thanks' | 'encouragement' | 'custom';
+    recipient?: string;
+    details?: string;
+    nonce: number;
+  } | null>(null);
 
   const [morningMessage, setMorningMessage] = useState<MorningMessage>(() => {
     const saved = readJsonStorage<MorningMessage | null>(STORAGE_KEYS.morningMsg, null);
@@ -468,9 +591,76 @@ export default function App() {
     localStorage.setItem(STORAGE_KEYS.triggeredAuto, JSON.stringify(triggeredAutoMap));
   }, [triggeredAutoMap]);
 
-  // Check native Android capabilities and sync server URL on mount and when returning from Settings
   useEffect(() => {
-    getNativeCapabilities().then(setNativeCaps);
+    localStorage.setItem(STORAGE_KEYS.shopping, JSON.stringify(shoppingItems));
+  }, [shoppingItems]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.expenses, JSON.stringify(expenses));
+  }, [expenses]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.monthlyBudget, String(monthlyBudget));
+  }, [monthlyBudget]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.bills, JSON.stringify(bills));
+  }, [bills]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.meds, JSON.stringify(meds));
+  }, [meds]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.meals, JSON.stringify(meals));
+  }, [meals]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.vault, JSON.stringify(vaultNotes));
+  }, [vaultNotes]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.packing, JSON.stringify(packingItems));
+  }, [packingItems]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.events, JSON.stringify(specialEvents));
+  }, [specialEvents]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.chores, JSON.stringify(homeChores));
+  }, [homeChores]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.englishLearned, JSON.stringify(learnedEnglishIds));
+  }, [learnedEnglishIds]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.personalityFocus, personalityFocus);
+  }, [personalityFocus]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.personalityDone, JSON.stringify(completedExercisesState));
+  }, [completedExercisesState]);
+
+  // Check native Android capabilities and sync server URL + default bank SMS privacy policy
+  useEffect(() => {
+    getNativeCapabilities().then((caps) => {
+      setNativeCaps(caps);
+      if (caps.isNative && localStorage.getItem('rmz_sms_policy_synced_v2') !== '1') {
+        void saveSmsAnnouncementPolicyNative({
+          blockedSenders: localStorage.getItem('rmz_sms_blocked_senders') ?? '',
+          blockedKeywords: localStorage.getItem('rmz_sms_blocked_keywords') ?? 'تبریک برنده شدید\nجایزه رایگان\nخرید شارژ\nوام فوری',
+          importantSenders: localStorage.getItem('rmz_sms_important_senders') ?? '',
+          quietHours: Number(localStorage.getItem('rmz_sms_quiet_hours') ?? '0'),
+          summarize: localStorage.getItem('rmz_sms_summarize') !== 'false',
+          filterOperatorPromotions: localStorage.getItem('rmz_sms_filter_operator_promotions') !== 'false',
+          skipBankAndOtp: localStorage.getItem('rmz_sms_skip_bank_and_otp') !== 'false',
+        }).then((ok) => {
+          if (ok) localStorage.setItem('rmz_sms_policy_synced_v2', '1');
+        });
+      }
+    });
     syncServerBaseUrlToNative(getCloudApiBaseUrl());
     const onVisibility = () => {
       if (document.visibilityState === 'visible') {
@@ -512,6 +702,16 @@ export default function App() {
           onGratitudes: (cloudGratitudes) => setGratitudes(cloudGratitudes),
           onCallers: (cloudCallers) => setCallers(cloudCallers),
           onSchedules: (cloudSchedules) => setSchedules(cloudSchedules),
+          onShopping: (cloudShopping) => setShoppingItems(cloudShopping),
+          onExpenses: (cloudExpenses) => setExpenses(cloudExpenses),
+          onBills: (cloudBills) => setBills(cloudBills),
+          onMeds: (cloudMeds) => setMeds(cloudMeds),
+          onMeals: (cloudMeals) =>
+            setMeals(DEFAULT_MEAL_PLAN.map((def) => cloudMeals.find((cm) => cm.id === def.id) ?? def)),
+          onVault: (cloudVault) => setVaultNotes(cloudVault),
+          onPacking: (cloudPacking) => setPackingItems(cloudPacking),
+          onEvents: (cloudEvents) => setSpecialEvents(cloudEvents),
+          onChores: (cloudChores) => setHomeChores(cloudChores),
           onSettings: (cloudSettings) =>
             setSettings((prev) => ({
               ...DEFAULT_SETTINGS,
@@ -638,12 +838,14 @@ export default function App() {
       .map((g) => {
         const id = `goal-rem-${g.id}`;
         const scopeWord = g.scope === 'work' ? 'کاری' : 'خانه';
+        const cleanMyName = settings.myName.trim() || 'من';
+        const cleanPartnerName = settings.partnerName.trim() || 'همراه';
         const ownerWord =
           g.owner === 'man'
-            ? settings.myName
+            ? cleanMyName
             : g.owner === 'zari'
-              ? settings.partnerName
-              : `${settings.myName} و ${settings.partnerName}`;
+              ? cleanPartnerName
+              : `${cleanMyName} و ${cleanPartnerName}`;
         return {
           id,
           title: `یادآور برنامه ${scopeWord}: ${g.title}`,
@@ -652,6 +854,31 @@ export default function App() {
           enabled: true,
           voiceName: g.reminderVoice ?? settings.defaultVoice,
           customText: `یادآور برنامه برای ${ownerWord}: ${g.title}`,
+          days: 'daily',
+          lastTriggeredDate: triggeredAutoMap[id],
+        };
+      });
+
+    const medSchedules: ScheduledAnnouncement[] = meds
+      .filter((m) => m.enabled && m.voiceRemind && /^\d{2}:\d{2}$/.test(m.time))
+      .map((m) => {
+        const id = `med-rem-${m.id}`;
+        const cleanMyName = settings.myName.trim() || 'من';
+        const cleanPartnerName = settings.partnerName.trim() || 'همراه';
+        const ownerWord =
+          m.owner === 'man'
+            ? cleanMyName
+            : m.owner === 'zari'
+              ? cleanPartnerName
+              : `${cleanMyName} و ${cleanPartnerName}`;
+        return {
+          id,
+          title: `${m.kind === 'appointment' ? 'نوبت پزشک' : 'یادآور دارو'}: ${m.name}`,
+          topic: 'custom',
+          time: m.time,
+          enabled: true,
+          voiceName: settings.defaultVoice,
+          customText: `یادآور سلامت برای ${ownerWord}: وقت ${m.name}${m.dosage ? ` (${m.dosage})` : ''} است.`,
           days: 'daily',
           lastTriggeredDate: triggeredAutoMap[id],
         };
@@ -672,9 +899,10 @@ export default function App() {
       });
     }
 
-    return [...schedules, ...goalSchedules, ...extras];
+    return [...schedules, ...goalSchedules, ...medSchedules, ...extras];
   }, [
     goals,
+    meds,
     schedules,
     settings.defaultVoice,
     settings.myName,
@@ -695,7 +923,7 @@ export default function App() {
 
   const handleMarkTriggered = useCallback(
     (scheduleId: string, dateKey: string) => {
-      if (scheduleId.startsWith('goal-rem-') || scheduleId === 'auto-night-movies') {
+      if (scheduleId.startsWith('goal-rem-') || scheduleId.startsWith('med-rem-') || scheduleId === 'auto-night-movies') {
         setTriggeredAutoMap((prev) => ({...prev, [scheduleId]: dateKey}));
         return;
       }
@@ -1001,6 +1229,15 @@ export default function App() {
         callers,
         schedules,
         settings,
+        shoppingItems,
+        expenses,
+        bills,
+        meds,
+        meals,
+        vaultNotes,
+        packingItems,
+        specialEvents,
+        homeChores,
       });
       showToast('تمام داده‌ها و تنظیمات این گوشی به فضای مشترک ارسال شد.');
     } catch (err) {
@@ -1129,6 +1366,31 @@ export default function App() {
     }
   };
 
+  const handleCarryOverPastGoals = () => {
+    const todayKey = getTodayKey();
+    let movedCount = 0;
+    const movedGoals: GoalItem[] = [];
+    setGoals((prev) =>
+      prev.map((g) => {
+        if (g.dateKey < todayKey && !g.completed) {
+          movedCount += 1;
+          const updated = {...g, dateKey: todayKey};
+          movedGoals.push(updated);
+          return updated;
+        }
+        return g;
+      })
+    );
+    if (movedCount > 0) {
+      if (spaceInfo) {
+        movedGoals.forEach((g) => {
+          pushGoalToCloud(spaceInfo.spaceId, g).catch(() => {});
+        });
+      }
+      showToast(`${movedCount} کار باقی‌مانده از روزهای قبل به لیست امروز منتقل شد.`);
+    }
+  };
+
   const handleToggleHabitDate = (habitId: string, dateKey: string) => {
     setHabits((prev) => {
       const next = prev.map((h) => {
@@ -1208,12 +1470,490 @@ export default function App() {
     }
   };
 
+  // Shopping CRUD
+  const handleAddShoppingItem = (title: string, category: ShoppingCategory = 'grocery', note?: string) => {
+    const cleaned = title.trim();
+    if (!cleaned) return;
+    const item: ShoppingItem = {
+      id: `sh-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      title: cleaned,
+      note: note?.trim() || undefined,
+      category,
+      checked: false,
+      createdAt: Date.now(),
+    };
+    setShoppingItems((prev) => [item, ...prev]);
+    if (spaceInfo) {
+      pushShoppingToCloud(spaceInfo.spaceId, item).catch(() => {});
+    }
+  };
+
+  const handleAddShoppingItems = (titles: string[], category: ShoppingCategory = 'grocery', note?: string) => {
+    const created: ShoppingItem[] = [];
+    for (const raw of titles) {
+      const cleaned = raw.trim();
+      if (!cleaned) continue;
+      created.push({
+        id: `sh-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        title: cleaned,
+        note: note?.trim() || undefined,
+        category,
+        checked: false,
+        createdAt: Date.now(),
+      });
+    }
+    if (created.length === 0) return;
+    setShoppingItems((prev) => [...created, ...prev]);
+    if (spaceInfo) {
+      created.forEach((it) => {
+        pushShoppingToCloud(spaceInfo.spaceId, it).catch(() => {});
+      });
+    }
+  };
+
+  const handleToggleShoppingItem = (id: string) => {
+    setShoppingItems((prev) => {
+      const next = prev.map((it) => (it.id === id ? {...it, checked: !it.checked} : it));
+      const target = next.find((it) => it.id === id);
+      if (target && spaceInfo) {
+        pushShoppingToCloud(spaceInfo.spaceId, target).catch(() => {});
+      }
+      return next;
+    });
+  };
+
+  const handleDeleteShoppingItem = (id: string) => {
+    setShoppingItems((prev) => prev.filter((it) => it.id !== id));
+    if (spaceInfo) {
+      deleteShoppingFromCloud(spaceInfo.spaceId, id).catch(() => {});
+    }
+  };
+
+  const handleClearCheckedShopping = () => {
+    const removedIds = shoppingItems.filter((it) => it.checked).map((it) => it.id);
+    setShoppingItems((prev) => prev.filter((it) => !it.checked));
+    if (spaceInfo) {
+      removedIds.forEach((id) => {
+        deleteShoppingFromCloud(spaceInfo.spaceId, id).catch(() => {});
+      });
+    }
+  };
+
+  // Expense CRUD
+  const handleAddExpense = (entry: Omit<ExpenseEntry, 'id' | 'createdAt' | 'dateKey'>) => {
+    const created: ExpenseEntry = {
+      ...entry,
+      id: `exp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      dateKey: getTodayKey(),
+      createdAt: Date.now(),
+    };
+    setExpenses((prev) => [created, ...prev]);
+    if (spaceInfo) {
+      pushExpenseToCloud(spaceInfo.spaceId, created).catch(() => {});
+    }
+  };
+
+  const handleDeleteExpense = (id: string) => {
+    setExpenses((prev) => prev.filter((e) => e.id !== id));
+    if (spaceInfo) {
+      deleteExpenseFromCloud(spaceInfo.spaceId, id).catch(() => {});
+    }
+  };
+
+  // Bills CRUD
+  const handleAddBill = (input: Omit<BillReminderItem, 'id' | 'createdAt' | 'paid'>) => {
+    const created: BillReminderItem = {
+      ...input,
+      id: `bill-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      paid: false,
+      createdAt: Date.now(),
+    };
+    setBills((prev) => [created, ...prev]);
+    if (spaceInfo) {
+      pushBillToCloud(spaceInfo.spaceId, created).catch(() => {});
+    }
+  };
+
+  const handleToggleBillPaid = (id: string, logAsExpense: boolean) => {
+    const targetBill = bills.find((b) => b.id === id);
+    if (!targetBill) return;
+    const becomingPaid = !targetBill.paid;
+
+    if (becomingPaid && logAsExpense && targetBill.amount > 0) {
+      handleAddExpense({
+        title: `پرداخت ${targetBill.title}`,
+        amount: targetBill.amount,
+        category: targetBill.kind === 'vehicle' ? 'transport' : 'bills',
+        payer: deviceOwner === 'zari' ? 'zari' : 'man',
+      });
+    }
+
+    if (becomingPaid && (targetBill.cycle === 'monthly' || targetBill.cycle === 'yearly')) {
+      const nextDueDateKey = advanceDateKey(targetBill.dueDateKey, targetBill.cycle);
+      const updatedBill: BillReminderItem = {
+        ...targetBill,
+        dueDateKey: nextDueDateKey,
+        paid: false,
+      };
+      setBills((prev) => prev.map((b) => (b.id === id ? updatedBill : b)));
+      if (spaceInfo) {
+        pushBillToCloud(spaceInfo.spaceId, updatedBill).catch(() => {});
+      }
+      showToast(`«${targetBill.title}» پرداخت شد و سررسید بعدی (${nextDueDateKey}) تنظیم گردید.`);
+      return;
+    }
+
+    const updatedBill: BillReminderItem = {...targetBill, paid: becomingPaid};
+    setBills((prev) => prev.map((b) => (b.id === id ? updatedBill : b)));
+    if (spaceInfo) {
+      pushBillToCloud(spaceInfo.spaceId, updatedBill).catch(() => {});
+    }
+  };
+
+  const handleDeleteBill = (id: string) => {
+    setBills((prev) => prev.filter((b) => b.id !== id));
+    if (spaceInfo) {
+      deleteBillFromCloud(spaceInfo.spaceId, id).catch(() => {});
+    }
+  };
+
+  // Medications CRUD
+  const handleAddMed = (input: Omit<MedicationItem, 'id' | 'createdAt' | 'takenDates'>) => {
+    const created: MedicationItem = {
+      ...input,
+      id: `med-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      takenDates: [],
+      createdAt: Date.now(),
+    };
+    setMeds((prev) => [...prev, created]);
+    if (spaceInfo) {
+      pushMedicationToCloud(spaceInfo.spaceId, created).catch(() => {});
+    }
+  };
+
+  const handleToggleMedTakenToday = (id: string) => {
+    const todayKey = getTodayKey();
+    setMeds((prev) => {
+      const next = prev.map((m) => {
+        if (m.id !== id) return m;
+        const taken = m.takenDates.includes(todayKey);
+        return {
+          ...m,
+          takenDates: taken ? m.takenDates.filter((d) => d !== todayKey) : [...m.takenDates, todayKey],
+        };
+      });
+      const target = next.find((m) => m.id === id);
+      if (target && spaceInfo) {
+        pushMedicationToCloud(spaceInfo.spaceId, target).catch(() => {});
+      }
+      return next;
+    });
+  };
+
+  const handleToggleMedEnabled = (id: string) => {
+    setMeds((prev) => {
+      const next = prev.map((m) => (m.id === id ? {...m, enabled: !m.enabled} : m));
+      const target = next.find((m) => m.id === id);
+      if (target && spaceInfo) {
+        pushMedicationToCloud(spaceInfo.spaceId, target).catch(() => {});
+      }
+      return next;
+    });
+  };
+
+  const handleDeleteMed = (id: string) => {
+    setMeds((prev) => prev.filter((m) => m.id !== id));
+    if (spaceInfo) {
+      deleteMedicationFromCloud(spaceInfo.spaceId, id).catch(() => {});
+    }
+  };
+
+  // Meal Planner Save
+  const handleSaveMealDay = (entry: MealPlanEntry) => {
+    setMeals((prev) => prev.map((m) => (m.id === entry.id ? entry : m)));
+    if (spaceInfo) {
+      pushMealPlanToCloud(spaceInfo.spaceId, entry).catch(() => {});
+    }
+  };
+
+  // Vault Notes CRUD
+  const handleAddVaultNote = (input: Omit<QuickVaultNote, 'id' | 'createdAt'>) => {
+    const created: QuickVaultNote = {
+      ...input,
+      id: `vault-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      createdAt: Date.now(),
+    };
+    setVaultNotes((prev) => [created, ...prev]);
+    if (spaceInfo) {
+      pushVaultNoteToCloud(spaceInfo.spaceId, created).catch(() => {});
+    }
+  };
+
+  const handleDeleteVaultNote = (id: string) => {
+    setVaultNotes((prev) => prev.filter((v) => v.id !== id));
+    if (spaceInfo) {
+      deleteVaultNoteFromCloud(spaceInfo.spaceId, id).catch(() => {});
+    }
+  };
+
+  // Packing Checklist CRUD
+  const handleAddPackingItem = (title: string, template: PackingTemplateId, owner: OwnerRole) => {
+    const created: PackingItem = {
+      id: `pack-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      title: title.trim(),
+      template,
+      owner,
+      checked: false,
+      createdAt: Date.now(),
+    };
+    setPackingItems((prev) => [created, ...prev]);
+    if (spaceInfo) {
+      pushPackingToCloud(spaceInfo.spaceId, created).catch(() => {});
+    }
+  };
+
+  const handleAddPackingPreset = (template: PackingTemplateId) => {
+    const preset = PACKING_TEMPLATES[template];
+    if (!preset) return;
+    const existingTitles = new Set(
+      packingItems.filter((it) => it.template === template).map((it) => it.title.trim())
+    );
+    const created: PackingItem[] = [];
+    for (const itemTitle of preset.items) {
+      if (existingTitles.has(itemTitle.trim())) continue;
+      created.push({
+        id: `pack-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        title: itemTitle,
+        template,
+        owner: 'both',
+        checked: false,
+        createdAt: Date.now(),
+      });
+    }
+    if (created.length === 0) {
+      showToast('تمام موارد آماده این الگو قبلاً در فهرست وجود دارند.');
+      return;
+    }
+    setPackingItems((prev) => [...created, ...prev]);
+    if (spaceInfo) {
+      created.forEach((item) => {
+        pushPackingToCloud(spaceInfo.spaceId, item).catch(() => {});
+      });
+    }
+    showToast(`${toPersianDigits(created.length)} مورد به چک‌لیست «${preset.label}» اضافه شد.`);
+  };
+
+  const handleTogglePackingItem = (id: string) => {
+    setPackingItems((prev) => {
+      const next = prev.map((it) => (it.id === id ? {...it, checked: !it.checked} : it));
+      const target = next.find((it) => it.id === id);
+      if (target && spaceInfo) {
+        pushPackingToCloud(spaceInfo.spaceId, target).catch(() => {});
+      }
+      return next;
+    });
+  };
+
+  const handleDeletePackingItem = (id: string) => {
+    setPackingItems((prev) => prev.filter((it) => it.id !== id));
+    if (spaceInfo) {
+      deletePackingFromCloud(spaceInfo.spaceId, id).catch(() => {});
+    }
+  };
+
+  const handleSendPackingToShopping = (titles: string[]) => {
+    handleAddShoppingItems(titles, 'home', 'از چک‌لیست سفر');
+    showToast(`${toPersianDigits(titles.length)} مورد باقیمانده سفر به لیست خرید ارسال شد.`);
+  };
+
+  // Special Events CRUD
+  const handleAddSpecialEvent = (input: {
+    title: string;
+    kind: SpecialEventKind;
+    jalaliMonth: number;
+    jalaliDay: number;
+    owner: OwnerRole;
+    note?: string;
+  }) => {
+    const created: SpecialEventItem = {
+      id: `ev-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      title: input.title,
+      kind: input.kind,
+      jalaliMonth: input.jalaliMonth,
+      jalaliDay: input.jalaliDay,
+      owner: input.owner,
+      note: input.note,
+      createdAt: Date.now(),
+    };
+    setSpecialEvents((prev) => [created, ...prev]);
+    if (spaceInfo) {
+      pushSpecialEventToCloud(spaceInfo.spaceId, created).catch(() => {});
+    }
+  };
+
+  const handleDeleteSpecialEvent = (id: string) => {
+    setSpecialEvents((prev) => prev.filter((ev) => ev.id !== id));
+    if (spaceInfo) {
+      deleteSpecialEventFromCloud(spaceInfo.spaceId, id).catch(() => {});
+    }
+  };
+
+  const handleCreateWishMessage = (ev: SpecialEventItem) => {
+    const occasion: 'birthday' | 'anniversary' | 'custom' =
+      ev.kind === 'birthday' ? 'birthday' : ev.kind === 'anniversary' ? 'anniversary' : 'custom';
+    setNightMessagePrefill({
+      occasion,
+      recipient: ev.title,
+      details: ev.note || '',
+      nonce: Date.now(),
+    });
+    setActiveTab('night');
+  };
+
+  // Home Maintenance Chores CRUD
+  const handleAddChore = (input: {title: string; area: string; intervalDays: number; owner: OwnerRole}) => {
+    const today = getTodayKey();
+    const created: HomeChoreItem = {
+      id: `chore-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      title: input.title,
+      area: input.area,
+      intervalDays: input.intervalDays,
+      lastDoneDateKey: '',
+      nextDueDateKey: today,
+      owner: input.owner,
+      createdAt: Date.now(),
+    };
+    setHomeChores((prev) => [created, ...prev]);
+    if (spaceInfo) {
+      pushHomeChoreToCloud(spaceInfo.spaceId, created).catch(() => {});
+    }
+  };
+
+  const handleMarkChoreDoneToday = (id: string) => {
+    const today = getTodayKey();
+    setHomeChores((prev) => {
+      const next = prev.map((ch) =>
+        ch.id === id
+          ? {
+              ...ch,
+              lastDoneDateKey: today,
+              nextDueDateKey: addDaysKey(today, Math.max(1, ch.intervalDays)),
+            }
+          : ch
+      );
+      const target = next.find((ch) => ch.id === id);
+      if (target && spaceInfo) {
+        pushHomeChoreToCloud(spaceInfo.spaceId, target).catch(() => {});
+      }
+      return next;
+    });
+    showToast('انجام شد و موعد بعدی به‌صورت خودکار تنظیم گردید.');
+  };
+
+  const handleDeleteChore = (id: string) => {
+    setHomeChores((prev) => prev.filter((ch) => ch.id !== id));
+    if (spaceInfo) {
+      deleteHomeChoreFromCloud(spaceInfo.spaceId, id).catch(() => {});
+    }
+  };
+
+  // Daily English & Personality Exercises handlers
+  const handleToggleEnglishLearned = (id: string) => {
+    setLearnedEnglishIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const handleSpeakDailyEnglish = useCallback(() => {
+    const phrases = getTodayEnglishPhrases(5);
+    const spoken = `مرور پنج عبارت انگلیسی امروز: ${phrases
+      .map((p, idx) => `شماره ${toPersianDigits(idx + 1)}: ${p.english}. به فارسی یعنی: ${p.persian}`)
+      .join('؛ ')}.`;
+    void handleSpeakText(spoken, '۵ عبارت انگلیسی امروز', 'custom');
+  }, [handleSpeakText]);
+
+  const handleToggleExerciseDone = (exerciseId: string) => {
+    const tk = getTodayKey();
+    setCompletedExercisesState((prev) => {
+      const baseIds = prev.dateKey === tk ? prev.ids : [];
+      const nextIds = baseIds.includes(exerciseId)
+        ? baseIds.filter((x) => x !== exerciseId)
+        : [...baseIds, exerciseId];
+      return {dateKey: tk, ids: nextIds};
+    });
+  };
+
+  const completedExercisesToday =
+    completedExercisesState.dateKey === getTodayKey() ? completedExercisesState.ids : [];
+
+  const todayExpenseTotal = useMemo(() => {
+    const tk = getTodayKey();
+    return expenses.filter((e) => e.dateKey === tk).reduce((s, e) => s + e.amount, 0);
+  }, [expenses]);
+
+  const monthExpenseTotal = useMemo(() => {
+    const mp = getTodayKey().slice(0, 7);
+    return expenses.filter((e) => e.dateKey.startsWith(mp)).reduce((s, e) => s + e.amount, 0);
+  }, [expenses]);
+
+  const handleBuildDailyBriefing = useCallback(
+    async (mode: 'morning' | 'evening') => {
+      const weatherSummary = isOnline && mode === 'morning' ? await fetchQuickWeatherBrief() : '';
+      return buildDailyBriefingText({
+        mode,
+        selfName: getSelfName(settings, deviceOwner),
+        partnerName: getPartnerNameForDevice(settings, deviceOwner),
+        goals,
+        shoppingItems,
+        bills,
+        meds,
+        meals,
+        specialEvents,
+        homeChores,
+        todayExpenseTotal,
+        monthExpenseTotal,
+        monthlyBudget,
+        weatherSummary,
+      });
+    },
+    [
+      bills,
+      deviceOwner,
+      goals,
+      homeChores,
+      isOnline,
+      meals,
+      meds,
+      monthExpenseTotal,
+      monthlyBudget,
+      settings,
+      shoppingItems,
+      specialEvents,
+      todayExpenseTotal,
+    ]
+  );
+
+  const handleAskRecipe = (dishName: string) => {
+    setActiveTab('assistant');
+    setPendingAssistantQuery({
+      text: `طرز تهیه و مواد لازم ${dishName} رو خلاصه بگو`,
+      nonce: Date.now(),
+    });
+  };
+
   const handleImportBundle = (payload: {
     goals?: GoalItem[];
     habits?: HabitItem[];
     gratitudes?: GratitudeEntry[];
     callers?: CallerContact[];
     schedules?: ScheduledAnnouncement[];
+    shoppingItems?: ShoppingItem[];
+    expenses?: ExpenseEntry[];
+    bills?: BillReminderItem[];
+    meds?: MedicationItem[];
+    meals?: MealPlanEntry[];
+    vaultNotes?: QuickVaultNote[];
+    packingItems?: PackingItem[];
+    specialEvents?: SpecialEventItem[];
+    homeChores?: HomeChoreItem[];
   }) => {
     if (Array.isArray(payload.goals)) {
       setGoals((prev) => {
@@ -1245,6 +1985,62 @@ export default function App() {
         return [...prev, ...payload.schedules!.filter((x) => !ids.has(x.id))];
       });
     }
+    if (Array.isArray(payload.shoppingItems)) {
+      setShoppingItems((prev) => {
+        const ids = new Set(prev.map((x) => x.id));
+        return [...payload.shoppingItems!.filter((x) => !ids.has(x.id)), ...prev];
+      });
+    }
+    if (Array.isArray(payload.expenses)) {
+      setExpenses((prev) => {
+        const ids = new Set(prev.map((x) => x.id));
+        return [...payload.expenses!.filter((x) => !ids.has(x.id)), ...prev];
+      });
+    }
+    if (Array.isArray(payload.bills)) {
+      setBills((prev) => {
+        const ids = new Set(prev.map((x) => x.id));
+        return [...payload.bills!.filter((x) => !ids.has(x.id)), ...prev];
+      });
+    }
+    if (Array.isArray(payload.meds)) {
+      setMeds((prev) => {
+        const ids = new Set(prev.map((x) => x.id));
+        return [...prev, ...payload.meds!.filter((x) => !ids.has(x.id))];
+      });
+    }
+    if (Array.isArray(payload.meals)) {
+      setMeals((prev) =>
+        prev.map((m) => {
+          const incoming = payload.meals!.find((im) => im.id === m.id);
+          return incoming && (incoming.lunch || incoming.dinner || incoming.ingredients) ? incoming : m;
+        })
+      );
+    }
+    if (Array.isArray(payload.vaultNotes)) {
+      setVaultNotes((prev) => {
+        const ids = new Set(prev.map((x) => x.id));
+        return [...payload.vaultNotes!.filter((x) => !ids.has(x.id)), ...prev];
+      });
+    }
+    if (Array.isArray(payload.packingItems)) {
+      setPackingItems((prev) => {
+        const ids = new Set(prev.map((x) => x.id));
+        return [...payload.packingItems!.filter((x) => !ids.has(x.id)), ...prev];
+      });
+    }
+    if (Array.isArray(payload.specialEvents)) {
+      setSpecialEvents((prev) => {
+        const ids = new Set(prev.map((x) => x.id));
+        return [...payload.specialEvents!.filter((x) => !ids.has(x.id)), ...prev];
+      });
+    }
+    if (Array.isArray(payload.homeChores)) {
+      setHomeChores((prev) => {
+        const ids = new Set(prev.map((x) => x.id));
+        return [...payload.homeChores!.filter((x) => !ids.has(x.id)), ...prev];
+      });
+    }
   };
 
   const quickPlayMorning = () => {
@@ -1254,24 +2050,44 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F6F8F7] dark:bg-[#0B1312] text-slate-900 dark:text-slate-100">
+    <div className="min-h-screen flex flex-col bg-[#F7F6F2] dark:bg-[#070D0C] text-slate-900 dark:text-slate-100">
       <TopBar
         activeTab={activeTab}
         deviceOwner={deviceOwner}
         selfName={selfName}
         assistantName={settings.assistantName?.trim() || 'هم‌صدا'}
+        theme={settings.theme}
         masterSpeakerEnabled={localVoiceControls.masterSpeakerEnabled}
+        onToggleTheme={() =>
+          handleUpdateSettings({theme: settings.theme === 'dark' ? 'light' : 'dark'})
+        }
         onToggleMasterSpeaker={handleToggleMasterSpeaker}
         onRefreshApp={handleRefreshApp}
         onSelectTab={setActiveTab}
         onQuickPlayMorning={quickPlayMorning}
+        onOpenDriveMode={() => setDriveModeOpen(true)}
       />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-24 md:pb-12">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-28 lg:pb-12">
         {activeTab === 'today' && (
           <TodayView
             goals={goals}
             habits={habits}
+            shoppingItems={shoppingItems}
+            expenses={expenses}
+            monthlyBudget={monthlyBudget}
+            bills={bills}
+            meds={meds}
+            meals={meals}
+            vaultNotes={vaultNotes}
+            packingItems={packingItems}
+            specialEvents={specialEvents}
+            homeChores={homeChores}
+            learnedEnglishIds={learnedEnglishIds}
+            personalityFocus={personalityFocus}
+            completedExercisesToday={completedExercisesToday}
+            activeSubSection={todaySubSection}
+            onChangeSubSection={setTodaySubSection}
             morningMessage={morningMessage}
             isOnline={isOnline}
             isSpeaking={isSpeaking}
@@ -1284,14 +2100,51 @@ export default function App() {
             onAddGoal={handleAddGoal}
             onToggleGoal={handleToggleGoal}
             onDeleteGoal={handleDeleteGoal}
+            onCarryOverPastGoals={handleCarryOverPastGoals}
             onToggleHabitDate={handleToggleHabitDate}
             onAddHabit={handleAddHabit}
             onDeleteHabit={handleDeleteHabit}
+            onAddShoppingItem={handleAddShoppingItem}
+            onAddShoppingItems={handleAddShoppingItems}
+            onToggleShoppingItem={handleToggleShoppingItem}
+            onDeleteShoppingItem={handleDeleteShoppingItem}
+            onClearCheckedShopping={handleClearCheckedShopping}
+            onUpdateBudget={setMonthlyBudget}
+            onAddExpense={handleAddExpense}
+            onDeleteExpense={handleDeleteExpense}
+            onAddBill={handleAddBill}
+            onToggleBillPaid={handleToggleBillPaid}
+            onDeleteBill={handleDeleteBill}
+            onAddMed={handleAddMed}
+            onToggleMedTakenToday={handleToggleMedTakenToday}
+            onToggleMedEnabled={handleToggleMedEnabled}
+            onDeleteMed={handleDeleteMed}
+            onSaveMealDay={handleSaveMealDay}
+            onAddVaultNote={handleAddVaultNote}
+            onDeleteVaultNote={handleDeleteVaultNote}
+            onAddPackingItem={handleAddPackingItem}
+            onAddPackingPreset={handleAddPackingPreset}
+            onTogglePackingItem={handleTogglePackingItem}
+            onDeletePackingItem={handleDeletePackingItem}
+            onSendPackingToShopping={handleSendPackingToShopping}
+            onAddSpecialEvent={handleAddSpecialEvent}
+            onDeleteSpecialEvent={handleDeleteSpecialEvent}
+            onCreateWishMessage={handleCreateWishMessage}
+            onAddChore={handleAddChore}
+            onMarkChoreDoneToday={handleMarkChoreDoneToday}
+            onDeleteChore={handleDeleteChore}
+            onToggleEnglishLearned={handleToggleEnglishLearned}
+            onSpeakDailyEnglish={handleSpeakDailyEnglish}
+            onChangePersonalityFocus={setPersonalityFocus}
+            onToggleExerciseDone={handleToggleExerciseDone}
+            onAskRecipe={handleAskRecipe}
+            onOpenDriveMode={() => setDriveModeOpen(true)}
             onCycleOfflineMessage={handleCycleOfflineMessage}
             onGenerateAiMessage={handleGenerateAiMessage}
             isGeneratingAi={isGeneratingAi}
             onSpeakText={handleSpeakText}
             onStopSpeech={handleStopSpeech}
+            onStatusToast={showToast}
           />
         )}
 
@@ -1316,6 +2169,10 @@ export default function App() {
             onSpeakText={handleSpeakText}
             onStopSpeech={handleStopSpeech}
             onOpenTab={setActiveTab}
+            onOpenTodaySection={(section) => {
+              setTodaySubSection(section);
+              setActiveTab('today');
+            }}
             onTriggerMedia={(tab, query) =>
               setAssistantMediaTrigger({tab, query, nonce: Date.now()})
             }
@@ -1334,6 +2191,19 @@ export default function App() {
                 priority: 'normal',
               })
             }
+            onAddShoppingItems={handleAddShoppingItems}
+            onAddExpenseEntry={(title, amount, category: ExpenseCategory) =>
+              handleAddExpense({
+                title,
+                amount,
+                category,
+                payer: deviceOwner === 'zari' ? 'zari' : 'man',
+              })
+            }
+            onBuildDailyBriefing={handleBuildDailyBriefing}
+            onSpeakDailyEnglish={handleSpeakDailyEnglish}
+            onOpenDriveMode={() => setDriveModeOpen(true)}
+            pendingAssistantQuery={pendingAssistantQuery}
             onStatusToast={showToast}
           />
         )}
@@ -1369,6 +2239,7 @@ export default function App() {
             onStopSpeech={handleStopSpeech}
             onStatusToast={showToast}
             assistantMediaTrigger={assistantMediaTrigger}
+            messagePrefill={nightMessagePrefill}
           />
         )}
 
@@ -1424,6 +2295,15 @@ export default function App() {
             gratitudes={gratitudes}
             callers={callers}
             schedules={schedules}
+            shoppingItems={shoppingItems}
+            expenses={expenses}
+            bills={bills}
+            meds={meds}
+            meals={meals}
+            vaultNotes={vaultNotes}
+            packingItems={packingItems}
+            specialEvents={specialEvents}
+            homeChores={homeChores}
             notifPermission={notifPermission}
             keepAliveActive={keepAliveActive}
             isOnline={isOnline}
@@ -1456,12 +2336,48 @@ export default function App() {
         )}
       </main>
 
-      <footer className="hidden md:block border-t border-slate-200/70 dark:border-emerald-950/60 py-5 text-center text-xs text-slate-500 dark:text-slate-400">
-        هم‌صدا · برنامه‌ریزی هدفمند، شکرگذاری، همگام‌سازی ابری و کتابخانه صوتی فارسی و دوزبانه
+      <DriveModeModal
+        open={driveModeOpen}
+        onClose={() => setDriveModeOpen(false)}
+        settings={settings}
+        deviceOwner={deviceOwner}
+        isSpeaking={isSpeaking}
+        goals={goals}
+        shoppingItems={shoppingItems}
+        bills={bills}
+        meds={meds}
+        meals={meals}
+        todayExpenseTotal={todayExpenseTotal}
+        monthExpenseTotal={monthExpenseTotal}
+        monthlyBudget={monthlyBudget}
+        syncedContacts={syncedContacts}
+        callers={callers}
+        onSpeakText={handleSpeakText}
+        onStopSpeech={handleStopSpeech}
+        onOpenAssistant={() => setActiveTab('assistant')}
+        onStatusToast={showToast}
+      />
+
+      <footer className="border-t border-[#E6E2D8] dark:border-emerald-950/60 py-5 pb-24 lg:pb-6 px-4 text-center text-xs text-slate-500 dark:text-slate-400 space-y-1.5">
+        <div>
+          هم‌صدا · برنامه‌ریزی روزانه، لیست خرید و غذا، مالی و تسویه، دارو، مناسبت‌ها، سفر، حالت رانندگی و دستیار صوتی فارسی
+        </div>
+        <div>
+          نسخه رایگان هم‌صدا برای همه · با حمایت{' '}
+          <a
+            href="https://tapnfc.ir"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-bold text-emerald-800 dark:text-amber-300 underline underline-offset-4 hover:text-emerald-600"
+            dir="ltr"
+          >
+            tapnfc.ir
+          </a>
+        </div>
       </footer>
 
       {!isOnline && (
-        <div className="fixed bottom-20 md:bottom-5 left-4 z-40 flex items-center gap-2 rounded-xl bg-amber-600 px-3.5 py-2 text-xs font-medium text-white shadow-lg">
+        <div className="fixed bottom-24 lg:bottom-5 left-4 z-40 flex items-center gap-2 rounded-xl bg-amber-600 px-3.5 py-2 text-xs font-medium text-white shadow-lg">
           <WifiOff className="w-4 h-4 shrink-0" />
           <span>حالت آفلاین — تمام داده‌ها و صوت‌های ذخیره‌شده در دسترس هستند</span>
         </div>

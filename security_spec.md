@@ -4,7 +4,7 @@
 1. A `UserProfile` at `/users/{userId}` can only be read, created, or updated by `request.auth.uid == userId` with verified email and matching `uid`/`email`.
 2. A `CoupleSpace` at `/spaces/{spaceId}` must have an immutable `ownerUid == request.auth.uid` and `ownerEmail == request.auth.token.email`. Only the owner can update `partnerEmail` or `title`.
 3. A `SpaceMember` at `/spaces/{spaceId}/members/{memberUid}` can only be created when `memberUid == request.auth.uid` AND either `role == 'owner'` matching `space.ownerUid` or `role == 'partner'` matching `space.partnerEmail == request.auth.token.email`.
-4. All space subcollections (`goals`, `habits`, `gratitudes`, `callers`, `schedules`, `config`) require active membership in `/spaces/{spaceId}/members/{request.auth.uid}` (`isSpaceMember(spaceId)`).
+4. All space subcollections (`goals`, `habits`, `gratitudes`, `callers`, `schedules`, `config`, `shopping`, `expenses`, `bills`, `meds`, `meals`, `vault`, `packing`, `events`, `chores`) require active membership in `/spaces/{spaceId}/members/{request.auth.uid}` (`isSpaceMember(spaceId)`).
 5. All writes enforce server timestamps (`request.time`), `updatedByUid == request.auth.uid`, immutable `authorUid`/`createdAt`, strict allowlisted keys (`hasAll`/`hasOnly` on create, `affectedKeys().hasOnly` on update), and strict `.size()` bounds on every string and array.
 
 ## 2. The "Dirty Dozen" Attack Payloads (All Must Return PERMISSION_DENIED)

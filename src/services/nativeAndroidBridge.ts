@@ -78,6 +78,7 @@ interface RoozhayeNativePlugin {
     quietHours: number;
     summarize: boolean;
     filterOperatorPromotions?: boolean;
+    skipBankAndOtp?: boolean;
   }): Promise<{ok: boolean; quietUntil?: number}>;
   syncCallers(options: {callersJson: string}): Promise<{count: number}>;
   syncSchedules(options: {schedulesJson: string}): Promise<{count: number}>;
@@ -424,6 +425,7 @@ export async function saveSmsAnnouncementPolicyNative(options: {
   quietHours: number;
   summarize: boolean;
   filterOperatorPromotions?: boolean;
+  skipBankAndOtp?: boolean;
 }): Promise<boolean> {
   if (!isNativeAndroid()) return false;
   try {

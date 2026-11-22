@@ -5,6 +5,7 @@ import type {
   AssistantCommandResult,
   CallerContact,
   DeviceOwner,
+  ExpenseCategory,
   MorningMessage,
   SyncedPhoneContact,
 } from '../types/app';
@@ -680,6 +681,89 @@ export function parseOfflineAssistantCommand(
     };
   }
 
+  // 10b. Daily 30-second Morning / Evening Briefing
+  if (/(گزارش روز|گزارش شروع روز|خلاصه روز|خلاصه امروز|جمع‌بندی امشب|جمع بندی امشب|گزارش ۳۰ ثانیه|گزارش 30 ثانیه|وضعیت امروز)/.test(norm)) {
+    const isEvening = /(امشب|شب|پایان روز)/.test(norm) || new Date().getHours() >= 17;
+    return {
+      action: 'daily_briefing',
+      briefingMode: isEvening ? 'evening' : 'morning',
+      replyText: isEvening ? 'در حال آماده‌سازی جمع‌بندی امشب هستم.' : 'در حال آماده‌سازی گزارش شروع روز هستم.',
+    };
+  }
+
+  // 10c. Drive / Road Mode
+  if (/(حالت رانندگی|حالت جاده|مود ماشین|مود رانندگی|صفحه رانندگی)/.test(norm)) {
+    return {
+      action: 'open_drive_mode',
+      replyText: 'حالت ایمن رانندگی هم‌صدا با دکمه‌های بزرگ باز شد.',
+    };
+  }
+
+  // 10d. Voice Shopping List Add
+  if (/(لیست خرید|سبد خرید|بخرم|بخریم)/.test(norm) && /(اضافه کن|بنویس|ثبت کن|بذار|بگذار)/.test(norm)) {
+    const cleanedItemsStr = commandRaw
+      .replace(/^(لطفاً|لطفا|میشه|می‌شه)\s+/i, '')
+      .replace(/(رو|را)?\s*(توی|تو|به|در)?\s*(لیست خرید|سبد خرید)\s*(اضافه کن|بنویس|ثبت کن|بذار|بگذار).*$/i, '')
+      .replace(/^(توی|تو|به|در)?\s*(لیست خرید|سبد خرید)\s*(اضافه کن|بنویس|ثبت کن|بذار|بگذار)[:،]?\s*/i, '')
+      .trim();
+    const items = cleanedItemsStr
+      .split(/\s*(?:،|,|\n|\s+و\s+)\s*/)
+      .map((s) => s.trim())
+      .filter((s) => s.length >= 2);
+    if (items.length > 0) {
+      return {
+        action: 'add_shopping_item',
+        shoppingItems: items,
+        replyText: `${items.join(' و ')} به لیست خرید اضافه ${items.length > 1 ? 'شدند' : 'شد'}.`,
+      };
+    }
+  }
+
+  // 10e. Voice Expense Log
+  if (/(هزینه|خرج|خریدم|پرداخت کردم|واریز کردم)/.test(norm) && /(ثبت کن|بنویس|اضافه کن|تومن|تومان|هزار|میلیون)/.test(norm)) {
+    const asciiRaw = persianDigitsToAscii(commandRaw);
+    const numMatch = asciiRaw.match(/(\d+(?:[.,/]\d+)?)\s*(میلیون|تومن|تومان|هزار)?/);
+    if (numMatch) {
+      let baseNum = parseFloat(numMatch[1].replace(/,/g, '').replace('/', '.'));
+      const afterNum = norm.slice(Math.max(0, norm.indexOf(numMatch[1]) + numMatch[1].length));
+      if (numMatch[2] === 'میلیون' || /^ ?میلیون/.test(afterNum)) {
+        baseNum = Math.round(baseNum * 1_000_000);
+      } else if (
+        numMatch[2] === 'هزار' ||
+        /هزار/.test(asciiRaw) ||
+        (baseNum < 5000 && /(تومن|تومان)/.test(norm) && /(هزار|هزین|خرج|خرید)/.test(norm) && baseNum >= 1 && !asciiRaw.includes('000'))
+      ) {
+        if (/هزار/.test(asciiRaw)) {
+          baseNum = Math.round(baseNum * 1000);
+        }
+      }
+      const amount = Math.round(baseNum);
+      if (amount > 0) {
+        let expenseTitle = commandRaw
+          .replace(new RegExp(numMatch[1].replace('.', '\\.'), 'g'), '')
+          .replace(/(میلیون|هزار|تومان|تومن|هزینه|خرج|خریدم|پرداخت کردم|بابت|برای|ثبت کن|بنویس|اضافه کن|رو|را)/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (!expenseTitle) expenseTitle = 'هزینه روزانه';
+
+        let expenseCategory: ExpenseCategory = 'other';
+        if (/(میوه|نان|نون|شیر|غذا|رستوران|سوپر|گوشت|مرغ|برنج|خرید)/.test(norm)) expenseCategory = 'food';
+        else if (/(قبض|برق|آب|گاز|شارژ|اجاره|قسط|اینترنت)/.test(norm)) expenseCategory = 'bills';
+        else if (/(بنزین|اسنپ|تاکسی|خودرو|ماشین|تعمیر|روغن|مترو)/.test(norm)) expenseCategory = 'transport';
+        else if (/(دارو|دکتر|پزشک|داروخانه|ویزیت|بیمارستان)/.test(norm)) expenseCategory = 'health';
+        else if (/(هدیه|کادو|مهمان|خانواده)/.test(norm)) expenseCategory = 'family';
+
+        return {
+          action: 'add_expense',
+          expenseTitle,
+          expenseAmount: amount,
+          expenseCategory,
+          replyText: `هزینه «${expenseTitle}» به مبلغ ${toPersianDigits(amount.toLocaleString('en-US'))} تومان ثبت شد.`,
+        };
+      }
+    }
+  }
+
   // 11. Add Goal
   const goalMatch = commandRaw.match(/(?:هدف|کار|یادآور)\s*(?:جدید\s*)?(?:اضافه کن|ثبت کن|بنویس)[:،]?\s*(.+)$/);
   if (goalMatch?.[1]?.trim()) {
@@ -691,8 +775,49 @@ export function parseOfflineAssistantCommand(
     };
   }
 
-  // 12. Tab Navigation
+  // 11b. Daily English Audio Practice
+  if (/(زبان انگلیسی بخوان|پنج عبارت انگلیسی|۵ عبارت انگلیسی|عبارت انگلیسی امروز|تمرین انگلیسی)/.test(norm)) {
+    return {
+      action: 'daily_english',
+      replyText: 'پنج عبارت انگلیسی کاربردی امروز با معنی فارسی پخش می‌شود.',
+    };
+  }
+
+  // 12. Tab Navigation (including Today SubSections)
   if (/(برو به|باز کن|نشان بده|بخش)/.test(norm)) {
+    if (/(لیست خرید|غذای هفته|برنامه غذا|غذا چی|چک لیست سفر|سفر|چمدان|نگهداری خانه|سرویس خانه)/.test(norm)) {
+      return {
+        action: 'open_tab',
+        tab: 'today',
+        todaySection: 'shopping_meals',
+        replyText: 'بخش خرید، غذای هفته، چک‌لیست سفر و نگهداری خانه باز شد.',
+      };
+    }
+    if (/(دخل و خرج|مالی|هزینه|اقساط|قبوض|قسط|تسویه|حساب دو نفره|حساب دونفره)/.test(norm)) {
+      return {
+        action: 'open_tab',
+        tab: 'today',
+        todaySection: 'finance_bills',
+        replyText: 'بخش مدیریت مالی، تسویه دونفره، اقساط و قبوض باز شد.',
+      };
+    }
+    if (/(دارو|نوبت پزشک|کارت دان|کارت‌دان|شماره کارت|شبا|تولد|مناسبت|سالگرد)/.test(norm)) {
+      return {
+        action: 'open_tab',
+        tab: 'today',
+        todaySection: 'health_vault',
+        replyText: 'بخش دارو، مناسبت‌های شمسی و کارت‌دان باز شد.',
+      };
+    }
+    if (/(زبان انگلیسی|خلاصه خوان|خلاصه‌خوان|خلاصه متن|تمرین شخصیت|شخصیت|رشد فردی)/.test(norm)) {
+      return {
+        action: 'open_tab',
+        tab: 'today',
+        todaySection: 'growth_lab',
+        replyText: 'بخش رشد فردی، ۵ عبارت انگلیسی و خلاصه‌خوان متن باز شد.',
+      };
+    }
+
     const tabMap: {keywords: string[]; tab: AppTab; label: string}[] = [
       {keywords: ['امروز', 'هدف', 'برنامه'], tab: 'today', label: 'امروزِ ما'},
       {keywords: ['شکر', 'سپاس', 'انرژی'], tab: 'gratitude', label: 'شکرگذاری'},

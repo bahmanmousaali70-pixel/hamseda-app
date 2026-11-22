@@ -3134,8 +3134,13 @@ ${compactContacts.length > 0 ? `مخاطبین دفترچه تلفن برای ت
 - take_photo / record_video: باز کردن دوربین عکس یا فیلم‌برداری.
 - record_audio_start / record_audio_stop: شروع یا توقف ضبط صدا.
 - play_radio / play_music / play_podcast / stop_audio: پخش رادیو زنده، موزیک شبانه، جستجوی پادکست و توقف پخش.
-- open_tab: باز کردن یکی از بخش‌های برنامه (tab: today | assistant | gratitude | night | voice | caller | sync).
+- open_tab: باز کردن یکی از بخش‌های برنامه (tab: today | assistant | gratitude | night | voice | caller | sync). اگر کاربر بخش‌های داخلی امروز را خواست todaySection را یکی از planner | shopping_meals | finance_bills | health_vault | growth_lab بگذار.
 - add_goal: افزودن یک هدف/یادآور جدید به لیست امروز (goalTitle پر شود).
+- add_shopping_item: افزودن یک یا چند مورد به لیست خرید خانه (shoppingItems آرایه رشته‌ها پر شود).
+- add_expense: ثبت هزینه روزانه به تومان (expenseTitle عنوان هزینه، expenseAmount مبلغ عدد صحیح به تومان، expenseCategory یکی از food | bills | transport | health | family | other).
+- daily_briefing: گزارش هوشمند ۳۰ ثانیه‌ای صبحگاهی یا جمع‌بندی امشب (briefingMode: morning | evening).
+- open_drive_mode: باز کردن حالت ایمن رانندگی با دکمه‌های بزرگ.
+- daily_english: خواندن ۵ عبارت انگلیسی روزمره امروز همراه با تلفظ و ترجمه فارسی.
 - answer: گفت‌وگو، مشورت یا پرسش عمومی. اگر پاسخ به اطلاعات به‌روز اینترنتی نیاز دارد needsLiveWeb را true کن.
 
 ۲. اگر در مخاطبین اسم مشابه یا هم‌آوا پیدا شد، دقیق‌ترین targetName و targetPhone را پر کن؛ اگر تطبیق مبهم است، مخاطب را حدس نزن و سؤال روشن‌کننده بپرس.
@@ -3190,6 +3195,11 @@ ${compactContacts.length > 0 ? `مخاطبین دفترچه تلفن برای ت
             'stop_audio',
             'add_goal',
             'add_gratitude',
+            'add_shopping_item',
+            'add_expense',
+            'daily_briefing',
+            'open_drive_mode',
+            'daily_english',
           ],
         },
         replyText: {type: Type.STRING, description: 'Short warm spoken Persian reply for TTS'},
@@ -3198,8 +3208,14 @@ ${compactContacts.length > 0 ? `مخاطبین دفترچه تلفن برای ت
         targetPhone: {type: Type.STRING, description: 'Matched phone number if call/SMS'},
         smsBody: {type: Type.STRING, description: 'SMS body text if already spoken'},
         tab: {type: Type.STRING, description: 'Target app tab id if open_tab'},
+        todaySection: {type: Type.STRING, description: 'Sub-section inside today tab: planner | shopping_meals | finance_bills | health_vault | growth_lab'},
         query: {type: Type.STRING, description: 'Search, music, radio, or navigation query'},
         goalTitle: {type: Type.STRING, description: 'Goal text or alarm label'},
+        shoppingItems: {type: Type.ARRAY, items: {type: Type.STRING}, description: 'List of items to add to shopping list'},
+        expenseTitle: {type: Type.STRING, description: 'Expense title if add_expense'},
+        expenseAmount: {type: Type.INTEGER, description: 'Expense amount in Toman if add_expense'},
+        expenseCategory: {type: Type.STRING, description: 'Expense category: food | bills | transport | health | family | other'},
+        briefingMode: {type: Type.STRING, description: 'morning or evening if daily_briefing'},
         downloadUrl: {type: Type.STRING, description: 'Explicit https URL if user gave one or website domain'},
         downloadTitle: {type: Type.STRING, description: 'Short file/page title'},
         alarmHour: {type: Type.INTEGER, description: 'Alarm hour 0-23 if set_alarm'},
@@ -3217,8 +3233,14 @@ ${compactContacts.length > 0 ? `مخاطبین دفترچه تلفن برای ت
       targetPhone?: string;
       smsBody?: string;
       tab?: string;
+      todaySection?: string;
       query?: string;
       goalTitle?: string;
+      shoppingItems?: string[];
+      expenseTitle?: string;
+      expenseAmount?: number;
+      expenseCategory?: string;
+      briefingMode?: 'morning' | 'evening';
       downloadUrl?: string;
       downloadTitle?: string;
       alarmHour?: number;
@@ -3499,6 +3521,118 @@ ${sourceText}`,
     }
     console.error('Assistant command AI error:', err);
     res.status(500).json({error: 'خطا در پردازش دستور صوتی.'});
+  }
+});
+
+app.post('/api/summarize-text', async (req, res) => {
+  const text = typeof req.body?.text === 'string' ? req.body.text.trim().slice(0, 20000) : '';
+  if (text.length < 30) {
+    res.status(400).json({error: 'لطفاً متن طولانی‌تری برای خلاصه‌سازی وارد کنید (حداقل ۳۰ کاراکتر).'});
+    return;
+  }
+
+  const ai = getAiClient();
+  if (!ai) {
+    res.status(503).json({
+      error: 'سرویس خلاصه‌سازی هوشمند در دسترس نیست.',
+      offlineFallback: true,
+    });
+    return;
+  }
+
+  try {
+    const models = getAvailableTextModels();
+    if (models.length === 0) {
+      res.status(429).json({
+        error: 'سهمیه موقت مدل هوشمند تکمیل شده است؛ از خلاصه‌ساز آفلاین استفاده می‌شود.',
+        offlineFallback: true,
+      });
+      return;
+    }
+
+    const schema = {
+      type: Type.OBJECT,
+      properties: {
+        title: {type: Type.STRING, description: 'Short Persian title summarizing the text'},
+        bullets: {
+          type: Type.ARRAY,
+          items: {type: Type.STRING},
+          description: 'Exactly 3 crisp, informative Persian key takeaway bullets',
+        },
+        spokenSummary: {
+          type: Type.STRING,
+          description: 'Fluent 2 to 4 sentence conversational Persian summary ready for text-to-speech playback',
+        },
+      },
+      required: ['title', 'bullets', 'spokenSummary'],
+    };
+
+    const prompt = `متن زیر را با دقت بخوان و به فارسی روان و دقیق خلاصه کن:
+۱. یک عنوان کوتاه و روشن (title) بساز.
+۲. دقیقاً ۳ نکته کلیدی و کاربردی (bullets) استخراج کن.
+۳. یک خلاصه شنیداری طبیعی و خوش‌آهنگ (spokenSummary، بین ۲ تا ۴ جمله) بنویس که بدون علامت‌های اضافه برای خواندن صوتی آماده باشد.
+اطلاعات را تحریف یا اضافه نکن و فقط به محتوای همین متن تکیه کن.
+
+متن:
+${text}`;
+
+    let parsedResult: {title?: string; bullets?: string[]; spokenSummary?: string} | null = null;
+    let lastErr: unknown = null;
+
+    for (const model of models) {
+      try {
+        const response = await withPromiseTimeout(
+          ai.models.generateContent({
+            model,
+            contents: prompt,
+            config: {
+              responseMimeType: 'application/json',
+              responseSchema: schema,
+              ...(model === 'gemini-4-hydrogen' ? {thinkingConfig: {thinkingLevel: ThinkingLevel.LOW}} : {}),
+            },
+          }),
+          10000,
+          `Summarize text (${model})`
+        );
+        const raw = (response.text || '').trim();
+        if (!raw) continue;
+        const jsonCandidate = JSON.parse(raw) as {title?: string; bullets?: string[]; spokenSummary?: string};
+        if (jsonCandidate && typeof jsonCandidate.spokenSummary === 'string' && Array.isArray(jsonCandidate.bullets)) {
+          parsedResult = jsonCandidate;
+          break;
+        }
+      } catch (err) {
+        lastErr = err;
+        markTextModelCooldown(model, err);
+      }
+    }
+
+    if (!parsedResult) {
+      if (isQuotaExhaustedError(lastErr)) {
+        res.status(429).json({
+          error: 'سهمیه رایگان مدل تکمیل شده است؛ خلاصه آفلاین فعال می‌شود.',
+          offlineFallback: true,
+        });
+        return;
+      }
+      res.status(502).json({
+        error: 'پاسخ خلاصه‌ساز آماده نشد؛ از خلاصه‌ساز آفلاین استفاده کنید.',
+        offlineFallback: true,
+      });
+      return;
+    }
+
+    res.json({
+      title: (parsedResult.title || 'خلاصه متن').trim(),
+      bullets: (parsedResult.bullets || []).map((b) => String(b).trim()).filter(Boolean).slice(0, 3),
+      spokenSummary: (parsedResult.spokenSummary || '').trim(),
+    });
+  } catch (err) {
+    console.error('Summarize text endpoint error:', err);
+    res.status(500).json({
+      error: 'خطا در خلاصه‌سازی متن.',
+      offlineFallback: true,
+    });
   }
 });
 

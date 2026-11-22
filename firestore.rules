@@ -157,12 +157,14 @@ service cloud.firestore {
 
     function isValidSpaceSettings(data) {
       return data.keys().hasAll(['theme', 'defaultVoice', 'speechRate', 'myName', 'partnerName', 'backgroundKeepAlive', 'updatedByUid', 'updatedAt'])
-        && data.keys().hasOnly(['theme', 'defaultVoice', 'speechRate', 'myName', 'partnerName', 'backgroundKeepAlive', 'announceCalls', 'announceSms', 'autoOpenMorning', 'nightMovieAutoCheck', 'nightMovieTime', 'updatedByUid', 'updatedAt'])
+        && data.keys().hasOnly(['theme', 'defaultVoice', 'speechRate', 'myName', 'partnerName', 'assistantName', 'assistantWakeWordEnabled', 'backgroundKeepAlive', 'announceCalls', 'announceSms', 'autoOpenMorning', 'nightMovieAutoCheck', 'nightMovieTime', 'updatedByUid', 'updatedAt'])
         && data.theme is string && data.theme in ['light', 'dark']
         && data.defaultVoice is string && data.defaultVoice in ['Kore', 'Zephyr', 'Puck', 'Charon', 'Fenrir']
         && data.speechRate is number && data.speechRate >= 0.5 && data.speechRate <= 2.0
         && data.myName is string && data.myName.size() >= 1 && data.myName.size() <= 60
         && data.partnerName is string && data.partnerName.size() >= 1 && data.partnerName.size() <= 60
+        && (!('assistantName' in data) || (data.assistantName is string && data.assistantName.size() >= 1 && data.assistantName.size() <= 60))
+        && (!('assistantWakeWordEnabled' in data) || data.assistantWakeWordEnabled is bool)
         && data.backgroundKeepAlive is bool
         && (!('announceCalls' in data) || data.announceCalls is bool)
         && (!('announceSms' in data) || data.announceSms is bool)
@@ -170,6 +172,155 @@ service cloud.firestore {
         && (!('nightMovieAutoCheck' in data) || data.nightMovieAutoCheck is bool)
         && (!('nightMovieTime' in data) || (data.nightMovieTime is string && data.nightMovieTime.size() <= 10 && data.nightMovieTime.matches('^\\d{2}:\\d{2}$')))
         && data.updatedByUid is string && data.updatedByUid == request.auth.uid && isValidId(data.updatedByUid)
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidShopping(data, itemId) {
+      return data.keys().hasAll(['id', 'title', 'category', 'checked', 'clientCreatedAt', 'authorUid', 'updatedByUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'title', 'note', 'category', 'checked', 'clientCreatedAt', 'authorUid', 'updatedByUid', 'createdAt', 'updatedAt'])
+        && data.id is string && data.id == itemId && isValidId(data.id)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 200
+        && (!('note' in data) || (data.note is string && data.note.size() <= 200))
+        && data.category is string && data.category in ['grocery', 'home', 'health', 'note']
+        && data.checked is bool
+        && data.clientCreatedAt is number
+        && data.authorUid is string && isValidId(data.authorUid)
+        && data.updatedByUid is string && data.updatedByUid == request.auth.uid && isValidId(data.updatedByUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidExpense(data, expenseId) {
+      return data.keys().hasAll(['id', 'title', 'amount', 'category', 'payer', 'dateKey', 'clientCreatedAt', 'authorUid', 'updatedByUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'title', 'amount', 'category', 'payer', 'splitMode', 'dateKey', 'clientCreatedAt', 'authorUid', 'updatedByUid', 'createdAt', 'updatedAt'])
+        && data.id is string && data.id == expenseId && isValidId(data.id)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 200
+        && data.amount is number && data.amount >= 0 && data.amount <= 999999999999
+        && data.category is string && data.category in ['food', 'bills', 'transport', 'health', 'family', 'other']
+        && data.payer is string && data.payer in ['man', 'zari', 'both']
+        && (!('splitMode' in data) || (data.splitMode is string && data.splitMode in ['shared', 'personal', 'for_partner', 'settlement']))
+        && data.dateKey is string && data.dateKey.size() >= 8 && data.dateKey.size() <= 20
+        && data.clientCreatedAt is number
+        && data.authorUid is string && isValidId(data.authorUid)
+        && data.updatedByUid is string && data.updatedByUid == request.auth.uid && isValidId(data.updatedByUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidBill(data, billId) {
+      return data.keys().hasAll(['id', 'title', 'amount', 'kind', 'dueDateKey', 'cycle', 'paid', 'clientCreatedAt', 'authorUid', 'updatedByUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'title', 'amount', 'kind', 'dueDateKey', 'cycle', 'paid', 'note', 'clientCreatedAt', 'authorUid', 'updatedByUid', 'createdAt', 'updatedAt'])
+        && data.id is string && data.id == billId && isValidId(data.id)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 200
+        && data.amount is number && data.amount >= 0 && data.amount <= 999999999999
+        && data.kind is string && data.kind in ['installment', 'bill', 'vehicle', 'subscription']
+        && data.dueDateKey is string && data.dueDateKey.size() >= 8 && data.dueDateKey.size() <= 20
+        && data.cycle is string && data.cycle in ['once', 'monthly', 'yearly']
+        && data.paid is bool
+        && (!('note' in data) || (data.note is string && data.note.size() <= 240))
+        && data.clientCreatedAt is number
+        && data.authorUid is string && isValidId(data.authorUid)
+        && data.updatedByUid is string && data.updatedByUid == request.auth.uid && isValidId(data.updatedByUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidMedication(data, medId) {
+      return data.keys().hasAll(['id', 'name', 'dosage', 'time', 'owner', 'kind', 'takenDates', 'voiceRemind', 'enabled', 'clientCreatedAt', 'authorUid', 'updatedByUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'name', 'dosage', 'time', 'owner', 'kind', 'takenDates', 'voiceRemind', 'enabled', 'clientCreatedAt', 'authorUid', 'updatedByUid', 'createdAt', 'updatedAt'])
+        && data.id is string && data.id == medId && isValidId(data.id)
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 200
+        && data.dosage is string && data.dosage.size() <= 160
+        && data.time is string && data.time.matches('^\\d{2}:\\d{2}$')
+        && data.owner is string && data.owner in ['man', 'zari', 'both']
+        && data.kind is string && data.kind in ['med', 'appointment']
+        && data.takenDates is list && data.takenDates.size() <= 365
+        && (data.takenDates.size() == 0 || (data.takenDates[0] is string && data.takenDates[0].size() <= 20))
+        && data.voiceRemind is bool
+        && data.enabled is bool
+        && data.clientCreatedAt is number
+        && data.authorUid is string && isValidId(data.authorUid)
+        && data.updatedByUid is string && data.updatedByUid == request.auth.uid && isValidId(data.updatedByUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidMealPlan(data, mealId) {
+      return data.keys().hasAll(['id', 'dayLabel', 'lunch', 'dinner', 'ingredients', 'authorUid', 'updatedByUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'dayLabel', 'lunch', 'dinner', 'ingredients', 'authorUid', 'updatedByUid', 'createdAt', 'updatedAt'])
+        && data.id is string && data.id == mealId && isValidId(data.id)
+        && data.dayLabel is string && data.dayLabel.size() >= 1 && data.dayLabel.size() <= 40
+        && data.lunch is string && data.lunch.size() <= 200
+        && data.dinner is string && data.dinner.size() <= 200
+        && data.ingredients is string && data.ingredients.size() <= 400
+        && data.authorUid is string && isValidId(data.authorUid)
+        && data.updatedByUid is string && data.updatedByUid == request.auth.uid && isValidId(data.updatedByUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidVaultNote(data, noteId) {
+      return data.keys().hasAll(['id', 'title', 'value', 'category', 'owner', 'clientCreatedAt', 'authorUid', 'updatedByUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'title', 'value', 'category', 'owner', 'clientCreatedAt', 'authorUid', 'updatedByUid', 'createdAt', 'updatedAt'])
+        && data.id is string && data.id == noteId && isValidId(data.id)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 160
+        && data.value is string && data.value.size() >= 1 && data.value.size() <= 500
+        && data.category is string && data.category in ['bank', 'home', 'ids', 'note']
+        && data.owner is string && data.owner in ['man', 'zari', 'both']
+        && data.clientCreatedAt is number
+        && data.authorUid is string && isValidId(data.authorUid)
+        && data.updatedByUid is string && data.updatedByUid == request.auth.uid && isValidId(data.updatedByUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPacking(data, itemId) {
+      return data.keys().hasAll(['id', 'title', 'template', 'checked', 'owner', 'clientCreatedAt', 'authorUid', 'updatedByUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'title', 'template', 'checked', 'owner', 'clientCreatedAt', 'authorUid', 'updatedByUid', 'createdAt', 'updatedAt'])
+        && data.id is string && data.id == itemId && isValidId(data.id)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 200
+        && data.template is string && data.template in ['road', 'flight', 'camp', 'custom']
+        && data.checked is bool
+        && data.owner is string && data.owner in ['man', 'zari', 'both']
+        && data.clientCreatedAt is number
+        && data.authorUid is string && isValidId(data.authorUid)
+        && data.updatedByUid is string && data.updatedByUid == request.auth.uid && isValidId(data.updatedByUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSpecialEvent(data, eventId) {
+      return data.keys().hasAll(['id', 'title', 'kind', 'jalaliMonth', 'jalaliDay', 'owner', 'clientCreatedAt', 'authorUid', 'updatedByUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'title', 'kind', 'jalaliMonth', 'jalaliDay', 'jalaliYear', 'owner', 'note', 'clientCreatedAt', 'authorUid', 'updatedByUid', 'createdAt', 'updatedAt'])
+        && data.id is string && data.id == eventId && isValidId(data.id)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 180
+        && data.kind is string && data.kind in ['birthday', 'anniversary', 'occasion']
+        && data.jalaliMonth is number && data.jalaliMonth >= 1 && data.jalaliMonth <= 12
+        && data.jalaliDay is number && data.jalaliDay >= 1 && data.jalaliDay <= 31
+        && (!('jalaliYear' in data) || (data.jalaliYear is number && data.jalaliYear >= 1300 && data.jalaliYear <= 1500))
+        && data.owner is string && data.owner in ['man', 'zari', 'both']
+        && (!('note' in data) || (data.note is string && data.note.size() <= 240))
+        && data.clientCreatedAt is number
+        && data.authorUid is string && isValidId(data.authorUid)
+        && data.updatedByUid is string && data.updatedByUid == request.auth.uid && isValidId(data.updatedByUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidHomeChore(data, choreId) {
+      return data.keys().hasAll(['id', 'title', 'area', 'intervalDays', 'lastDoneDateKey', 'nextDueDateKey', 'owner', 'clientCreatedAt', 'authorUid', 'updatedByUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'title', 'area', 'intervalDays', 'lastDoneDateKey', 'nextDueDateKey', 'owner', 'clientCreatedAt', 'authorUid', 'updatedByUid', 'createdAt', 'updatedAt'])
+        && data.id is string && data.id == choreId && isValidId(data.id)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 200
+        && data.area is string && data.area.size() >= 1 && data.area.size() <= 80
+        && data.intervalDays is number && data.intervalDays >= 1 && data.intervalDays <= 3650
+        && data.lastDoneDateKey is string && data.lastDoneDateKey.size() >= 8 && data.lastDoneDateKey.size() <= 20
+        && data.nextDueDateKey is string && data.nextDueDateKey.size() >= 8 && data.nextDueDateKey.size() <= 20
+        && data.owner is string && data.owner in ['man', 'zari', 'both']
+        && data.clientCreatedAt is number
+        && data.authorUid is string && isValidId(data.authorUid)
+        && data.updatedByUid is string && data.updatedByUid == request.auth.uid && isValidId(data.updatedByUid)
+        && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
 
@@ -365,7 +516,223 @@ service cloud.firestore {
           && isSpaceMember(spaceId)
           && isValidSpaceSettings(incoming())
           && incoming().updatedAt == request.time
-          && incoming().diff(existing()).affectedKeys().hasOnly(['theme', 'defaultVoice', 'speechRate', 'myName', 'partnerName', 'backgroundKeepAlive', 'announceCalls', 'announceSms', 'autoOpenMorning', 'nightMovieAutoCheck', 'nightMovieTime', 'updatedByUid', 'updatedAt']);
+          && incoming().diff(existing()).affectedKeys().hasOnly(['theme', 'defaultVoice', 'speechRate', 'myName', 'partnerName', 'assistantName', 'assistantWakeWordEnabled', 'backgroundKeepAlive', 'announceCalls', 'announceSms', 'autoOpenMorning', 'nightMovieAutoCheck', 'nightMovieTime', 'updatedByUid', 'updatedAt']);
+      }
+
+      match /shopping/{itemId} {
+        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(itemId) && isSpaceMember(spaceId);
+        allow list: if isVerifiedUser() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow create: if isVerifiedUser()
+          && isValidId(spaceId)
+          && isValidId(itemId)
+          && isSpaceMember(spaceId)
+          && isValidShopping(incoming(), itemId)
+          && incoming().authorUid == request.auth.uid
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isVerifiedUser()
+          && isValidId(spaceId)
+          && isValidId(itemId)
+          && isSpaceMember(spaceId)
+          && isValidShopping(incoming(), itemId)
+          && incoming().id == existing().id
+          && incoming().authorUid == existing().authorUid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'note', 'category', 'checked', 'updatedByUid', 'updatedAt']);
+        allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(itemId) && isSpaceMember(spaceId);
+      }
+
+      match /expenses/{expenseId} {
+        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(expenseId) && isSpaceMember(spaceId);
+        allow list: if isVerifiedUser() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow create: if isVerifiedUser()
+          && isValidId(spaceId)
+          && isValidId(expenseId)
+          && isSpaceMember(spaceId)
+          && isValidExpense(incoming(), expenseId)
+          && incoming().authorUid == request.auth.uid
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isVerifiedUser()
+          && isValidId(spaceId)
+          && isValidId(expenseId)
+          && isSpaceMember(spaceId)
+          && isValidExpense(incoming(), expenseId)
+          && incoming().id == existing().id
+          && incoming().authorUid == existing().authorUid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'amount', 'category', 'payer', 'splitMode', 'dateKey', 'updatedByUid', 'updatedAt']);
+        allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(expenseId) && isSpaceMember(spaceId);
+      }
+
+      match /bills/{billId} {
+        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(billId) && isSpaceMember(spaceId);
+        allow list: if isVerifiedUser() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow create: if isVerifiedUser()
+          && isValidId(spaceId)
+          && isValidId(billId)
+          && isSpaceMember(spaceId)
+          && isValidBill(incoming(), billId)
+          && incoming().authorUid == request.auth.uid
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isVerifiedUser()
+          && isValidId(spaceId)
+          && isValidId(billId)
+          && isSpaceMember(spaceId)
+          && isValidBill(incoming(), billId)
+          && incoming().id == existing().id
+          && incoming().authorUid == existing().authorUid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'amount', 'kind', 'dueDateKey', 'cycle', 'paid', 'note', 'updatedByUid', 'updatedAt']);
+        allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(billId) && isSpaceMember(spaceId);
+      }
+
+      match /meds/{medId} {
+        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(medId) && isSpaceMember(spaceId);
+        allow list: if isVerifiedUser() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow create: if isVerifiedUser()
+          && isValidId(spaceId)
+          && isValidId(medId)
+          && isSpaceMember(spaceId)
+          && isValidMedication(incoming(), medId)
+          && incoming().authorUid == request.auth.uid
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isVerifiedUser()
+          && isValidId(spaceId)
+          && isValidId(medId)
+          && isSpaceMember(spaceId)
+          && isValidMedication(incoming(), medId)
+          && incoming().id == existing().id
+          && incoming().authorUid == existing().authorUid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'dosage', 'time', 'owner', 'kind', 'takenDates', 'voiceRemind', 'enabled', 'updatedByUid', 'updatedAt']);
+        allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(medId) && isSpaceMember(spaceId);
+      }
+
+      match /meals/{mealId} {
+        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(mealId) && isSpaceMember(spaceId);
+        allow list: if isVerifiedUser() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow create: if isVerifiedUser()
+          && isValidId(spaceId)
+          && isValidId(mealId)
+          && isSpaceMember(spaceId)
+          && isValidMealPlan(incoming(), mealId)
+          && incoming().authorUid == request.auth.uid
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isVerifiedUser()
+          && isValidId(spaceId)
+          && isValidId(mealId)
+          && isSpaceMember(spaceId)
+          && isValidMealPlan(incoming(), mealId)
+          && incoming().id == existing().id
+          && incoming().authorUid == existing().authorUid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['dayLabel', 'lunch', 'dinner', 'ingredients', 'updatedByUid', 'updatedAt']);
+        allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(mealId) && isSpaceMember(spaceId);
+      }
+
+      match /vault/{noteId} {
+        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(noteId) && isSpaceMember(spaceId);
+        allow list: if isVerifiedUser() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow create: if isVerifiedUser()
+          && isValidId(spaceId)
+          && isValidId(noteId)
+          && isSpaceMember(spaceId)
+          && isValidVaultNote(incoming(), noteId)
+          && incoming().authorUid == request.auth.uid
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isVerifiedUser()
+          && isValidId(spaceId)
+          && isValidId(noteId)
+          && isSpaceMember(spaceId)
+          && isValidVaultNote(incoming(), noteId)
+          && incoming().id == existing().id
+          && incoming().authorUid == existing().authorUid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'value', 'category', 'owner', 'updatedByUid', 'updatedAt']);
+        allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(noteId) && isSpaceMember(spaceId);
+      }
+
+      match /packing/{itemId} {
+        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(itemId) && isSpaceMember(spaceId);
+        allow list: if isVerifiedUser() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow create: if isVerifiedUser()
+          && isValidId(spaceId)
+          && isValidId(itemId)
+          && isSpaceMember(spaceId)
+          && isValidPacking(incoming(), itemId)
+          && incoming().authorUid == request.auth.uid
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isVerifiedUser()
+          && isValidId(spaceId)
+          && isValidId(itemId)
+          && isSpaceMember(spaceId)
+          && isValidPacking(incoming(), itemId)
+          && incoming().id == existing().id
+          && incoming().authorUid == existing().authorUid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'template', 'checked', 'owner', 'updatedByUid', 'updatedAt']);
+        allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(itemId) && isSpaceMember(spaceId);
+      }
+
+      match /events/{eventId} {
+        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(eventId) && isSpaceMember(spaceId);
+        allow list: if isVerifiedUser() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow create: if isVerifiedUser()
+          && isValidId(spaceId)
+          && isValidId(eventId)
+          && isSpaceMember(spaceId)
+          && isValidSpecialEvent(incoming(), eventId)
+          && incoming().authorUid == request.auth.uid
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isVerifiedUser()
+          && isValidId(spaceId)
+          && isValidId(eventId)
+          && isSpaceMember(spaceId)
+          && isValidSpecialEvent(incoming(), eventId)
+          && incoming().id == existing().id
+          && incoming().authorUid == existing().authorUid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'kind', 'jalaliMonth', 'jalaliDay', 'jalaliYear', 'owner', 'note', 'updatedByUid', 'updatedAt']);
+        allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(eventId) && isSpaceMember(spaceId);
+      }
+
+      match /chores/{choreId} {
+        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(choreId) && isSpaceMember(spaceId);
+        allow list: if isVerifiedUser() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow create: if isVerifiedUser()
+          && isValidId(spaceId)
+          && isValidId(choreId)
+          && isSpaceMember(spaceId)
+          && isValidHomeChore(incoming(), choreId)
+          && incoming().authorUid == request.auth.uid
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isVerifiedUser()
+          && isValidId(spaceId)
+          && isValidId(choreId)
+          && isSpaceMember(spaceId)
+          && isValidHomeChore(incoming(), choreId)
+          && incoming().id == existing().id
+          && incoming().authorUid == existing().authorUid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'area', 'intervalDays', 'lastDoneDateKey', 'nextDueDateKey', 'owner', 'updatedByUid', 'updatedAt']);
+        allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(choreId) && isSpaceMember(spaceId);
       }
     }
   }
