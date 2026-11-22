@@ -98,18 +98,23 @@ export const CallsView: React.FC<CallsViewProps> = ({displayName, visible}) => {
         setError(err instanceof Error ? err.message : 'ارسال اطلاعات اتصال ناموفق بود.');
       });
     };
-    const stopIce = watchVoiceIce(
-      callId,
-      uid,
-      (candidate) => {
-        void peer.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {
-          // Candidates can arrive before remote SDP has been applied; retry after SDP below.
-          pendingRemoteIceRef.current.push(candidate);
-        });
-      },
-      (err) => setError(err.message)
-    );
-    unsubsRef.current.push(stopIce);
+    if (callId !== 'pending') {
+      const stopIce = watchVoiceIce(
+        callId,
+        uid,
+        (candidate) => {
+          void peer.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {
+            pendingRemoteIceRef.current.push(candidate);
+          });
+        },
+        (err) => setError(err.message)
+      );
+      unsubsRef.current.push(stopIce);
+    }
+    peer.onconnectionstatechange = () => {
+      if (peer.connectionState === 'connected') setCallStatus('تماس برقرار شد.');
+      if (peer.connectionState === 'failed') setCallStatus('اتصال برقرار نشد؛ شبکه یا سرور واسط لازم است.');
+    };
     return peer;
   }, []);
 
@@ -279,6 +284,22 @@ export const CallsView: React.FC<CallsViewProps> = ({displayName, visible}) => {
         offer,
       });
       callIdRef.current = callId;
+      const stopIce = watchVoiceIce(
+        callId,
+        identity.uid,
+        (candidate) => {
+          const activePeer = peerRef.current;
+          if (!activePeer?.remoteDescription) {
+            pendingRemoteIceRef.current.push(candidate);
+            return;
+          }
+          void activePeer.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {
+            pendingRemoteIceRef.current.push(candidate);
+          });
+        },
+        (err) => setError(err.message)
+      );
+      unsubsRef.current.push(stopIce);
       const queued = [...pendingLocalIceRef.current];
       pendingLocalIceRef.current = [];
       for (const candidate of queued) {
