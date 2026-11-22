@@ -87,6 +87,7 @@ jobs:
       - name: Install dependencies and build web bundle
         run: |
           npm install --legacy-peer-deps
+          npm run lint
           VITE_APP_VERSION="$APP_VERSION" npm run build
           npx cap sync android
 
