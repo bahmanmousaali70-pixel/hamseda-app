@@ -18,7 +18,7 @@ import firebaseConfig from '../../firebase-applet-config.json';
 
 const callApp = initializeApp(firebaseConfig, 'HamsedaVoiceCalls');
 const callAuth = getAuth(callApp);
-const callDb = getFirestore(callApp);
+const callDb = getFirestore(callApp, firebaseConfig.firestoreDatabaseId);
 
 export interface VoiceIdentity {
   uid: string;
