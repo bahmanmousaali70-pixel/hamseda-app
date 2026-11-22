@@ -361,7 +361,7 @@ export const CallsView: React.FC<CallsViewProps> = ({displayName, visible, onOpe
   useEffect(() => {
     if (!requestedCall || !identity || busy || activeCall) return;
     const normalize = (value: string) => value.toLocaleLowerCase('fa-IR')
-      .replace(/[\\s\\u200c\\u200f\\u200e]/g, '')
+      .replace(/[\s\u200c\u200f\u200e]/g, '')
       .replace(/ي/g, 'ی')
       .replace(/ك/g, 'ک');
     const target = normalize(requestedCall.targetName);
