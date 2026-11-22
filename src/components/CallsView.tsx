@@ -50,7 +50,8 @@ export const CallsView: React.FC<CallsViewProps> = ({displayName, visible}) => {
   const callIdRef = useRef<string | null>(null);
   const uidRef = useRef<string | null>(null);
   const remoteUidRef = useRef<string | null>(null);
-  const pendingIceRef = useRef<RTCIceCandidate[]>([]);
+  const pendingLocalIceRef = useRef<RTCIceCandidate[]>([]);
+  const pendingRemoteIceRef = useRef<RTCIceCandidateInit[]>([]);
   const unsubsRef = useRef<Array<() => void>>([]);
   const autoAnsweredRef = useRef<Set<string>>(new Set());
 
@@ -63,7 +64,8 @@ export const CallsView: React.FC<CallsViewProps> = ({displayName, visible}) => {
     localStreamRef.current = null;
     callIdRef.current = null;
     remoteUidRef.current = null;
-    pendingIceRef.current = [];
+    pendingLocalIceRef.current = [];
+    pendingRemoteIceRef.current = [];
     setRemoteStream(null);
     setMuted(false);
     setActiveCall(null);
@@ -77,7 +79,7 @@ export const CallsView: React.FC<CallsViewProps> = ({displayName, visible}) => {
     localStreamRef.current = stream;
     const peer = new RTCPeerConnection(ICE_CONFIG);
     peerRef.current = peer;
-    callIdRef.current = callId;
+    callIdRef.current = callId === 'pending' ? null : callId;
     remoteUidRef.current = remoteUid;
     stream.getTracks().forEach((track) => peer.addTrack(track, stream));
     peer.ontrack = (event) => {
@@ -89,7 +91,7 @@ export const CallsView: React.FC<CallsViewProps> = ({displayName, visible}) => {
       const targetUid = remoteUidRef.current;
       const currentCallId = callIdRef.current;
       if (!targetUid || !currentCallId) {
-        pendingIceRef.current.push(event.candidate);
+        pendingLocalIceRef.current.push(event.candidate);
         return;
       }
       void addVoiceIce(currentCallId, uid, targetUid, event.candidate).catch((err) => {
@@ -102,7 +104,7 @@ export const CallsView: React.FC<CallsViewProps> = ({displayName, visible}) => {
       (candidate) => {
         void peer.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {
           // Candidates can arrive before remote SDP has been applied; retry after SDP below.
-          pendingIceRef.current.push(new RTCIceCandidate(candidate));
+          pendingRemoteIceRef.current.push(candidate);
         });
       },
       (err) => setError(err.message)
@@ -116,15 +118,20 @@ export const CallsView: React.FC<CallsViewProps> = ({displayName, visible}) => {
     const uid = uidRef.current;
     const targetUid = remoteUidRef.current;
     if (!callId || !uid || !targetUid || !peerRef.current) return;
-    const queued = [...pendingIceRef.current];
-    pendingIceRef.current = [];
+    const queued = [...pendingLocalIceRef.current];
+    pendingLocalIceRef.current = [];
     for (const candidate of queued) {
-      try {
-        if (candidate.candidate) await peerRef.current.addIceCandidate(candidate);
-        else await addVoiceIce(callId, uid, targetUid, candidate);
-      } catch {
-        // A candidate that is no longer valid is safely ignored.
-      }
+      try { await addVoiceIce(callId, uid, targetUid, candidate); } catch { /* retry is not useful for stale ICE */ }
+    }
+  }, []);
+
+  const flushRemoteIce = useCallback(async () => {
+    const peer = peerRef.current;
+    if (!peer?.remoteDescription) return;
+    const queued = [...pendingRemoteIceRef.current];
+    pendingRemoteIceRef.current = [];
+    for (const candidate of queued) {
+      try { await peer.addIceCandidate(new RTCIceCandidate(candidate)); } catch { /* ignore stale candidates */ }
     }
   }, []);
 
@@ -147,6 +154,7 @@ export const CallsView: React.FC<CallsViewProps> = ({displayName, visible}) => {
       const peer = await createPeer(call.id, call.callerUid);
       if (!call.offer) throw new Error('اطلاعات تماس ناقص است.');
       await peer.setRemoteDescription(new RTCSessionDescription(call.offer));
+      await flushRemoteIce();
       await flushLocalIce();
       const answer = await peer.createAnswer();
       await peer.setLocalDescription(answer);
@@ -159,7 +167,14 @@ export const CallsView: React.FC<CallsViewProps> = ({displayName, visible}) => {
     } finally {
       setBusy(false);
     }
-  }, [activeCall, busy, cleanupMedia, createPeer, flushLocalIce]);
+    const stopCall = watchVoiceCall(call.id, (updated) => {
+      if (updated?.status === 'ended' || updated?.status === 'rejected') {
+        cleanupMedia();
+        setCallStatus(updated.status === 'rejected' ? 'تماس رد شد.' : 'تماس پایان یافت.');
+      }
+    }, (err) => setError(err.message));
+    unsubsRef.current.push(stopCall);
+  }, [activeCall, busy, cleanupMedia, createPeer, flushLocalIce, flushRemoteIce]);
 
   useEffect(() => {
     let cancelled = false;
@@ -264,8 +279,8 @@ export const CallsView: React.FC<CallsViewProps> = ({displayName, visible}) => {
         offer,
       });
       callIdRef.current = callId;
-      const queued = [...pendingIceRef.current];
-      pendingIceRef.current = [];
+      const queued = [...pendingLocalIceRef.current];
+      pendingLocalIceRef.current = [];
       for (const candidate of queued) {
         await addVoiceIce(callId, identity.uid, contact.uid, candidate);
       }
@@ -278,6 +293,7 @@ export const CallsView: React.FC<CallsViewProps> = ({displayName, visible}) => {
           if (call.answer && peerRef.current && !peerRef.current.remoteDescription) {
             try {
               await peerRef.current.setRemoteDescription(new RTCSessionDescription(call.answer));
+              await flushRemoteIce();
               await flushLocalIce();
               setCallStatus('تماس برقرار شد.');
             } catch (err) {
