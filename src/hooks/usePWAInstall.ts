@@ -1,5 +1,6 @@
 import {useEffect, useState} from 'react';
-import {apiUrl, safeReadJsonResponse} from '../services/apiConfig';
+import {apiUrl, getCloudApiBaseUrl, safeReadJsonResponse} from '../services/apiConfig';
+import {checkConnectivityNative, isNativeAndroid} from '../services/nativeAndroidBridge';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -66,8 +67,18 @@ export function useOnlineStatus() {
     let disposed = false;
     let activeCheck: AbortController | null = null;
 
-    // navigator.onLine is only a hint in Android WebView; verify the actual Hamseda API.
+    // On Android APK, navigator.onLine in WebView can lag and /api/health may
+    // return 404/302 if the AI Studio server isn't published publicly. Check
+    // native ConnectivityManager so APK accurately reflects phone Wi-Fi/Cellular/VPN.
     const verifyCloudConnection = async () => {
+      if (isNativeAndroid()) {
+        const probe = await checkConnectivityNative(getCloudApiBaseUrl());
+        if (!disposed) {
+          setIsOnline(probe.deviceOnline || (typeof navigator !== 'undefined' && navigator.onLine));
+        }
+        return;
+      }
+
       activeCheck?.abort();
       const controller = new AbortController();
       activeCheck = controller;
@@ -79,19 +90,37 @@ export function useOnlineStatus() {
           signal: controller.signal,
         });
         const parsed = await safeReadJsonResponse<{ok?: boolean}>(response);
-        if (!disposed) setIsOnline(response.ok && Boolean(parsed.data?.ok));
+        if (!disposed) {
+          setIsOnline(
+            (response.ok && Boolean(parsed.data?.ok)) ||
+              (typeof navigator !== 'undefined' ? navigator.onLine : true)
+          );
+        }
       } catch {
-        if (!disposed) setIsOnline(false);
+        if (!disposed) {
+          setIsOnline(typeof navigator !== 'undefined' ? navigator.onLine : false);
+        }
       } finally {
         window.clearTimeout(timeout);
         if (activeCheck === controller) activeCheck = null;
       }
     };
 
-    const onOnline = () => { void verifyCloudConnection(); };
-    const onOffline = () => setIsOnline(false);
+    const onOnline = () => {
+      setIsOnline(true);
+      void verifyCloudConnection();
+    };
+    const onOffline = () => {
+      if (isNativeAndroid()) {
+        void verifyCloudConnection();
+      } else {
+        setIsOnline(false);
+      }
+    };
     void verifyCloudConnection();
-    const interval = window.setInterval(() => { void verifyCloudConnection(); }, 30000);
+    const interval = window.setInterval(() => {
+      void verifyCloudConnection();
+    }, 20000);
 
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);

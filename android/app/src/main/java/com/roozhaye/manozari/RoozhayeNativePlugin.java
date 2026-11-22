@@ -2249,6 +2249,32 @@ public class RoozhayeNativePlugin extends Plugin {
         }, "HamsedaWebSearch").start();
     }
 
+    @PluginMethod
+    public void checkConnectivityNative(PluginCall call) {
+        final String url = call.getString("url", "");
+        final Context appCtx = getContext().getApplicationContext();
+        new Thread(() -> {
+            JSONObject res = NativeWebSearchHelper.checkConnectivityAndServer(appCtx, url);
+            JSObject ret;
+            try {
+                ret = JSObject.fromJSONObject(res);
+            } catch (Exception e) {
+                ret = new JSObject();
+                ret.put("ok", res.optBoolean("ok", false));
+                ret.put("deviceOnline", res.optBoolean("deviceOnline", false));
+                ret.put("vpnActive", res.optBoolean("vpnActive", false));
+                ret.put("networkType", res.optString("networkType", "unknown"));
+                ret.put("serverOk", res.optBoolean("serverOk", false));
+                ret.put("aiReady", res.optBoolean("aiReady", false));
+                ret.put("httpCode", res.optInt("httpCode", 0));
+                ret.put("authRedirect", res.optBoolean("authRedirect", false));
+                ret.put("error", res.optString("error", ""));
+            }
+            final JSObject finalRet = ret;
+            mainHandler.post(() -> call.resolve(finalRet));
+        }, "HamsedaNetCheck").start();
+    }
+
     private JSObject buildCapsObject() {
         Context ctx = getContext();
         JSObject obj = new JSObject();

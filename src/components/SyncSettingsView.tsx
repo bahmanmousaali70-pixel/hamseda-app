@@ -35,6 +35,7 @@ import {usePWAInstall} from '../hooks/usePWAInstall';
 import {apiUrl, getCloudApiBaseUrl, safeReadJsonResponse, setCloudApiBaseUrl} from '../services/apiConfig';
 import type {CoupleSpaceInfo} from '../services/coupleSyncService';
 import {
+  checkConnectivityNative,
   clearSecurityAlertsLogNative,
   flushPendingSecurityAlertsNative,
   getSecurityGuardStatusNative,
@@ -502,6 +503,47 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
     setCheckingServer(true);
     setServerCheckStatus(null);
     try {
+      if (isNativeAndroid()) {
+        const probe = await checkConnectivityNative(targetBase);
+        if (probe.serverOk && probe.aiReady) {
+          const msg = 'آدرس ذخیره شد و اتصال به سرور صدا برقرار است.';
+          setServerCheckStatus({ok: true, msg});
+          onStatusToast(msg);
+          return;
+        }
+        if (probe.serverOk && !probe.aiReady) {
+          const msg = 'سرور در دسترس است اما کلید سرویس هوش مصنوعی روی سرور فعال نیست.';
+          setServerCheckStatus({ok: false, msg});
+          onStatusToast(msg);
+          return;
+        }
+        if (!probe.deviceOnline) {
+          const msg = 'گوشی به وای‌فای یا اینترنت همراه متصل نیست.';
+          setServerCheckStatus({ok: false, msg});
+          onStatusToast(msg);
+          return;
+        }
+        if (probe.authRedirect) {
+          const msg =
+            'اینترنت گوشی وصل است، اما این نشانی (ais-dev) مخصوص مرورگر است و در APK باز نمی‌شود. از نشانی عمومی (ais-pre بعد از Deploy در AI Studio) یا سرور مستقل استفاده کنید. جستجوی اینترنت، رادیو و امکانات گوشی بدون سرور هم با اینترنت گوشی کار می‌کنند.';
+          setServerCheckStatus({ok: false, msg});
+          onStatusToast(msg);
+          return;
+        }
+        if (probe.httpCode === 404) {
+          const msg =
+            'اینترنت گوشی وصل است، اما سرور عمومی هم‌صدا روی این نشانی هنوز منتشر (Deploy) نشده است (خطای ۴۰۴). در AI Studio دکمه Deploy/Share را بزنید. جستجوی اینترنتی دستیار، رادیو و همگام‌سازی بدون این سرور هم روی APK فعال هستند.';
+          setServerCheckStatus({ok: false, msg});
+          onStatusToast(msg);
+          return;
+        }
+        const msg =
+          'اینترنت گوشی وصل است، اما نشانی سرور پاسخ نداد (وضعیت فیلترشکن یا آدرس سرور را بررسی کنید). جستجوی مستقیم دستیار و رادیو همچنان با اینترنت گوشی فعال هستند.';
+        setServerCheckStatus({ok: false, msg});
+        onStatusToast(msg);
+        return;
+      }
+
       const res = await fetch(`${targetBase}/api/health`);
       const parsed = await safeReadJsonResponse<{ok?: boolean; aiReady?: boolean}>(res);
       if (parsed.isHtml) {

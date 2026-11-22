@@ -409,4 +409,85 @@ public final class NativeWebSearchHelper {
             if (conn != null) conn.disconnect();
         }
     }
+
+    public static JSONObject checkConnectivityAndServer(Context ctx, String serverBaseUrl) {
+        JSONObject out = new JSONObject();
+        try {
+            JSONObject net = SecurityAlertHelper.getNetworkSnapshot(ctx);
+            boolean netConnected = net.optBoolean("connected", false);
+            boolean vpnActive = net.optBoolean("vpnActive", false);
+            String networkType = net.optString("networkType", "unknown");
+
+            boolean serverOk = false;
+            boolean aiReady = false;
+            int httpCode = 0;
+            boolean authRedirect = false;
+            String error = "";
+            boolean deviceOnline = netConnected;
+
+            String base = serverBaseUrl != null ? serverBaseUrl.trim().replaceAll("/+$", "") : "";
+            if (netConnected && !base.isEmpty()) {
+                HttpURLConnection conn = null;
+                try {
+                    URL url = new URL(base + "/api/health");
+                    conn = (HttpURLConnection) url.openConnection();
+                    conn.setRequestMethod("GET");
+                    conn.setConnectTimeout(6000);
+                    conn.setReadTimeout(6000);
+                    conn.setInstanceFollowRedirects(false);
+                    conn.setRequestProperty("User-Agent", USER_AGENT);
+                    conn.setRequestProperty("Accept", "application/json");
+                    httpCode = conn.getResponseCode();
+                    if (httpCode >= 200 && httpCode < 300) {
+                        deviceOnline = true;
+                        BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8));
+                        StringBuilder sb = new StringBuilder();
+                        String line;
+                        while ((line = br.readLine()) != null) {
+                            sb.append(line);
+                            if (sb.length() > 16384) break;
+                        }
+                        br.close();
+                        String body = sb.toString().trim();
+                        if (body.startsWith("{")) {
+                            JSONObject health = new JSONObject(body);
+                            serverOk = health.optBoolean("ok", false);
+                            aiReady = health.optBoolean("aiReady", false);
+                        }
+                    } else if (httpCode >= 300 && httpCode < 400) {
+                        deviceOnline = true;
+                        String loc = conn.getHeaderField("Location");
+                        if (loc != null && (loc.contains("cookie_check") || loc.contains("accounts.google") || loc.contains("signin"))) {
+                            authRedirect = true;
+                        }
+                    } else if (httpCode > 0) {
+                        deviceOnline = true;
+                    }
+                } catch (Exception e) {
+                    error = e.getMessage() != null ? e.getMessage() : "خطای شبکه";
+                } finally {
+                    if (conn != null) conn.disconnect();
+                }
+            }
+
+            out.put("ok", true);
+            out.put("deviceOnline", deviceOnline);
+            out.put("vpnActive", vpnActive);
+            out.put("networkType", networkType);
+            out.put("serverOk", serverOk);
+            out.put("aiReady", aiReady);
+            out.put("httpCode", httpCode);
+            out.put("authRedirect", authRedirect);
+            out.put("error", error);
+        } catch (Exception e) {
+            try {
+                out.put("ok", false);
+                out.put("deviceOnline", false);
+                out.put("serverOk", false);
+                out.put("error", e.getMessage() != null ? e.getMessage() : "خطا در بررسی شبکه");
+            } catch (Exception ignored) {
+            }
+        }
+        return out;
+    }
 }

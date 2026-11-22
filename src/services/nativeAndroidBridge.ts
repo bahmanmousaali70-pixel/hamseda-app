@@ -247,6 +247,17 @@ interface RoozhayeNativePlugin {
     linksJson?: string;
     error?: string;
   }>;
+  checkConnectivityNative(options: {url?: string}): Promise<{
+    ok: boolean;
+    deviceOnline?: boolean;
+    vpnActive?: boolean;
+    networkType?: string;
+    serverOk?: boolean;
+    aiReady?: boolean;
+    httpCode?: number;
+    authRedirect?: boolean;
+    error?: string;
+  }>;
 }
 
 const RoozhayeNative = registerPlugin<RoozhayeNativePlugin>('RoozhayeNative');
@@ -1195,6 +1206,56 @@ export async function searchWebNative(query: string): Promise<{
     return {
       ok: false,
       error: err instanceof Error ? err.message : 'خطا در جستجوی مستقیم اندروید',
+    };
+  }
+}
+
+export interface NativeConnectivityReport {
+  deviceOnline: boolean;
+  vpnActive: boolean;
+  networkType: string;
+  serverOk: boolean;
+  aiReady: boolean;
+  httpCode: number;
+  authRedirect: boolean;
+  error?: string;
+}
+
+export async function checkConnectivityNative(url?: string): Promise<NativeConnectivityReport> {
+  if (!isNativeAndroid()) {
+    const online = typeof navigator !== 'undefined' ? navigator.onLine : true;
+    return {
+      deviceOnline: online,
+      vpnActive: false,
+      networkType: online ? 'web' : 'offline',
+      serverOk: false,
+      aiReady: false,
+      httpCode: 0,
+      authRedirect: false,
+    };
+  }
+  try {
+    const res = await RoozhayeNative.checkConnectivityNative({url: url || ''});
+    return {
+      deviceOnline: Boolean(res.deviceOnline),
+      vpnActive: Boolean(res.vpnActive),
+      networkType: res.networkType || 'unknown',
+      serverOk: Boolean(res.serverOk),
+      aiReady: Boolean(res.aiReady),
+      httpCode: res.httpCode ?? 0,
+      authRedirect: Boolean(res.authRedirect),
+      error: res.error,
+    };
+  } catch (err) {
+    return {
+      deviceOnline: typeof navigator !== 'undefined' ? navigator.onLine : false,
+      vpnActive: false,
+      networkType: 'unknown',
+      serverOk: false,
+      aiReady: false,
+      httpCode: 0,
+      authRedirect: false,
+      error: err instanceof Error ? err.message : 'خطا در بررسی شبکه',
     };
   }
 }
