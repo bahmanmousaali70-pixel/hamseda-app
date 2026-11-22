@@ -187,6 +187,7 @@ interface RoozhayeNativePlugin {
   getSecurityGuardStatus(): Promise<{
     ok: boolean;
     enabled?: boolean;
+    allowInAppBypass?: boolean;
     hasPin?: boolean;
     backupEmail?: string;
     webhookUrl?: string;
@@ -203,6 +204,7 @@ interface RoozhayeNativePlugin {
   }>;
   setSecurityGuardConfig(options: {
     enabled: boolean;
+    allowInAppBypass?: boolean;
     pin?: string;
     clearPin?: boolean;
     backupEmail?: string;
@@ -211,6 +213,7 @@ interface RoozhayeNativePlugin {
   }): Promise<{
     ok: boolean;
     enabled?: boolean;
+    allowInAppBypass?: boolean;
     hasPin?: boolean;
     backupEmail?: string;
     webhookUrl?: string;
@@ -926,14 +929,18 @@ export interface SecurityAlertRecord {
   mapsUrl: string;
   sent: boolean;
   emailSent: boolean;
+  webhookSent?: boolean;
   dispatchStatus: string;
   hasFrontPhoto: boolean;
   hasBackPhoto: boolean;
+  frontPreviewDataUrl?: string;
+  backPreviewDataUrl?: string;
 }
 
 export interface SecurityGuardStatus {
   ok: boolean;
   enabled: boolean;
+  allowInAppBypass: boolean;
   hasPin: boolean;
   backupEmail: string;
   webhookUrl: string;
@@ -952,6 +959,7 @@ export interface SecurityGuardStatus {
 function parseSecurityGuardResponse(res: {
   ok: boolean;
   enabled?: boolean;
+  allowInAppBypass?: boolean;
   hasPin?: boolean;
   backupEmail?: string;
   webhookUrl?: string;
@@ -978,6 +986,7 @@ function parseSecurityGuardResponse(res: {
   return {
     ok: Boolean(res.ok),
     enabled: Boolean(res.enabled),
+    allowInAppBypass: res.allowInAppBypass !== false,
     hasPin: Boolean(res.hasPin),
     backupEmail: res.backupEmail || '',
     webhookUrl: res.webhookUrl || '',
@@ -999,6 +1008,7 @@ export async function getSecurityGuardStatusNative(): Promise<SecurityGuardStatu
     return {
       ok: false,
       enabled: false,
+      allowInAppBypass: true,
       hasPin: false,
       backupEmail: '',
       webhookUrl: '',
@@ -1020,6 +1030,7 @@ export async function getSecurityGuardStatusNative(): Promise<SecurityGuardStatu
     return {
       ok: false,
       enabled: false,
+      allowInAppBypass: true,
       hasPin: false,
       backupEmail: '',
       webhookUrl: '',
@@ -1039,6 +1050,7 @@ export async function getSecurityGuardStatusNative(): Promise<SecurityGuardStatu
 
 export async function setSecurityGuardConfigNative(options: {
   enabled: boolean;
+  allowInAppBypass?: boolean;
   pin?: string;
   clearPin?: boolean;
   backupEmail?: string;

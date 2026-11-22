@@ -2104,8 +2104,9 @@ public class RoozhayeNativePlugin extends Plugin {
         String backupEmail = call.getString("backupEmail");
         String webhookUrl = call.getString("webhookUrl");
         String serverBaseUrl = call.getString("serverBaseUrl");
+        boolean allowInAppBypass = !call.hasOption("allowInAppBypass") || Boolean.TRUE.equals(call.getBoolean("allowInAppBypass", true));
 
-        SecurityAlertHelper.saveConfig(getContext(), enabled, pin, clearPin, backupEmail, webhookUrl, serverBaseUrl);
+        SecurityAlertHelper.saveConfig(getContext(), enabled, pin, clearPin, backupEmail, webhookUrl, serverBaseUrl, allowInAppBypass);
         try {
             JSONObject summary = SecurityAlertHelper.buildStatusSummary(getContext());
             JSObject ret = JSObject.fromJSONObject(summary);

@@ -54,7 +54,7 @@ public class CallAnnouncerService extends Service {
     public static final String EXTRA_VOICE_NAME = "voice_name";
     public static final String EXTRA_REPEAT = "repeat_count";
     public static final String EXTRA_IS_CALL = "is_call";
-    private static final String DEFAULT_API_BASE = "https://roozhaye-manozari-7.ai.studio";
+    private static final String DEFAULT_API_BASE = "https://hamseda-voice-suite.ai.studio";
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private volatile boolean cancelled = false;
@@ -86,19 +86,29 @@ public class CallAnnouncerService extends Service {
             ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
             if (cm == null) return false;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                Network net = cm.getActiveNetwork();
-                if (net == null) return false;
-                NetworkCapabilities caps = cm.getNetworkCapabilities(net);
-                return caps != null && (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
-                        || caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
-                        || caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
-                        || caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN));
+                Network active = cm.getActiveNetwork();
+                if (active != null && hasUsableTransport(cm.getNetworkCapabilities(active))) {
+                    return true;
+                }
+                for (Network net : cm.getAllNetworks()) {
+                    if (hasUsableTransport(cm.getNetworkCapabilities(net))) {
+                        return true;
+                    }
+                }
+                return false;
             }
             NetworkInfo info = cm.getActiveNetworkInfo();
             return info != null && info.isConnected();
         } catch (Exception ignored) {
             return false;
         }
+    }
+
+    private static boolean hasUsableTransport(@Nullable NetworkCapabilities caps) {
+        return caps != null && (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+                || caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
+                || caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+                || caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN));
     }
 
     @Nullable

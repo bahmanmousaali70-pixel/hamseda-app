@@ -7,6 +7,7 @@ import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.ImageFormat;
+import android.graphics.Matrix;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
@@ -53,7 +54,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
-import java.util.List;
 import java.util.Locale;
 import java.util.TimeZone;
 import java.util.concurrent.CountDownLatch;
@@ -64,14 +64,18 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Handles Power-Off PIN verification, stealth front/back camera snapshots,
- * precise GPS coordinate capture, local offline evidence queue, and
- * dispatching alerts to /api/security-alert.
+ * fast dual-provider (Network + GPS) coordinate capture, local offline evidence queue,
+ * and dispatching alerts to /api/security-alert (+ direct HTTPS webhook fallback).
  */
 public final class SecurityAlertHelper {
     private static final String PREFS = "rmz_native_prefs";
-    private static final String DEFAULT_API_BASE = "https://roozhaye-manozari-7.ai.studio";
+    private static final String DEFAULT_API_BASE = "https://hamseda-voice-suite.ai.studio";
     private static final AtomicBoolean CAPTURE_IN_PROGRESS = new AtomicBoolean(false);
     private static final AtomicBoolean FLUSH_IN_PROGRESS = new AtomicBoolean(false);
+
+    public interface CaptureCallback {
+        void onCaptureFinished(@Nullable JSONObject record);
+    }
 
     private SecurityAlertHelper() {}
 
@@ -97,11 +101,13 @@ public final class SecurityAlertHelper {
             boolean clearPin,
             @Nullable String backupEmail,
             @Nullable String webhookUrl,
-            @Nullable String serverBaseUrl
+            @Nullable String serverBaseUrl,
+            boolean allowInAppBypass
     ) {
         SharedPreferences prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         SharedPreferences.Editor ed = prefs.edit();
         ed.putBoolean("power_guard_enabled", enabled);
+        ed.putBoolean("power_guard_allow_in_app_bypass", allowInAppBypass);
         if (clearPin) {
             ed.remove("power_guard_pin_hash");
         } else if (newPin != null && !newPin.trim().isEmpty()) {
@@ -117,6 +123,11 @@ public final class SecurityAlertHelper {
             ed.putString("server_base_url", serverBaseUrl.trim().replaceAll("/+$", ""));
         }
         ed.apply();
+    }
+
+    public static boolean isOwnerInAppBypassEnabled(Context ctx) {
+        SharedPreferences prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        return prefs.getBoolean("power_guard_allow_in_app_bypass", true);
     }
 
     public static boolean isEnabledAndConfigured(Context ctx) {
@@ -171,13 +182,23 @@ public final class SecurityAlertHelper {
                                     || caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET);
                         }
                     }
-                    if (!vpnActive) {
-                        for (Network net : cm.getAllNetworks()) {
-                            NetworkCapabilities c = cm.getNetworkCapabilities(net);
-                            if (c != null && c.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
-                                vpnActive = true;
-                                break;
-                            }
+                    for (Network net : cm.getAllNetworks()) {
+                        NetworkCapabilities c = cm.getNetworkCapabilities(net);
+                        if (c == null) continue;
+                        if (c.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                            wifiActive = true;
+                            connected = true;
+                        }
+                        if (c.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
+                            cellularActive = true;
+                            connected = true;
+                        }
+                        if (c.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) {
+                            connected = true;
+                        }
+                        if (c.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
+                            vpnActive = true;
+                            connected = true;
                         }
                     }
                 } else {
@@ -200,18 +221,46 @@ public final class SecurityAlertHelper {
     }
 
     public static void captureEvidenceAndQueueAlertAsync(Context ctx, String reason, int attemptCount) {
+        captureEvidenceAndQueueAlertAsync(ctx, reason, attemptCount, null);
+    }
+
+    public static void captureEvidenceAndQueueAlertAsync(
+            Context ctx,
+            String reason,
+            int attemptCount,
+            @Nullable CaptureCallback callback
+    ) {
         if (!CAPTURE_IN_PROGRESS.compareAndSet(false, true)) {
+            if (callback != null) {
+                new Handler(Looper.getMainLooper()).post(() -> callback.onCaptureFinished(null));
+            }
             return;
         }
         final Context appCtx = ctx.getApplicationContext();
+        final Handler main = new Handler(Looper.getMainLooper());
         new Thread(() -> {
+            JSONObject savedRecord = null;
             try {
                 SharedPreferences prefs = appCtx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
-                Location loc = acquireBestLocation(appCtx);
+                final AtomicReference<Location> locRef = new AtomicReference<>(null);
+                Thread locThread = new Thread(() -> {
+                    try {
+                        locRef.set(acquireBestLocation(appCtx));
+                    } catch (Exception ignored) {
+                    }
+                }, "HamsedaSecLoc");
+                locThread.start();
+
                 JSONObject net = getNetworkSnapshot(appCtx);
 
-                byte[] frontJpeg = captureSinglePhotoJpeg(appCtx, CameraCharacteristics.LENS_FACING_FRONT, 2600L);
-                byte[] backJpeg = captureSinglePhotoJpeg(appCtx, CameraCharacteristics.LENS_FACING_BACK, 2400L);
+                // Capture cameras immediately while PowerGuardActivity is in foreground
+                byte[] frontJpeg = captureSinglePhotoJpeg(appCtx, CameraCharacteristics.LENS_FACING_FRONT, 2200L);
+                byte[] backJpeg = captureSinglePhotoJpeg(appCtx, CameraCharacteristics.LENS_FACING_BACK, 2200L);
+                try {
+                    locThread.join(900L);
+                } catch (InterruptedException ignored) {
+                }
+                Location loc = locRef.get();
 
                 long now = System.currentTimeMillis();
                 SimpleDateFormat isoFmt = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US);
@@ -223,18 +272,28 @@ public final class SecurityAlertHelper {
                 String backPath = "";
                 String frontB64 = "";
                 String backB64 = "";
+                String frontThumbB64 = "";
+                String backThumbB64 = "";
 
                 if (frontJpeg != null && frontJpeg.length > 0) {
                     File fFile = new File(alertDir, "selfie_" + now + ".jpg");
                     writeBytes(fFile, frontJpeg);
                     frontPath = fFile.getAbsolutePath();
                     frontB64 = Base64.encodeToString(frontJpeg, Base64.NO_WRAP);
+                    byte[] fThumb = shrinkJpegForEmail(frontJpeg, 220, 62);
+                    if (fThumb != null && fThumb.length > 0) {
+                        frontThumbB64 = Base64.encodeToString(fThumb, Base64.NO_WRAP);
+                    }
                 }
                 if (backJpeg != null && backJpeg.length > 0) {
                     File bFile = new File(alertDir, "rear_" + now + ".jpg");
                     writeBytes(bFile, backJpeg);
                     backPath = bFile.getAbsolutePath();
                     backB64 = Base64.encodeToString(backJpeg, Base64.NO_WRAP);
+                    byte[] bThumb = shrinkJpegForEmail(backJpeg, 220, 62);
+                    if (bThumb != null && bThumb.length > 0) {
+                        backThumbB64 = Base64.encodeToString(bThumb, Base64.NO_WRAP);
+                    }
                 }
 
                 JSONObject record = new JSONObject();
@@ -253,9 +312,12 @@ public final class SecurityAlertHelper {
                 record.put("backPhotoPath", backPath);
                 record.put("frontPhotoBase64", frontB64);
                 record.put("backPhotoBase64", backB64);
+                record.put("frontThumbBase64", frontThumbB64);
+                record.put("backThumbBase64", backThumbB64);
                 record.put("sent", false);
                 record.put("emailSent", false);
-                record.put("dispatchStatus", "در صف ارسال");
+                record.put("webhookSent", false);
+                record.put("dispatchStatus", net.optBoolean("connected", false) ? "در حال ارسال..." : "ذخیره آفلاین (بدون اینترنت)");
 
                 if (loc != null) {
                     double lat = loc.getLatitude();
@@ -271,9 +333,20 @@ public final class SecurityAlertHelper {
                 File recordFile = new File(alertDir, "alert_" + now + ".json");
                 writeBytes(recordFile, record.toString().getBytes(StandardCharsets.UTF_8));
                 pruneOldAlerts(alertDir);
+                savedRecord = record;
+
+                // Notify Activity so it can safely finish after camera hardware is closed
+                if (callback != null) {
+                    final JSONObject snapshotForUi = new JSONObject(record.toString());
+                    main.post(() -> callback.onCaptureFinished(snapshotForUi));
+                }
 
                 trySendAlertFile(appCtx, recordFile, record);
             } catch (Exception ignored) {
+                if (callback != null) {
+                    final JSONObject fallbackSnap = savedRecord;
+                    main.post(() -> callback.onCaptureFinished(fallbackSnap));
+                }
             } finally {
                 CAPTURE_IN_PROGRESS.set(false);
             }
@@ -285,7 +358,6 @@ public final class SecurityAlertHelper {
         final Context appCtx = ctx.getApplicationContext();
         new Thread(() -> {
             try {
-                if (!CallAnnouncerService.isNetworkConnected(appCtx)) return;
                 File alertDir = getAlertsDir(appCtx);
                 File[] files = alertDir.listFiles((d, name) -> name.startsWith("alert_") && name.endsWith(".json"));
                 if (files == null || files.length == 0) return;
@@ -306,7 +378,6 @@ public final class SecurityAlertHelper {
     }
 
     private static void trySendAlertFile(Context ctx, File recordFile, JSONObject record) {
-        if (!CallAnnouncerService.isNetworkConnected(ctx)) return;
         SharedPreferences prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         String backupEmail = record.optString("backupEmail", "").trim();
         if (backupEmail.isEmpty()) backupEmail = prefs.getString("security_backup_email", "").trim();
@@ -314,8 +385,17 @@ public final class SecurityAlertHelper {
         if (webhookUrl.isEmpty()) webhookUrl = prefs.getString("security_webhook_url", "").trim();
 
         String baseUrl = prefs.getString("server_base_url", DEFAULT_API_BASE);
-        if (baseUrl == null || baseUrl.trim().isEmpty()) baseUrl = DEFAULT_API_BASE;
+        if (baseUrl == null || baseUrl.trim().isEmpty()
+                || "https://roozhaye-manozari-7.ai.studio".equals(baseUrl.replaceAll("/+$", ""))) {
+            baseUrl = DEFAULT_API_BASE;
+        }
         String endpoint = baseUrl.replaceAll("/+$", "") + "/api/security-alert";
+
+        boolean serverOk = false;
+        boolean emailSent = false;
+        boolean webhookSent = false;
+        String serverMsg = "";
+        String serverErr = "";
 
         HttpURLConnection conn = null;
         try {
@@ -326,8 +406,8 @@ public final class SecurityAlertHelper {
             URL url = new URL(endpoint);
             conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("POST");
-            conn.setConnectTimeout(10000);
-            conn.setReadTimeout(15000);
+            conn.setConnectTimeout(9000);
+            conn.setReadTimeout(16000);
             conn.setDoOutput(true);
             conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
 
@@ -350,19 +430,92 @@ public final class SecurityAlertHelper {
             reader.close();
 
             if (code >= 200 && code < 300) {
-                JSONObject respJson = new JSONObject(respSb.toString());
-                record.put("sent", true);
-                record.put("emailSent", respJson.optBoolean("emailSent", false));
-                record.put("dispatchStatus", respJson.optString("message", "ارسال شد"));
-                record.put("sentAt", System.currentTimeMillis());
-                writeBytes(recordFile, record.toString().getBytes(StandardCharsets.UTF_8));
+                String rawResp = respSb.toString().trim();
+                if (rawResp.startsWith("{")) {
+                    JSONObject respJson = new JSONObject(rawResp);
+                    serverOk = Boolean.TRUE.equals(respJson.optBoolean("ok", true));
+                    emailSent = respJson.optBoolean("emailSent", false);
+                    webhookSent = respJson.optBoolean("webhookSent", false);
+                    serverMsg = respJson.optString("message", "در سرور ثبت شد");
+                } else {
+                    serverErr = "سرور صفحه وب غیرمعتبر برگرداند (نشانی سرور در تنظیمات بررسی شود)";
+                }
+            } else {
+                serverErr = "خطای سرور (کد " + code + ")";
             }
         } catch (Exception e) {
-            try {
-                record.put("dispatchStatus", "در انتظار اتصال اینترنت برای ارسال مجدد");
-                writeBytes(recordFile, record.toString().getBytes(StandardCharsets.UTF_8));
-            } catch (Exception ignored) {
+            String em = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            serverErr = "عدم دسترسی به سرور (" + em + ")";
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
+
+        // Direct HTTPS webhook fallback from Android device itself (works on Wi-Fi even if server is unreachable)
+        if (!webhookSent && webhookUrl.startsWith("https://")) {
+            webhookSent = tryDirectWebhookPost(webhookUrl, record, backupEmail);
+        }
+
+        try {
+            if (serverOk || webhookSent) {
+                record.put("sent", true);
+                record.put("emailSent", emailSent);
+                record.put("webhookSent", webhookSent);
+                record.put("sentAt", System.currentTimeMillis());
+                if (emailSent) {
+                    record.put("dispatchStatus", "ایمیل با عکس و لوکیشن ارسال شد");
+                } else if (webhookSent && !serverOk) {
+                    record.put("dispatchStatus", "مستقیماً به وب‌هوک ارسال شد (" + serverErr + ")");
+                } else if (webhookSent) {
+                    record.put("dispatchStatus", "به وب‌هوک ارسال شد");
+                } else {
+                    record.put("dispatchStatus", !serverMsg.isEmpty() ? serverMsg : "ثبت در سرور (ایمیل تنظیم نشده)");
+                }
+            } else {
+                record.put("sent", false);
+                record.put("dispatchStatus", !serverErr.isEmpty() ? serverErr : "در انتظار ارسال مجدد");
             }
+            writeBytes(recordFile, record.toString().getBytes(StandardCharsets.UTF_8));
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static boolean tryDirectWebhookPost(String webhookUrl, JSONObject record, String backupEmail) {
+        HttpURLConnection conn = null;
+        try {
+            JSONObject hookPayload = new JSONObject();
+            hookPayload.put("event", "hamseda_security_alert");
+            hookPayload.put("source", "android_direct");
+            hookPayload.put("ownerName", record.optString("ownerName", ""));
+            hookPayload.put("backupEmail", backupEmail);
+            hookPayload.put("reason", record.optString("reason", ""));
+            hookPayload.put("attemptCount", record.optInt("attemptCount", 1));
+            hookPayload.put("timestampIso", record.optString("timestampIso", ""));
+            hookPayload.put("mapsUrl", record.optString("mapsUrl", ""));
+            if (record.has("lat")) hookPayload.put("lat", record.optDouble("lat"));
+            if (record.has("lng")) hookPayload.put("lng", record.optDouble("lng"));
+            hookPayload.put("accuracyMeters", record.optInt("accuracyMeters", 0));
+            hookPayload.put("deviceModel", record.optString("deviceModel", Build.MODEL));
+            hookPayload.put("networkType", record.optString("networkType", "unknown"));
+            hookPayload.put("vpnActive", record.optBoolean("vpnActive", false));
+            hookPayload.put("frontPhotoBase64", record.optString("frontPhotoBase64", ""));
+            hookPayload.put("backPhotoBase64", record.optString("backPhotoBase64", ""));
+
+            URL url = new URL(webhookUrl);
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setConnectTimeout(9000);
+            conn.setReadTimeout(15000);
+            conn.setDoOutput(true);
+            conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+            byte[] bytes = hookPayload.toString().getBytes(StandardCharsets.UTF_8);
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(bytes);
+                os.flush();
+            }
+            int code = conn.getResponseCode();
+            return code >= 200 && code < 400;
+        } catch (Exception ignored) {
+            return false;
         } finally {
             if (conn != null) conn.disconnect();
         }
@@ -374,6 +527,7 @@ public final class SecurityAlertHelper {
         JSONObject out = new JSONObject();
         try {
             out.put("enabled", prefs.getBoolean("power_guard_enabled", false));
+            out.put("allowInAppBypass", isOwnerInAppBypassEnabled(ctx));
             out.put("hasPin", hasPinConfigured(ctx));
             out.put("backupEmail", prefs.getString("security_backup_email", ""));
             out.put("webhookUrl", prefs.getString("security_webhook_url", ""));
@@ -396,7 +550,7 @@ public final class SecurityAlertHelper {
                     try {
                         JSONObject rec = new JSONObject(readFileUtf8(files[i]));
                         if (!rec.optBoolean("sent", false)) pendingCount++;
-                        if (recentArr.length() < 8) {
+                        if (recentArr.length() < 6) {
                             JSONObject slim = new JSONObject();
                             slim.put("id", rec.optString("id", ""));
                             slim.put("createdAt", rec.optLong("createdAt", 0L));
@@ -406,9 +560,24 @@ public final class SecurityAlertHelper {
                             slim.put("mapsUrl", rec.optString("mapsUrl", ""));
                             slim.put("sent", rec.optBoolean("sent", false));
                             slim.put("emailSent", rec.optBoolean("emailSent", false));
+                            slim.put("webhookSent", rec.optBoolean("webhookSent", false));
                             slim.put("dispatchStatus", rec.optString("dispatchStatus", ""));
-                            slim.put("hasFrontPhoto", !rec.optString("frontPhotoBase64", "").isEmpty());
-                            slim.put("hasBackPhoto", !rec.optString("backPhotoBase64", "").isEmpty());
+                            String frontB64 = rec.optString("frontPhotoBase64", "");
+                            String backB64 = rec.optString("backPhotoBase64", "");
+                            slim.put("hasFrontPhoto", !frontB64.isEmpty());
+                            slim.put("hasBackPhoto", !backB64.isEmpty());
+                            if (recentArr.length() < 3) {
+                                String fThumb = rec.optString("frontThumbBase64", "");
+                                String bThumb = rec.optString("backThumbBase64", "");
+                                if (fThumb.isEmpty() && !frontB64.isEmpty()) fThumb = frontB64;
+                                if (bThumb.isEmpty() && !backB64.isEmpty()) bThumb = backB64;
+                                if (!fThumb.isEmpty()) {
+                                    slim.put("frontPreviewDataUrl", "data:image/jpeg;base64," + fThumb);
+                                }
+                                if (!bThumb.isEmpty()) {
+                                    slim.put("backPreviewDataUrl", "data:image/jpeg;base64," + bThumb);
+                                }
+                            }
                             recentArr.put(slim);
                         }
                     } catch (Exception ignored) {
@@ -445,7 +614,7 @@ public final class SecurityAlertHelper {
         best = pickBetterLocation(best, safeLastKnown(lm, LocationManager.NETWORK_PROVIDER));
         best = pickBetterLocation(best, safeLastKnown(lm, LocationManager.PASSIVE_PROVIDER));
 
-        // If best is missing or older than 20s, attempt one quick single-shot fix
+        // If best is missing or older than 20s, query BOTH Network (fast indoors on Wi-Fi) and GPS simultaneously
         if (best == null || (System.currentTimeMillis() - best.getTime()) > 20_000L) {
             final AtomicReference<Location> freshRef = new AtomicReference<>(best);
             final CountDownLatch latch = new CountDownLatch(1);
@@ -453,31 +622,52 @@ public final class SecurityAlertHelper {
             LocationListener listener = new LocationListener() {
                 @Override public void onLocationChanged(@NonNull Location location) {
                     freshRef.set(pickBetterLocation(freshRef.get(), location));
-                    latch.countDown();
+                    if (location.getAccuracy() <= 120f) {
+                        latch.countDown();
+                    }
                 }
                 @Override public void onStatusChanged(String provider, int status, Bundle extras) {}
                 @Override public void onProviderEnabled(@NonNull String provider) {}
                 @Override public void onProviderDisabled(@NonNull String provider) {}
             };
             main.post(() -> {
+                boolean requestedAny = false;
                 try {
-                    String provider = hasFine && lm.isProviderEnabled(LocationManager.GPS_PROVIDER)
-                            ? LocationManager.GPS_PROVIDER
-                            : LocationManager.NETWORK_PROVIDER;
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                        lm.getCurrentLocation(provider, null, ContextCompat.getMainExecutor(ctx), loc -> {
-                            if (loc != null) freshRef.set(pickBetterLocation(freshRef.get(), loc));
-                            latch.countDown();
-                        });
-                    } else {
-                        lm.requestSingleUpdate(provider, listener, Looper.getMainLooper());
+                    if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                        requestedAny = true;
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            lm.getCurrentLocation(LocationManager.NETWORK_PROVIDER, null, ContextCompat.getMainExecutor(ctx), loc -> {
+                                if (loc != null) {
+                                    freshRef.set(pickBetterLocation(freshRef.get(), loc));
+                                    latch.countDown();
+                                }
+                            });
+                        } else {
+                            lm.requestSingleUpdate(LocationManager.NETWORK_PROVIDER, listener, Looper.getMainLooper());
+                        }
                     }
-                } catch (Exception ignored) {
+                } catch (Exception ignored) {}
+                try {
+                    if (hasFine && lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                        requestedAny = true;
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            lm.getCurrentLocation(LocationManager.GPS_PROVIDER, null, ContextCompat.getMainExecutor(ctx), loc -> {
+                                if (loc != null) {
+                                    freshRef.set(pickBetterLocation(freshRef.get(), loc));
+                                    latch.countDown();
+                                }
+                            });
+                        } else {
+                            lm.requestSingleUpdate(LocationManager.GPS_PROVIDER, listener, Looper.getMainLooper());
+                        }
+                    }
+                } catch (Exception ignored) {}
+                if (!requestedAny) {
                     latch.countDown();
                 }
             });
             try {
-                latch.await(2200L, TimeUnit.MILLISECONDS);
+                latch.await(1900L, TimeUnit.MILLISECONDS);
             } catch (InterruptedException ignored) {
             }
             main.post(() -> {
@@ -516,18 +706,24 @@ public final class SecurityAlertHelper {
         if (cm == null) return null;
 
         String chosenCameraId = null;
+        int sensorOrientation = 0;
         try {
             for (String id : cm.getCameraIdList()) {
                 CameraCharacteristics chars = cm.getCameraCharacteristics(id);
                 Integer facing = chars.get(CameraCharacteristics.LENS_FACING);
                 if (facing != null && facing == wantedLensFacing) {
                     chosenCameraId = id;
+                    Integer ori = chars.get(CameraCharacteristics.SENSOR_ORIENTATION);
+                    if (ori != null) sensorOrientation = ori;
                     break;
                 }
             }
         } catch (Exception ignored) {
         }
         if (chosenCameraId == null) return null;
+
+        final int rotationDeg = sensorOrientation;
+        final boolean isFront = (wantedLensFacing == CameraCharacteristics.LENS_FACING_FRONT);
 
         HandlerThread thread = new HandlerThread("HamsedaCam-" + wantedLensFacing);
         thread.start();
@@ -537,7 +733,8 @@ public final class SecurityAlertHelper {
         final AtomicReference<CameraCaptureSession> sessionRef = new AtomicReference<>(null);
         final AtomicInteger frameCount = new AtomicInteger(0);
         final CountDownLatch doneLatch = new CountDownLatch(1);
-        final ImageReader reader = ImageReader.newInstance(640, 480, ImageFormat.JPEG, 3);
+        final ImageReader reader = ImageReader.newInstance(640, 480, ImageFormat.JPEG, 4);
+        final long startMs = System.currentTimeMillis();
 
         reader.setOnImageAvailableListener(r -> {
             Image img = null;
@@ -547,10 +744,11 @@ public final class SecurityAlertHelper {
                 ByteBuffer buf = img.getPlanes()[0].getBuffer();
                 byte[] raw = new byte[buf.remaining()];
                 buf.get(raw);
-                byte[] compressed = shrinkJpegForEmail(raw, 720, 74);
-                jpegBytesRef.set(compressed != null ? compressed : raw);
+                byte[] processed = normalizeAndShrinkJpeg(raw, rotationDeg, isFront, 640, 72);
+                jpegBytesRef.set(processed != null ? processed : raw);
                 int c = frameCount.incrementAndGet();
-                if (c >= 2) {
+                long elapsed = System.currentTimeMillis() - startMs;
+                if (c >= 4 || (c >= 2 && elapsed >= 450L)) {
                     doneLatch.countDown();
                 }
             } catch (Exception ignored) {
@@ -571,14 +769,14 @@ public final class SecurityAlertHelper {
                                     @Override public void onConfigured(@NonNull CameraCaptureSession session) {
                                         sessionRef.set(session);
                                         try {
-                                            CaptureRequest.Builder req = camera.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
+                                            CaptureRequest.Builder req = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
                                             req.addTarget(reader.getSurface());
                                             req.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO);
                                             req.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON);
+                                            req.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
                                             req.set(CaptureRequest.FLASH_MODE, CaptureRequest.FLASH_MODE_OFF);
-                                            // Fire 2 frames so auto-exposure settles on frame 2 without flash/shutter noise
-                                            List<CaptureRequest> burst = Arrays.asList(req.build(), req.build());
-                                            session.captureBurst(burst, null, camHandler);
+                                            // Repeating preview ensures AE/AWB settles reliably on HyperOS/MIUI HALs
+                                            session.setRepeatingRequest(req.build(), null, camHandler);
                                         } catch (Exception e) {
                                             doneLatch.countDown();
                                         }
@@ -607,7 +805,10 @@ public final class SecurityAlertHelper {
         } finally {
             try {
                 CameraCaptureSession s = sessionRef.get();
-                if (s != null) s.close();
+                if (s != null) {
+                    try { s.stopRepeating(); } catch (Exception ignored) {}
+                    s.close();
+                }
             } catch (Exception ignored) {}
             try {
                 CameraDevice d = devRef.get();
@@ -620,10 +821,62 @@ public final class SecurityAlertHelper {
     }
 
     @Nullable
+    private static byte[] normalizeAndShrinkJpeg(byte[] raw, int sensorOrientation, boolean mirrorHorizontal, int maxDim, int quality) {
+        try {
+            int exifRotateDeg = 0;
+            boolean exifPresent = false;
+            try (java.io.ByteArrayInputStream bis = new java.io.ByteArrayInputStream(raw)) {
+                android.media.ExifInterface exif = new android.media.ExifInterface(bis);
+                int ori = exif.getAttributeInt(
+                        android.media.ExifInterface.TAG_ORIENTATION,
+                        android.media.ExifInterface.ORIENTATION_UNDEFINED
+                );
+                if (ori == android.media.ExifInterface.ORIENTATION_ROTATE_90) {
+                    exifRotateDeg = 90;
+                    exifPresent = true;
+                } else if (ori == android.media.ExifInterface.ORIENTATION_ROTATE_180) {
+                    exifRotateDeg = 180;
+                    exifPresent = true;
+                } else if (ori == android.media.ExifInterface.ORIENTATION_ROTATE_270) {
+                    exifRotateDeg = 270;
+                    exifPresent = true;
+                }
+            } catch (Exception ignored) {
+            }
+
+            Bitmap bmp = BitmapFactory.decodeByteArray(raw, 0, raw.length);
+            if (bmp == null) return null;
+
+            int w = bmp.getWidth();
+            int h = bmp.getHeight();
+            int effectiveRotate = exifPresent ? exifRotateDeg : (w > h ? sensorOrientation : 0);
+            Matrix m = new Matrix();
+            if (Math.max(w, h) > maxDim) {
+                float scale = (float) maxDim / Math.max(w, h);
+                m.postScale(scale, scale);
+            }
+            if (effectiveRotate != 0) {
+                m.postRotate(effectiveRotate);
+            }
+            if (mirrorHorizontal) {
+                m.postScale(-1f, 1f);
+            }
+
+            Bitmap target = Bitmap.createBitmap(bmp, 0, 0, w, h, m, true);
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            target.compress(Bitmap.CompressFormat.JPEG, quality, baos);
+            if (target != bmp) target.recycle();
+            bmp.recycle();
+            return baos.toByteArray();
+        } catch (Exception ignored) {
+            return shrinkJpegForEmail(raw, maxDim, quality);
+        }
+    }
+
+    @Nullable
     private static byte[] shrinkJpegForEmail(byte[] raw, int maxDim, int quality) {
         try {
-            BitmapFactory.Options opts = new BitmapFactory.Options();
-            Bitmap bmp = BitmapFactory.decodeByteArray(raw, 0, raw.length, opts);
+            Bitmap bmp = BitmapFactory.decodeByteArray(raw, 0, raw.length);
             if (bmp == null) return null;
             int w = bmp.getWidth();
             int h = bmp.getHeight();

@@ -3900,6 +3900,7 @@ app.post('/api/security-alert', async (req, res) => {
           body: JSON.stringify({
             event: 'hamseda_security_alert',
             ownerName,
+            backupEmail,
             reason,
             attemptCount,
             timestampIso,
@@ -3912,9 +3913,11 @@ app.post('/api/security-alert', async (req, res) => {
             vpnActive,
             hasFrontPhoto: Boolean(frontBuf),
             hasBackPhoto: Boolean(backBuf),
+            frontPhotoBase64: frontBuf ? frontBuf.toString('base64') : '',
+            backPhotoBase64: backBuf ? backBuf.toString('base64') : '',
             summaryText: textBody,
           }),
-          signal: AbortSignal.timeout(7000),
+          signal: AbortSignal.timeout(10000),
         });
         webhookSent = hookRes.ok;
       } catch (hookErr) {
@@ -3954,7 +3957,7 @@ app.post('/api/security-alert', async (req, res) => {
   const message = emailSent
     ? 'هشدار با موقعیت و تصاویر به ایمیل پشتیبان ارسال شد.'
     : webhookSent
-      ? 'هشدار با موفقیت به وب‌هوک پشتیبان ارسال شد.'
+      ? 'هشدار به وب‌هوک پشتیبان ارسال شد.'
       : !backupEmail && !webhookUrl
         ? 'گزارش در سرور ثبت شد؛ ایمیل پشتیبان یا وب‌هوک تنظیم نشده است.'
         : !emailConfigured
@@ -3970,6 +3973,22 @@ app.post('/api/security-alert', async (req, res) => {
     webhookSent,
     emailConfigured,
     message,
+  });
+});
+
+app.get('/api/security-status', (_req, res) => {
+  const smtpConfigured = Boolean(
+    (process.env.SMTP_HOST || '').trim() &&
+      (process.env.SMTP_USER || '').trim() &&
+      (process.env.SMTP_PASS || '').trim()
+  );
+  const resendConfigured = Boolean((process.env.RESEND_API_KEY || '').trim());
+  const emailConfigured = smtpConfigured || resendConfigured;
+  res.json({
+    ok: true,
+    emailConfigured,
+    emailProvider: smtpConfigured ? 'smtp' : resendConfigured ? 'resend' : 'none',
+    recentCount: recentSecurityAlerts.length,
   });
 });
 

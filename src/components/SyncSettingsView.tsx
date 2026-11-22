@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import {toPersianDigits, VOICE_PERSONAS} from '../data/persianLibrary';
 import {usePWAInstall} from '../hooks/usePWAInstall';
-import {getCloudApiBaseUrl, safeReadJsonResponse, setCloudApiBaseUrl} from '../services/apiConfig';
+import {apiUrl, getCloudApiBaseUrl, safeReadJsonResponse, setCloudApiBaseUrl} from '../services/apiConfig';
 import type {CoupleSpaceInfo} from '../services/coupleSyncService';
 import {
   clearSecurityAlertsLogNative,
@@ -258,27 +258,62 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
   const initialCallProfile = loadPersonalCallProfile();
   const [securityStatus, setSecurityStatus] = useState<SecurityGuardStatus | null>(null);
   const [guardEnabledDraft, setGuardEnabledDraft] = useState(false);
+  const [allowInAppBypassDraft, setAllowInAppBypassDraft] = useState(true);
   const [powerPinInput, setPowerPinInput] = useState('');
   const [backupSecurityEmail, setBackupSecurityEmail] = useState(initialCallProfile.backupSecurityEmail);
   const [securityWebhookUrl, setSecurityWebhookUrl] = useState(initialCallProfile.securityWebhookUrl);
   const [savingSecurity, setSavingSecurity] = useState(false);
   const [testingGuard, setTestingGuard] = useState(false);
+  const [sendingTestAlert, setSendingTestAlert] = useState(false);
+  const [serverEmailStatus, setServerEmailStatus] = useState<{
+    checked: boolean;
+    emailConfigured: boolean;
+    emailProvider?: string;
+    reachable: boolean;
+  }>({checked: false, emailConfigured: false, reachable: false});
+  const [showAppsScriptGuide, setShowAppsScriptGuide] = useState(false);
+  const [copiedAppsScript, setCopiedAppsScript] = useState(false);
 
   const [homeAddressDraft, setHomeAddressDraft] = useState(initialCallProfile.homeAddress);
   const [callbackPhoneDraft, setCallbackPhoneDraft] = useState(initialCallProfile.callbackPhone);
   const [voipWebhookDraft, setVoipWebhookDraft] = useState(initialCallProfile.voipWebhookUrl);
+
+  const refreshServerSecurityStatus = async () => {
+    try {
+      const res = await fetch(apiUrl('/api/security-status'));
+      const parsed = await safeReadJsonResponse<{
+        ok?: boolean;
+        emailConfigured?: boolean;
+        emailProvider?: string;
+      }>(res);
+      if (res.ok && !parsed.isHtml && parsed.data?.ok) {
+        setServerEmailStatus({
+          checked: true,
+          emailConfigured: Boolean(parsed.data.emailConfigured),
+          emailProvider: parsed.data.emailProvider,
+          reachable: true,
+        });
+      } else {
+        setServerEmailStatus({checked: true, emailConfigured: false, reachable: false});
+      }
+    } catch {
+      setServerEmailStatus({checked: true, emailConfigured: false, reachable: false});
+    }
+  };
 
   const refreshSecurityStatus = async () => {
     if (!isNativeAndroid()) return;
     const status = await getSecurityGuardStatusNative();
     setSecurityStatus(status);
     setGuardEnabledDraft(status.enabled);
+    setAllowInAppBypassDraft(status.allowInAppBypass !== false);
     if (status.backupEmail && !backupSecurityEmail) setBackupSecurityEmail(status.backupEmail);
     if (status.webhookUrl && !securityWebhookUrl) setSecurityWebhookUrl(status.webhookUrl);
   };
 
   useEffect(() => {
     void refreshSecurityStatus();
+    void refreshServerSecurityStatus();
     const onProfileUpdated = () => {
       const p = loadPersonalCallProfile();
       setHomeAddressDraft(p.homeAddress);
@@ -287,8 +322,21 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
       setBackupSecurityEmail(p.backupSecurityEmail);
       setSecurityWebhookUrl(p.securityWebhookUrl);
     };
+    const onReturnToApp = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshSecurityStatus();
+        setTimeout(() => void refreshSecurityStatus(), 1600);
+        setTimeout(() => void refreshSecurityStatus(), 3400);
+      }
+    };
     window.addEventListener('hamseda:profile-updated', onProfileUpdated);
-    return () => window.removeEventListener('hamseda:profile-updated', onProfileUpdated);
+    document.addEventListener('visibilitychange', onReturnToApp);
+    window.addEventListener('focus', onReturnToApp);
+    return () => {
+      window.removeEventListener('hamseda:profile-updated', onProfileUpdated);
+      document.removeEventListener('visibilitychange', onReturnToApp);
+      window.removeEventListener('focus', onReturnToApp);
+    };
   }, []);
 
   const exportPayload = JSON.stringify(
@@ -1121,18 +1169,104 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
-              وب‌هوک پشتیبان HTTPS (اختیاری — تلگرام/سرور)
+              وب‌هوک پشتیبان HTTPS (اختیاری — جیمیل/تلگرام/سرور)
             </label>
             <input
               type="url"
               dir="ltr"
               value={securityWebhookUrl}
               onChange={(e) => setSecurityWebhookUrl(e.target.value)}
-              placeholder="https://your-relay.example.com/alert"
+              placeholder="https://script.google.com/macros/s/.../exec"
               className="w-full min-h-[44px] px-3.5 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50/70 dark:bg-[#0B1312] text-xs font-mono-num text-slate-900 dark:text-white"
             />
           </div>
         </div>
+
+        <label className="flex items-start gap-2.5 rounded-xl border border-emerald-200/80 dark:border-emerald-900/70 bg-emerald-50/60 dark:bg-emerald-950/25 p-3 text-xs text-slate-800 dark:text-slate-200 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={allowInAppBypassDraft}
+            onChange={(e) => setAllowInAppBypassDraft(e.target.checked)}
+            className="mt-0.5 accent-emerald-700"
+          />
+          <span>
+            <strong>وقتی خودم داخل برنامه هم‌صدا هستم، قفل پاور مزاحم نشود (پیشنهادی)</strong>
+            <span className="block mt-1 text-[11px] leading-5 text-slate-600 dark:text-slate-400">
+              با روشن بودن این گزینه، تا زمانی که داخل هم‌صدا هستید برنامه تشخیص می‌دهد خودِ صاحب گوشی هستید و از بیرون‌پریدن ناخواسته جلوگیری می‌شود؛ اما روی صفحه قفل یا بیرون از برنامه قفل پاور کاملاً فعال می‌ماند.
+            </span>
+          </span>
+        </label>
+
+        {serverEmailStatus.checked && (
+          <div
+            className={`rounded-xl border p-3.5 text-xs leading-6 ${
+              serverEmailStatus.emailConfigured
+                ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
+                : 'bg-amber-50/80 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800 text-amber-950 dark:text-amber-100'
+            }`}
+          >
+            {serverEmailStatus.emailConfigured ? (
+              <span>
+                ارسال خودکار ایمیل از سرور فعال است ({serverEmailStatus.emailProvider}). همچنین در صورت قطع دسترسی به سرور، اگر وب‌هوک HTTPS وارد شده باشد مستقیماً از گوشی ارسال می‌شود.
+              </span>
+            ) : !serverEmailStatus.reachable ? (
+              <span>
+                سرور هم‌صدا در این لحظه در دسترس نیست (نشانی سرور یا اینترنت/فیلترشکن را چک کنید). اگر یک <strong>وب‌هوک HTTPS</strong> وارد کنید، گوشی مستقیماً روی وای‌فای هم عکس‌ها و لوکیشن را می‌فرستد.
+              </span>
+            ) : (
+              <div className="space-y-2">
+                <div>
+                  <strong>چرا ایمیل نیامد؟</strong> روی سرور فعلی هنوز تنظیمات ارسال ایمیل (<code dir="ltr">SMTP_*</code> یا <code dir="ltr">RESEND_API_KEY</code>) فعال نشده است؛ بنابراین هشدارها فقط روی گوشی و سرور ذخیره می‌شوند مگر اینکه یا از وب‌هوک شخصی استفاده کنید یا SMTP را در سرور قرار دهید.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAppsScriptGuide((prev) => !prev)}
+                  className="text-xs font-bold text-emerald-800 dark:text-amber-300 underline cursor-pointer"
+                >
+                  {showAppsScriptGuide
+                    ? 'بستن راهنمای ارسال رایگان به جیمیل بدون نیاز به VPN و سرور'
+                    : 'راه‌حل ۵ دقیقه‌ای: ارسال واقعی عکس‌ها و لوکیشن به جیمیل با وای‌فای ایران (بدون VPN)'}
+                </button>
+                {showAppsScriptGuide && (
+                  <div className="rounded-lg bg-white/90 dark:bg-[#0B1312] border border-amber-200 dark:border-emerald-900 p-3 space-y-2 text-[11px] leading-5 text-slate-700 dark:text-slate-200">
+                    <p>
+                      ۱. وارد <code dir="ltr">script.google.com</code> شوید و یک پروژه جدید بسازید؛ کد زیر را داخلش بگذارید و گزینه <strong>Deploy ← New deployment ← Web app (Anyone)</strong> را بزنید و لینک <code dir="ltr">https://script.google.com/.../exec</code> را در فیلد <strong>وب‌هوک پشتیبان</strong> بالا ذخیره کنید:
+                    </p>
+                    <pre dir="ltr" className="p-2 rounded bg-slate-900 text-emerald-200 text-[10px] overflow-x-auto">
+{`function doPost(e) {
+  var d = JSON.parse(e.postData.contents);
+  var to = d.backupEmail || Session.getActiveUser().getEmail();
+  var body = "هشدار هم‌صدا\\nدستگاه: " + d.deviceModel + "\\nزمان: " + d.timestampIso + "\\nنقشه: " + (d.mapsUrl || "ناموجود");
+  var atts = [];
+  if (d.frontPhotoBase64) atts.push(Utilities.newBlob(Utilities.base64Decode(d.frontPhotoBase64), "image/jpeg", "selfie.jpg"));
+  if (d.backPhotoBase64) atts.push(Utilities.newBlob(Utilities.base64Decode(d.backPhotoBase64), "image/jpeg", "rear.jpg"));
+  MailApp.sendEmail({ to: to, subject: "هشدار ضدسرقت هم‌صدا", body: body, attachments: atts });
+  return ContentService.createTextOutput(JSON.stringify({ ok: true })).setMimeType(ContentService.MimeType.JSON);
+}`}
+                    </pre>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const snippet = `function doPost(e) {\n  var d = JSON.parse(e.postData.contents);\n  var to = d.backupEmail || Session.getActiveUser().getEmail();\n  var body = "هشدار هم‌صدا\\nدستگاه: " + d.deviceModel + "\\nزمان: " + d.timestampIso + "\\nنقشه: " + (d.mapsUrl || "ناموجود");\n  var atts = [];\n  if (d.frontPhotoBase64) atts.push(Utilities.newBlob(Utilities.base64Decode(d.frontPhotoBase64), "image/jpeg", "selfie.jpg"));\n  if (d.backPhotoBase64) atts.push(Utilities.newBlob(Utilities.base64Decode(d.backPhotoBase64), "image/jpeg", "rear.jpg"));\n  MailApp.sendEmail({ to: to, subject: "هشدار ضدسرقت هم‌صدا", body: body, attachments: atts });\n  return ContentService.createTextOutput(JSON.stringify({ ok: true })).setMimeType(ContentService.MimeType.JSON);\n}`;
+                        try {
+                          await navigator.clipboard.writeText(snippet);
+                          setCopiedAppsScript(true);
+                          setTimeout(() => setCopiedAppsScript(false), 2500);
+                          onStatusToast('کد ارسال ایمیل جیمیل کپی شد.');
+                        } catch {
+                          onStatusToast('لطفاً کد را به‌صورت دستی کپی کنید.');
+                        }
+                      }}
+                      className="min-h-[34px] px-3 rounded-lg bg-emerald-700 text-white text-[11px] font-semibold cursor-pointer"
+                    >
+                      {copiedAppsScript ? 'کپی شد ✓' : 'کپی کد ارسال به جیمیل'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center gap-2.5">
           <button
@@ -1154,9 +1288,11 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
                   backupSecurityEmail: backupSecurityEmail.trim(),
                   securityWebhookUrl: securityWebhookUrl.trim(),
                 });
+                void refreshServerSecurityStatus();
                 if (isNativeAndroid()) {
                   const res = await setSecurityGuardConfigNative({
                     enabled: guardEnabledDraft,
+                    allowInAppBypass: allowInAppBypassDraft,
                     pin: trimmedPin || undefined,
                     backupEmail: backupSecurityEmail.trim(),
                     webhookUrl: securityWebhookUrl.trim(),
@@ -1177,6 +1313,47 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
             className="min-h-[44px] px-5 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white text-xs sm:text-sm font-semibold cursor-pointer"
           >
             {savingSecurity ? 'در حال ذخیره...' : 'ذخیره رمز و تنظیمات ضدسرقت'}
+          </button>
+
+          <button
+            type="button"
+            disabled={sendingTestAlert}
+            onClick={async () => {
+              setSendingTestAlert(true);
+              try {
+                const res = await fetch(apiUrl('/api/security-alert'), {
+                  method: 'POST',
+                  headers: {'Content-Type': 'application/json'},
+                  body: JSON.stringify({
+                    ownerName: selfName,
+                    backupEmail: backupSecurityEmail.trim(),
+                    webhookUrl: securityWebhookUrl.trim(),
+                    reason: 'web_connection_test',
+                    attemptCount: 1,
+                    networkType: isNativeAndroid() ? securityStatus?.networkType || 'android' : 'web',
+                  }),
+                });
+                const parsed = await safeReadJsonResponse<{
+                  ok?: boolean;
+                  emailSent?: boolean;
+                  webhookSent?: boolean;
+                  message?: string;
+                }>(res);
+                if (res.ok && parsed.data?.ok) {
+                  onStatusToast(parsed.data.message || 'تست ارسال با سرور انجام شد.');
+                } else {
+                  onStatusToast('ارتباط با مسیر هشدار سرور برقرار نشد.');
+                }
+                void refreshServerSecurityStatus();
+              } catch {
+                onStatusToast('خطا در اتصال به سرور؛ نشانی سرور و اینترنت را بررسی کنید.');
+              } finally {
+                setSendingTestAlert(false);
+              }
+            }}
+            className="min-h-[44px] px-4 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50 dark:bg-[#0B1312] text-slate-700 dark:text-slate-200 text-xs font-semibold cursor-pointer disabled:opacity-50"
+          >
+            {sendingTestAlert ? 'در حال تست ارسال...' : 'تست ارسال به ایمیل / وب‌هوک'}
           </button>
 
           {nativeCaps.isNative && (
@@ -1212,7 +1389,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
                     if (!res.ok) {
                       onStatusToast(res.message || 'ابتدا رمز خاموش‌شدن را ذخیره کنید.');
                     } else {
-                      onStatusToast('صفحه قفل آزمایشی باز شد. برای تست ثبت هشدار یک رمز اشتباه وارد کنید.');
+                      onStatusToast('صفحه قفل آزمایشی باز شد. یک رمز اشتباه بزنید تا سلفی، عکس پشت و لوکیشن ثبت و نمایش داده شود.');
                     }
                     await refreshSecurityStatus();
                   } finally {
@@ -1263,7 +1440,14 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
                   <span className="text-xs font-bold text-slate-900 dark:text-white">
                     آخرین هشدارهای امنیتی ثبت‌شده روی گوشی
                   </span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void refreshSecurityStatus()}
+                      className="min-h-[36px] px-3 rounded-lg border border-slate-200 dark:border-emerald-900 bg-white dark:bg-[#121E1C] text-[11px] font-semibold text-slate-700 dark:text-slate-200 cursor-pointer"
+                    >
+                      بروزرسانی عکس‌ها و وضعیت
+                    </button>
                     <button
                       type="button"
                       onClick={async () => {
@@ -1288,29 +1472,65 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
                     </button>
                   </div>
                 </div>
-                <div className="space-y-2 max-h-48 overflow-y-auto">
+                <div className="space-y-3 max-h-96 overflow-y-auto">
                   {securityStatus.recentAlerts.map((al) => (
                     <div
                       key={al.id}
-                      className="rounded-lg bg-white dark:bg-[#121E1C] border border-slate-200/70 dark:border-emerald-950 px-3 py-2 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                      className="rounded-lg bg-white dark:bg-[#121E1C] border border-slate-200/70 dark:border-emerald-950 p-3 text-xs space-y-2.5"
                     >
-                      <div className="space-y-0.5">
-                        <div className="font-semibold text-slate-900 dark:text-white">
-                          {al.reason} (تلاش {toPersianDigits(al.attemptCount)})
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="space-y-0.5">
+                          <div className="font-semibold text-slate-900 dark:text-white">
+                            {al.reason === 'power_guard_test_wrong_pin'
+                              ? 'آزمایش رمز اشتباه'
+                              : al.reason === 'power_guard_test_dismiss'
+                                ? 'آزمایش بستن بدون رمز'
+                                : al.reason === 'power_off_wrong_pin'
+                                  ? 'تلاش خاموش‌کردن با رمز اشتباه'
+                                  : al.reason === 'power_off_dismissed_without_pin'
+                                    ? 'بستن قفل پاور بدون رمز'
+                                    : al.reason}{' '}
+                            (تلاش {toPersianDigits(al.attemptCount)})
+                          </div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                            {al.timestampIso} · سلفی: {al.hasFrontPhoto ? 'ثبت شد ✓' : 'ناموفق ✗'} · پشت: {al.hasBackPhoto ? 'ثبت شد ✓' : 'ناموفق ✗'} · {al.dispatchStatus || (al.sent ? 'ارسال‌شده' : 'در صف')}
+                          </div>
                         </div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                          {al.timestampIso} · سلفی: {al.hasFrontPhoto ? 'ثبت شد' : 'خیر'} · پشت: {al.hasBackPhoto ? 'ثبت شد' : 'خیر'} · {al.dispatchStatus || (al.sent ? 'ارسال‌شده' : 'در صف')}
-                        </div>
+                        {al.mapsUrl && (
+                          <a
+                            href={al.mapsUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 hover:underline shrink-0"
+                          >
+                            مشاهده روی نقشه گوگل
+                          </a>
+                        )}
                       </div>
-                      {al.mapsUrl && (
-                        <a
-                          href={al.mapsUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 hover:underline shrink-0"
-                        >
-                          مشاهده روی نقشه گوگل
-                        </a>
+
+                      {(al.frontPreviewDataUrl || al.backPreviewDataUrl) && (
+                        <div className="grid grid-cols-2 gap-2.5 pt-1">
+                          {al.frontPreviewDataUrl && (
+                            <div className="space-y-1">
+                              <div className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">عکس سلفی</div>
+                              <img
+                                src={al.frontPreviewDataUrl}
+                                alt="Selfie alert capture"
+                                className="w-full h-32 object-cover rounded-lg border border-slate-200 dark:border-emerald-900"
+                              />
+                            </div>
+                          )}
+                          {al.backPreviewDataUrl && (
+                            <div className="space-y-1">
+                              <div className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">عکس دوربین پشت</div>
+                              <img
+                                src={al.backPreviewDataUrl}
+                                alt="Rear camera alert capture"
+                                className="w-full h-32 object-cover rounded-lg border border-slate-200 dark:border-emerald-900"
+                              />
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                   ))}
@@ -1325,7 +1545,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
           <ul className="list-disc list-inside space-y-1">
             <li>نگه‌داشتن ۱۰ ثانیه‌ای دکمه پاور در سطح سخت‌افزار گوشی انجام می‌شود و هیچ اپلیکیشنی امکان مسدود کردن قطع برق تراشه را ندارد؛ اما منوی عادی خاموش/ری‌استارت با سرویس دسترس‌پذیری متوقف می‌شود.</li>
             <li>روی گوشی‌های HyperOS / MIUI حتماً از تنظیمات گوشی گزینه <strong>غیرفعال کردن کنترل‌سنتر و منوی پاور در صفحه قفل</strong> را روشن کنید تا سارق نتواند در حالت قفل اینترنت را ببندد.</li>
-            <li>اندروید به برنامه‌های عادی اجازه روشن کردن خودکار دیتای موبایل، GPS یا اپلیکیشن VPN دیگر را نمی‌دهد؛ اما به محض برقراری اینترنت، عکس سلفی، عکس پشت و لوکیشن از صف آفلاین گوشی ارسال می‌شوند.</li>
+            <li>اندروید به برنامه‌های عادی اجازه روشن کردن خودکار دیتای موبایل، GPS یا اپلیکیشن VPN دیگر را نمی‌دهد؛ اما روی وای‌فای یا دیتای موبایل به‌محض اتصال، عکس‌ها و لوکیشن ارسال می‌شوند.</li>
           </ul>
         </div>
       </section>

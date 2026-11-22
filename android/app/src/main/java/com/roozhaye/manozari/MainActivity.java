@@ -8,6 +8,12 @@ import java.util.concurrent.TimeUnit;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
+    private static volatile boolean foregroundActive = false;
+
+    public static boolean isInForeground() {
+        return foregroundActive;
+    }
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(RoozhayeNativePlugin.class);
@@ -16,5 +22,17 @@ public class MainActivity extends BridgeActivity {
         WorkManager.getInstance(getApplicationContext()).enqueueUniquePeriodicWork(
                 "hamseda-github-update-check", ExistingPeriodicWorkPolicy.KEEP, updateCheck);
         WorkManager.getInstance(getApplicationContext()).enqueue(new androidx.work.OneTimeWorkRequest.Builder(GithubUpdateWorker.class).build());
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        foregroundActive = true;
+    }
+
+    @Override
+    public void onPause() {
+        foregroundActive = false;
+        super.onPause();
     }
 }

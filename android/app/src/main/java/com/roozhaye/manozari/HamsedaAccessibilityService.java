@@ -48,15 +48,21 @@ public class HamsedaAccessibilityService extends AccessibilityService {
         }
 
         // 1. Optional Anti-Theft Power-Off Menu Guard
-        CharSequence pkgCs = event.getPackageName();
-        String pkg = pkgCs != null ? pkgCs.toString().toLowerCase(Locale.ROOT) : "";
-        if (!getPackageName().equals(pkg)
-                && !"com.android.settings".equals(pkg)
+        // Never interrupt while owner is inside Hamseda (when enabled) or while PowerGuardActivity is already visible
+        if (!PowerGuardActivity.isShowing()
+                && (!SecurityAlertHelper.isOwnerInAppBypassEnabled(this) || !MainActivity.isInForeground())
                 && SecurityAlertHelper.isEnabledAndConfigured(this)
                 && !SecurityAlertHelper.isInUnlockGraceWindow(this)) {
-            if (isSystemPowerMenuVisible(pkg)) {
+            CharSequence pkgCs = event.getPackageName();
+            String pkg = pkgCs != null ? pkgCs.toString().toLowerCase(Locale.ROOT) : "";
+            String myPkg = getPackageName().toLowerCase(Locale.ROOT);
+            if (!myPkg.equals(pkg)
+                    && !"com.android.settings".equals(pkg)
+                    && !pkg.contains("inputmethod")
+                    && !pkg.contains("keyboard")
+                    && isSystemPowerMenuVisible(pkg, myPkg)) {
                 long now = System.currentTimeMillis();
-                if (now - lastPowerGuardTriggeredAtMs > 2800L) {
+                if (now - lastPowerGuardTriggeredAtMs > 3500L) {
                     lastPowerGuardTriggeredAtMs = now;
                     performGlobalAction(GLOBAL_ACTION_BACK);
                     PowerGuardActivity.launch(this, "power_menu_intercept", false);
@@ -74,32 +80,58 @@ public class HamsedaAccessibilityService extends AccessibilityService {
         }
     }
 
-    private boolean isSystemPowerMenuVisible(String eventPackage) {
-        boolean isSystemOverlayPkg = eventPackage.isEmpty()
-                || "android".equals(eventPackage)
-                || eventPackage.contains("systemui")
-                || eventPackage.contains("power")
-                || eventPackage.contains("miui")
-                || eventPackage.contains("globalactions");
-        if (!isSystemOverlayPkg) return false;
+    private static final class PowerMenuScanResult {
+        boolean hasGlobalActionsId = false;
+        boolean hasPowerOffAction = false;
+        boolean hasCompanionAction = false;
+        boolean looksLikeQuickSettingsOrApp = false;
+        int visitedNodes = 0;
+    }
+
+    private boolean isAllowedSystemPowerPackage(String pkg, String myPkg) {
+        if (pkg == null || pkg.isEmpty()) return false;
+        if (pkg.equals(myPkg) || pkg.equals("com.android.settings") || pkg.contains("securitycenter") || pkg.contains("launcher")) {
+            return false;
+        }
+        return "android".equals(pkg)
+                || "com.android.systemui".equals(pkg)
+                || pkg.contains("globalactions")
+                || pkg.contains("powermenu")
+                || pkg.contains("poweroff")
+                || pkg.contains("miui.power");
+    }
+
+    private boolean isSystemPowerMenuVisible(String eventPackage, String myPkg) {
+        if (!isAllowedSystemPowerPackage(eventPackage, myPkg)) {
+            return false;
+        }
 
         AccessibilityNodeInfo activeRoot = getRootInActiveWindow();
-        if (activeRoot != null && containsPowerMenuAction(activeRoot, 0)) {
-            return true;
+        if (activeRoot != null) {
+            CharSequence rootPkgCs = activeRoot.getPackageName();
+            String rootPkg = rootPkgCs != null ? rootPkgCs.toString().toLowerCase(Locale.ROOT) : "";
+            if (isAllowedSystemPowerPackage(rootPkg, myPkg) && matchesStrictPowerMenu(activeRoot)) {
+                return true;
+            }
         }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             try {
                 List<AccessibilityWindowInfo> windows = getWindows();
                 if (windows != null) {
                     for (AccessibilityWindowInfo win : windows) {
+                        if (win == null) continue;
+                        int wType = win.getType();
+                        if (wType != AccessibilityWindowInfo.TYPE_SYSTEM
+                                && wType != AccessibilityWindowInfo.TYPE_APPLICATION) {
+                            continue;
+                        }
                         AccessibilityNodeInfo root = win.getRoot();
                         if (root != null) {
                             CharSequence winPkgCs = root.getPackageName();
                             String winPkg = winPkgCs != null ? winPkgCs.toString().toLowerCase(Locale.ROOT) : "";
-                            if (!getPackageName().equals(winPkg) && !"com.android.settings".equals(winPkg)) {
-                                if (containsPowerMenuAction(root, 0)) {
-                                    return true;
-                                }
+                            if (isAllowedSystemPowerPackage(winPkg, myPkg) && matchesStrictPowerMenu(root)) {
+                                return true;
                             }
                         }
                     }
@@ -110,8 +142,44 @@ public class HamsedaAccessibilityService extends AccessibilityService {
         return false;
     }
 
-    private boolean containsPowerMenuAction(AccessibilityNodeInfo node, int depth) {
-        if (node == null || depth > 7) return false;
+    private boolean matchesStrictPowerMenu(AccessibilityNodeInfo root) {
+        PowerMenuScanResult scan = new PowerMenuScanResult();
+        scanPowerMenuTree(root, 0, scan);
+        if (scan.looksLikeQuickSettingsOrApp) {
+            return false;
+        }
+        return scan.hasGlobalActionsId || (scan.hasPowerOffAction && scan.hasCompanionAction);
+    }
+
+    private void scanPowerMenuTree(AccessibilityNodeInfo node, int depth, PowerMenuScanResult scan) {
+        if (node == null || depth > 7 || scan.visitedNodes > 80 || scan.looksLikeQuickSettingsOrApp) {
+            return;
+        }
+        scan.visitedNodes++;
+
+        String viewId = node.getViewIdResourceName() != null
+                ? node.getViewIdResourceName().toLowerCase(Locale.ROOT)
+                : "";
+        if (!viewId.isEmpty()) {
+            if (viewId.contains("notification_panel")
+                    || viewId.contains("quick_settings")
+                    || viewId.contains("qs_panel")
+                    || viewId.contains("qs_tile")
+                    || viewId.contains("control_center")
+                    || viewId.contains("miui_control")
+                    || viewId.contains("volume_dialog")
+                    || viewId.contains("notification_stack")) {
+                scan.looksLikeQuickSettingsOrApp = true;
+                return;
+            }
+            if (viewId.contains("global_actions")
+                    || viewId.contains("globalactions")
+                    || viewId.contains("power_off")
+                    || viewId.contains("shutdown_slider")) {
+                scan.hasGlobalActionsId = true;
+            }
+        }
+
         CharSequence t = node.getText();
         CharSequence d = node.getContentDescription();
         String label = ((t == null ? "" : t.toString()) + " " + (d == null ? "" : d.toString()))
@@ -121,31 +189,45 @@ public class HamsedaAccessibilityService extends AccessibilityService {
                 .trim();
 
         if (!label.isEmpty() && node.isVisibleToUser()) {
-            boolean isPowerOff = label.contains("power off")
+            if (label.contains("وای‌فای")
+                    || label.contains("وای فای")
+                    || label.contains("بلوتوث")
+                    || label.contains("داده همراه")
+                    || label.contains("نقطه اتصال")
+                    || label.contains("چراغ قوه")
+                    || label.contains("چراغ‌قوه")
+                    || label.contains("قفل خاموش کردن گوشی")
+                    || label.contains("تنظیمات دسترس‌پذیری")) {
+                scan.looksLikeQuickSettingsOrApp = true;
+                return;
+            }
+            if (label.contains("power off")
                     || label.contains("poweroff")
-                    || label.contains("turn off")
                     || label.contains("shut down")
                     || label.contains("shutdown")
+                    || label.contains("tap to power off")
                     || label.contains("خاموش کردن")
-                    || label.equals("خاموش")
-                    || label.contains("توقف کار");
-            boolean isReboot = label.equals("restart")
+                    || label.contains("برای خاموش شدن")) {
+                scan.hasPowerOffAction = true;
+            }
+            if (label.equals("restart")
                     || label.contains("reboot")
                     || label.contains("راه‌اندازی مجدد")
                     || label.contains("راه اندازی مجدد")
-                    || label.contains("شروع مجدد");
-            if (isPowerOff || isReboot) {
-                return true;
+                    || label.contains("شروع مجدد")
+                    || label.contains("emergency")
+                    || label.contains("اضطراری")
+                    || label.contains("airplane")
+                    || label.contains("حالت هواپیما")
+                    || label.contains("lockdown")) {
+                scan.hasCompanionAction = true;
             }
         }
 
         int childCount = Math.min(20, node.getChildCount());
         for (int i = 0; i < childCount; i++) {
-            if (containsPowerMenuAction(node.getChild(i), depth + 1)) {
-                return true;
-            }
+            scanPowerMenuTree(node.getChild(i), depth + 1, scan);
         }
-        return false;
     }
 
     private boolean clickCameraShutter(AccessibilityNodeInfo node) {

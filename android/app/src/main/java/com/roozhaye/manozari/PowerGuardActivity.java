@@ -7,6 +7,8 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.InputType;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -20,21 +22,29 @@ import androidx.appcompat.app.AppCompatActivity;
 
 /**
  * Lockscreen-capable Power-Off Guard screen.
- * Appears when the Power/Restart menu is intercepted by HamsedaAccessibilityService
- * (or during a user test). Requires the separate Power-Off PIN before allowing the
- * power menu for a 20-second grace window. Wrong attempts or dismiss attempts trigger
- * stealth selfie + rear snapshot + GPS location capture & alert queue.
+ * Keeps foreground Activity exemption alive while capturing front+back Camera2 snapshots
+ * and location so Android 11-16 never blocks camera access.
  */
 public class PowerGuardActivity extends AppCompatActivity {
     public static final String EXTRA_REASON = "guard_reason";
     public static final String EXTRA_IS_TEST = "is_test";
 
+    private static volatile boolean showing = false;
+
     private int failedAttempts = 0;
     private boolean unlocked = false;
     private boolean evidenceCapturedOnExit = false;
+    private boolean dismissingWithCapture = false;
     private boolean isTestMode = false;
     private EditText pinInput;
     private TextView errorView;
+    private Button verifyBtn;
+    private Button cancelBtn;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+
+    public static boolean isShowing() {
+        return showing;
+    }
 
     public static void launch(Context ctx, String reason, boolean isTest) {
         Intent i = new Intent(ctx, PowerGuardActivity.class);
@@ -60,6 +70,25 @@ public class PowerGuardActivity extends AppCompatActivity {
 
         isTestMode = getIntent() != null && getIntent().getBooleanExtra(EXTRA_IS_TEST, false);
         buildUi();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        showing = true;
+    }
+
+    @Override
+    protected void onPause() {
+        showing = false;
+        super.onPause();
+    }
+
+    @Override
+    protected void onDestroy() {
+        showing = false;
+        mainHandler.removeCallbacksAndMessages(null);
+        super.onDestroy();
     }
 
     private void buildUi() {
@@ -90,7 +119,7 @@ public class PowerGuardActivity extends AppCompatActivity {
 
         TextView subtitle = new TextView(this);
         subtitle.setText(isTestMode
-                ? "حالت آزمایش قفل خاموش‌شدن گوشی فعال است. وارد کردن رمز اشتباه ثبت هشدار آزمایشی را فعال می‌کند."
+                ? "حالت آزمایش قفل خاموش‌شدن گوشی: برای ثبت واقعی عکس سلفی، دوربین پشت و لوکیشن یک رمز اشتباه بزنید (یا انصراف بزنید تا نتیجه در تنظیمات نمایش داده شود)."
                 : "برای خاموش یا راه‌اندازی مجدد گوشی، رمز امنیتی خاموش‌شدن را وارد کنید.");
         subtitle.setTextColor(Color.parseColor("#B5C9C3"));
         subtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
@@ -130,7 +159,7 @@ public class PowerGuardActivity extends AppCompatActivity {
         errLp.topMargin = dp(10);
         card.addView(errorView, errLp);
 
-        Button verifyBtn = new Button(this);
+        verifyBtn = new Button(this);
         verifyBtn.setText("تأیید رمز و اجازه خاموش کردن");
         verifyBtn.setAllCaps(false);
         verifyBtn.setTextColor(Color.WHITE);
@@ -149,7 +178,7 @@ public class PowerGuardActivity extends AppCompatActivity {
         verifyBtn.setOnClickListener(v -> handleVerifyAttempt());
         card.addView(verifyBtn, btnLp);
 
-        Button cancelBtn = new Button(this);
+        cancelBtn = new Button(this);
         cancelBtn.setText("انصراف و بازگشت");
         cancelBtn.setAllCaps(false);
         cancelBtn.setTextColor(Color.parseColor("#CBD5E1"));
@@ -175,6 +204,7 @@ public class PowerGuardActivity extends AppCompatActivity {
     }
 
     private void handleVerifyAttempt() {
+        if (dismissingWithCapture) return;
         String candidate = pinInput.getText() != null ? pinInput.getText().toString() : "";
         if (SecurityAlertHelper.verifyPin(this, candidate)) {
             unlocked = true;
@@ -184,26 +214,77 @@ public class PowerGuardActivity extends AppCompatActivity {
         }
         failedAttempts += 1;
         pinInput.setText("");
-        errorView.setText("رمز اشتباه است. لطفاً رمز امنیتی خاموش‌شدن را درست وارد کنید.");
+        errorView.setText(isTestMode
+                ? "رمز اشتباه بود — در حال ثبت سلفی، دوربین پشت و موقعیت مکانی..."
+                : "رمز اشتباه است. لطفاً رمز امنیتی خاموش‌شدن را درست وارد کنید.");
+        errorView.setTextColor(Color.parseColor(isTestMode ? "#FBBF24" : "#F87171"));
         errorView.setVisibility(View.VISIBLE);
         evidenceCapturedOnExit = true;
+
         SecurityAlertHelper.captureEvidenceAndQueueAlertAsync(
                 this,
                 isTestMode ? "power_guard_test_wrong_pin" : "power_off_wrong_pin",
-                failedAttempts
+                failedAttempts,
+                record -> {
+                    if (!isTestMode || isFinishing() || isDestroyed()) return;
+                    if (record == null) {
+                        errorView.setText("درخواست ثبت شد (یا قبلاً در حال ثبت بود). صفحه تنظیمات را ببینید.");
+                        errorView.setTextColor(Color.parseColor("#34D399"));
+                        return;
+                    }
+                    boolean hasF = !record.optString("frontPhotoBase64", "").isEmpty();
+                    boolean hasB = !record.optString("backPhotoBase64", "").isEmpty();
+                    boolean hasLoc = !record.optString("mapsUrl", "").isEmpty();
+                    errorView.setText("ثبت شد — سلفی: " + (hasF ? "✓" : "✗")
+                            + " | پشت: " + (hasB ? "✓" : "✗")
+                            + " | لوکیشن: " + (hasLoc ? "✓" : "✗")
+                            + "\nالان «انصراف و بازگشت» را بزنید تا عکس‌ها را در تنظیمات ببینید.");
+                    errorView.setTextColor(Color.parseColor("#34D399"));
+                }
         );
     }
 
     private void handleUnauthorizedDismiss() {
+        if (unlocked || evidenceCapturedOnExit) {
+            finish();
+            return;
+        }
+        if (dismissingWithCapture) return;
+        dismissingWithCapture = true;
+        if (verifyBtn != null) verifyBtn.setEnabled(false);
+        if (cancelBtn != null) cancelBtn.setEnabled(false);
+        evidenceCapturedOnExit = true;
+
+        // Keep PowerGuardActivity in foreground until Camera2 snapshots finish (max 4.2s safety cap)
+        final Runnable safetyFinish = () -> {
+            if (!isFinishing() && !isDestroyed()) finish();
+        };
+        mainHandler.postDelayed(safetyFinish, 4200L);
+
+        SecurityAlertHelper.captureEvidenceAndQueueAlertAsync(
+                this,
+                isTestMode ? "power_guard_test_dismiss" : "power_off_dismissed_without_pin",
+                Math.max(1, failedAttempts),
+                record -> {
+                    mainHandler.removeCallbacks(safetyFinish);
+                    if (!isFinishing() && !isDestroyed()) {
+                        finish();
+                    }
+                }
+        );
+    }
+
+    @Override
+    protected void onUserLeaveHint() {
+        super.onUserLeaveHint();
         if (!unlocked && !evidenceCapturedOnExit && !isTestMode) {
             evidenceCapturedOnExit = true;
             SecurityAlertHelper.captureEvidenceAndQueueAlertAsync(
                     this,
-                    "power_off_dismissed_without_pin",
+                    "power_off_left_without_pin",
                     Math.max(1, failedAttempts)
             );
         }
-        finish();
     }
 
     @Override
