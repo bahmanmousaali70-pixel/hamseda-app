@@ -2783,15 +2783,15 @@ async function searchPublicWeb(query: string): Promise<PublicSearchResult[]> {
   const engines = [
     {kind: 'bing' as const, url: 'https://www.bing.com/search?q=' + encodeURIComponent(cleanQuery)},
     {kind: 'duckduckgo' as const, url: 'https://html.duckduckgo.com/html/?q=' + encodeURIComponent(cleanQuery)},
-    {kind: 'google' as const, url: 'https://www.google.com/search?hl=fa&num=10&q=' + encodeURIComponent(cleanQuery)},
+    {kind: 'google' as const, url: 'https://www.google.com/search?hl=fa&num=10&q=' + encodeURIComponent(cleanQuery)},\n    {kind: 'brave' as const, url: 'https://search.brave.com/search?q=' + encodeURIComponent(cleanQuery)},
   ];
 
-  const parseResults = (html: string, kind: 'bing' | 'duckduckgo' | 'google'): PublicSearchResult[] => {
+  const parseResults = (html: string, kind: 'bing' | 'duckduckgo' | 'google' | 'brave'): PublicSearchResult[] => {
     const found: PublicSearchResult[] = [];
     const seen = new Set<string>();
     const add = (rawHref: string, rawTitle: string, rawSnippet: string) => {
       const href = rawHref.replace(/&amp;/g, '&').replace(/&quot;/g, '"');
-      const url = unwrapSearchUrl(href, kind === 'duckduckgo' ? 'https://html.duckduckgo.com' : kind === 'bing' ? 'https://www.bing.com' : 'https://www.google.com');
+      const url = unwrapSearchUrl(href, kind === 'duckduckgo' ? 'https://html.duckduckgo.com' : kind === 'bing' ? 'https://www.bing.com' : kind === 'brave' ? 'https://search.brave.com' : 'https://www.google.com');
       const title = decodeSearchHtml(rawTitle).replace(/\s+/g, ' ').trim();
       const snippet = decodeSearchHtml(rawSnippet).replace(/\s+/g, ' ').trim();
       if (!url || !title || seen.has(url) || !/^https?:\/\//i.test(url)) return;
@@ -3131,9 +3131,9 @@ app.post('/api/assistant-command', async (req, res) => {
 
   const ai = getAiClient();
   const isDirectLiveWebQuery =
-    /(جستجو|جست‌وجو|جست و جو|سرچ|تو اینترنت|در اینترنت|تو وب|آب و هوا|اب و هوا|آب‌وهوا|هواشناسی|دمای هوا|وضعیت هوا|هوای |قیمت|نرخ|دلار|طلا|سکه|بورس|اخبار|خبر امروز|نتیجه بازی|امروز چنده|چند است|چقدر است|دستور پخت|طرز تهیه|مواد لازم|چطوری درست|چطور درست)/.test(
+    /(جستجو|جست‌وجو|جست و جو|جستجوی اینترنتی|سرچ|بگرد|برو تو اینترنت|برو اینترنت|اینترنت رو بگرد|در اینترنت پیدا|تو اینترنت پیدا|پیدا کن|بررسی کن|سایت های|سایت‌های|منابع معتبر|تو اینترنت|در اینترنت|تو وب|آب و هوا|اب و هوا|آب‌وهوا|هواشناسی|دمای هوا|وضعیت هوا|هوای |قیمت|نرخ|دلار|طلا|سکه|بورس|اخبار|خبر امروز|نتیجه بازی|امروز چنده|چند است|چقدر است|دستور پخت|طرز تهیه|مواد لازم|چطوری درست|چطور درست)/.test(
       utterance
-    ) && !/(تماس|زنگ|پیامک|اس ام اس|باز کن|تلگرام|واتساپ|تایمر|آلارم|چراغ|رادیو|پادکست|موزیک)/.test(utterance);
+    ) && !/(تماس|زنگ|پیامک|اس ام اس|باز کن|تلگرام|واتساپ|تایمر|آلارم|چراغ|رادیو|پادکست|موزیک|آهنگ)/.test(utterance);
 
   if (!ai && !isDirectLiveWebQuery) {
     res.status(503).json({
@@ -3354,9 +3354,9 @@ ${compactContacts.length > 0 ? `مخاطبین دفترچه تلفن برای ت
 
     if (!parsed) {
       const looksLikeLiveWebQuery =
-        /(جستجو|جست‌وجو|جست و جو|سرچ|تو اینترنت|در اینترنت|تو وب|آب و هوا|اب و هوا|آب‌وهوا|هواشناسی|دمای هوا|هوای |قیمت|نرخ|دلار|طلا|سکه|بورس|اخبار|خبر امروز|نتیجه بازی|امروز چنده|چند است|چقدر است|دستور پخت|طرز تهیه|مواد لازم|چطوری درست|چطور درست)/.test(
+        /(جستجو|جست‌وجو|جست و جو|جستجوی اینترنتی|سرچ|بگرد|برو تو اینترنت|برو اینترنت|اینترنت رو بگرد|در اینترنت پیدا|تو اینترنت پیدا|پیدا کن|بررسی کن|سایت های|سایت‌های|منابع معتبر|تو اینترنت|در اینترنت|تو وب|آب و هوا|اب و هوا|آب‌وهوا|هواشناسی|دمای هوا|هوای |قیمت|نرخ|دلار|طلا|سکه|بورس|اخبار|خبر امروز|نتیجه بازی|امروز چنده|چند است|چقدر است|دستور پخت|طرز تهیه|مواد لازم|چطوری درست|چطور درست)/.test(
           utterance
-        );
+        ) && !/(تماس|زنگ|پیامک|اس ام اس|باز کن|تلگرام|واتساپ|تایمر|آلارم|چراغ|رادیو|پادکست|موزیک|آهنگ)/.test(utterance);
       if (looksLikeLiveWebQuery) {
         fastWebRouted = true;
         parsed = {
