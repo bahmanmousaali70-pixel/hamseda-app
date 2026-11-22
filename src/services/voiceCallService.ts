@@ -65,14 +65,29 @@ export async function ensureVoiceIdentity(displayName: string): Promise<VoiceIde
     try {
       const parsed = JSON.parse(saved) as VoiceIdentity;
       if (parsed.uid === user.uid && parsed.inviteCode) {
-        await setDoc(
-          doc(callDb, 'voiceInvites', parsed.inviteCode),
-          {uid: user.uid, displayName: cleanedName, updatedAt: serverTimestamp()},
-          {merge: true}
-        );
-        const identity = {...parsed, displayName: cleanedName};
-        localStorage.setItem('hamseda_voice_identity_v1', JSON.stringify(identity));
-        return identity;
+        const inviteRef = doc(callDb, 'voiceInvites', parsed.inviteCode);
+        const inviteSnapshot = await getDoc(inviteRef);
+        if (inviteSnapshot.exists() && inviteSnapshot.data().uid === user.uid) {
+          await setDoc(
+            inviteRef,
+            {uid: user.uid, displayName: cleanedName, updatedAt: serverTimestamp()},
+            {merge: true}
+          );
+          const identity = {...parsed, displayName: cleanedName};
+          localStorage.setItem('hamseda_voice_identity_v1', JSON.stringify(identity));
+          return identity;
+        }
+        if (!inviteSnapshot.exists()) {
+          await setDoc(inviteRef, {
+            uid: user.uid,
+            displayName: cleanedName,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+          const identity = {...parsed, displayName: cleanedName};
+          localStorage.setItem('hamseda_voice_identity_v1', JSON.stringify(identity));
+          return identity;
+        }
       }
     } catch {
       // Create a fresh invite below if local identity data is damaged.
