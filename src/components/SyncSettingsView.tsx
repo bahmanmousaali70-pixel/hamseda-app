@@ -842,66 +842,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
           </div>
         </div>
 
-        {nativeCaps.isNative && (!nativeCaps.sms || !nativeCaps.notificationListener) && (
-          <div className="rounded-xl bg-amber-50 dark:bg-amber-950/35 border border-amber-300 dark:border-amber-800 p-4 sm:p-5 space-y-3">
-            <div className="text-xs sm:text-sm font-extrabold text-amber-950 dark:text-amber-200">
-              رفع قفل «تنظیمات محدودشده / Restricted setting» برای خواندن پیامک در گوشی همراه (اندروید ۱۳ تا ۱۶)
-            </div>
-            <p className="text-xs leading-6 text-amber-900 dark:text-amber-100/90">
-              چون برنامه از بیرون گوگل‌پلی نصب شده، اندروید ابتدا اجازه پیامک و اعلان را قفل می‌کند و لینک راهنمای گوگل را نشان می‌دهد. با این ۳ قدم ساده قفل آن برای همیشه باز می‌شود:
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
-              <div className="rounded-xl bg-white/80 dark:bg-[#0B1312] border border-amber-200/80 dark:border-amber-900 p-3 space-y-2 flex flex-col justify-between">
-                <div className="text-xs leading-5 text-slate-700 dark:text-slate-200">
-                  <strong>قدم ۱ (ظاهر شدن دکمه قفل):</strong> دکمه زیر را بزنید و کلید <em>هم‌صدا</em> را لمس کنید؛ اگر پنجره «تنظیمات محدودشده» داد، تایید/برگشت بزنید. (تا این را یک‌بار نزنید، گزینه قدم ۲ مخفی است!)
-                </div>
-                <button
-                  type="button"
-                  onClick={onOpenNotificationListenerSettings}
-                  className="w-full min-h-[40px] px-3 rounded-lg bg-slate-900 dark:bg-emerald-700 text-white text-xs font-semibold cursor-pointer"
-                >
-                  ۱. باز کردن دسترسی اعلان پیامک
-                </button>
-              </div>
 
-              <div className="rounded-xl bg-white/80 dark:bg-[#0B1312] border border-amber-200/80 dark:border-amber-900 p-3 space-y-2 flex flex-col justify-between">
-                <div className="text-xs leading-5 text-slate-700 dark:text-slate-200">
-                  <strong>قدم ۲ (باز کردن قفل):</strong> در صفحه اطلاعات برنامه، یا صفحه را <strong>تا پایینِ پایین</strong> بکشید و <strong>اجازه به تنظیمات محدودشده</strong> را بزنید، یا <strong>سه‌نقطه بالای صفحه (⋮)</strong> ← <em>Allow restricted settings</em> را تایید کنید.
-                </div>
-                <button
-                  type="button"
-                  onClick={onOpenAppInfoSettings}
-                  className="w-full min-h-[40px] px-3 rounded-lg bg-amber-700 hover:bg-amber-800 text-white text-xs font-semibold cursor-pointer"
-                >
-                  ۲. باز کردن اطلاعات برنامه (رفع قفل)
-                </button>
-              </div>
-
-              <div className="rounded-xl bg-white/80 dark:bg-[#0B1312] border border-amber-200/80 dark:border-amber-900 p-3 space-y-2 flex flex-col justify-between">
-                <div className="text-xs leading-5 text-slate-700 dark:text-slate-200">
-                  <strong>قدم ۳ (روشن کردن نهایی):</strong> پس از باز کردن قفل، دوباره دکمه قدم ۱ را بزنید و کلید را روشن کنید؛ سپس دکمه زیر را بزنید تا مجوز SMS تایید شود.
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void requestSmsPermissionsOnlyNative().then((caps) => {
-                      if (caps?.sms) {
-                        onStatusToast('مجوز خواندن پیامک (SMS) با موفقیت فعال شد.');
-                      } else if (caps) {
-                        onStatusToast(
-                          'اگر پنجره اجازه SMS باز نشد، قدم ۲ (باز کردن اطلاعات برنامه و اجازه تنظیمات محدودشده) را انجام دهید و در Permissions مجوز SMS را Allow کنید.'
-                        );
-                      }
-                    });
-                  }}
-                  className="w-full min-h-[40px] px-3 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold cursor-pointer"
-                >
-                  ۳. تایید نهایی مجوز پیامک (SMS)
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {nativeCaps.isNative && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 pt-2">
