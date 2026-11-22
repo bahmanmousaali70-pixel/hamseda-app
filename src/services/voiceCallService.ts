@@ -53,6 +53,7 @@ function createInviteCode(): string {
 }
 
 export async function ensureVoiceIdentity(displayName: string): Promise<VoiceIdentity> {
+  await callAuth.authStateReady();
   let user = callAuth.currentUser;
   if (!user) {
     const credential = await signInAnonymously(callAuth);
