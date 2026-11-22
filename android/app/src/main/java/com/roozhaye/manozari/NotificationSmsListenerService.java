@@ -89,7 +89,7 @@ public class NotificationSmsListenerService extends NotificationListenerService 
         }
         String knownSender = SmsLinkAnnouncementHelper.resolveKnownSenderName(getApplicationContext(), title);
         String spokenSender = knownSender != null
-                ? FinglishPhoneticHelper.resolveSenderDisplayName(getApplicationContext(), knownSender) : "";
+                ? SmsLinkAnnouncementHelper.spokenSenderName(getApplicationContext(), knownSender) : "";
         String spokenLink = SmsLinkAnnouncementHelper.spokenLinks(body);
 
         boolean isMale = "male".equals(prefs.getString("default_voice_gender", "female"));
