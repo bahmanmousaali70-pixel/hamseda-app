@@ -1685,7 +1685,8 @@ function musicQueryVariants(raw: string): string[] {
   const q = raw.replace(/[يى]/g, 'ی').replace(/ك/g, 'ک').replace(/\s+/g, ' ').trim();
   const cleaned = q.replace(/^(?:لطفا\s*)?(?:آهنگ|موزیک|موسیقی)\s+/,'').trim();
   const variants = [q, cleaned];
-  const artist = cleaned.replace(/\b(?:آلبوم|آلبوم‌های|آلبومهای|کالکشن|کالکشن‌های|مجموعه|آهنگ|آهنگ‌های|ترانه|گروه|خواننده|سبک|موزیک|موسیقی)\b/gi, ' ').replace(/\s+/g, ' ').trim();
+  const searchStopWords = new Set(['آلبوم', 'آلبوم‌های', 'آلبومهای', 'کالکشن', 'کالکشن‌های', 'مجموعه', 'آهنگ', 'آهنگ‌های', 'ترانه', 'گروه', 'خواننده', 'سبک', 'موزیک', 'موسیقی', 'جدید', 'قدیمی']);
+  const artist = cleaned.split(/\s+/).filter((word) => !searchStopWords.has(word.replace(/[،,.!?؟]/g, ''))).join(' ').trim();
   if (artist && artist !== cleaned) variants.push(artist);
   if (/(آریان|arian)/i.test(q)) variants.push('Arian', 'Arian Band', 'گروه آریان آلبوم');
   if (/(قدیمی|نوستالژی|خاطره|کالکشن|مجموعه)/.test(q)) variants.push('آهنگ های قدیمی ایرانی آلبوم', 'Persian oldies album');
