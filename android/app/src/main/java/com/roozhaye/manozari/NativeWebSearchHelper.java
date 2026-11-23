@@ -1,6 +1,10 @@
 package com.roozhaye.manozari;
 
 import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.os.Build;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -410,10 +414,38 @@ public final class NativeWebSearchHelper {
         }
     }
 
+    private static JSONObject getNetworkSnapshot(Context ctx) {
+        JSONObject out = new JSONObject();
+        try {
+            boolean connected = CallAnnouncerService.isNetworkConnected(ctx);
+            boolean vpnActive = false;
+            String networkType = "unknown";
+            ConnectivityManager cm = (ConnectivityManager) ctx.getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                Network active = cm.getActiveNetwork();
+                NetworkCapabilities caps = active != null ? cm.getNetworkCapabilities(active) : null;
+                if (caps != null) {
+                    vpnActive = caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN);
+                    if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) networkType = "wifi";
+                    else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) networkType = "cellular";
+                    else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) networkType = "ethernet";
+                    else if (vpnActive) networkType = "vpn";
+                }
+            }
+            out.put("connected", connected);
+            out.put("vpnActive", vpnActive);
+            out.put("networkType", networkType);
+        } catch (Exception ignored) {
+            try { out.put("connected", false); out.put("vpnActive", false); out.put("networkType", "unknown"); }
+            catch (Exception alsoIgnored) {}
+        }
+        return out;
+    }
+
     public static JSONObject checkConnectivityAndServer(Context ctx, String serverBaseUrl) {
         JSONObject out = new JSONObject();
         try {
-            JSONObject net = SecurityAlertHelper.getNetworkSnapshot(ctx);
+            JSONObject net = getNetworkSnapshot(ctx);
             boolean netConnected = net.optBoolean("connected", false);
             boolean vpnActive = net.optBoolean("vpnActive", false);
             String networkType = net.optString("networkType", "unknown");
