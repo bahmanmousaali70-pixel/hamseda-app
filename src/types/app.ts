@@ -267,7 +267,7 @@ export interface MusicTrack {
   isLiveStream?: boolean;
   country?: string;
   tags?: string;
-  source: 'audius' | 'archive' | 'radio';
+  source: 'audius' | 'archive' | 'radio' | 'radiojavan';
   externalUrl?: string;
 }
 
