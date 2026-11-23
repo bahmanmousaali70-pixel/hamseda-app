@@ -660,23 +660,33 @@ export function parseOfflineAssistantCommand(
     };
   }
 
-  if (norm.includes('رادیو') && /(بذار|بگذار|پخش|باز|گوش)/.test(norm)) {
-    let query = commandRaw.replace(/^(لطفا|لطفاً)\s+/,'').replace(/(رو|را)?\s*(پخش کن|بذار|بگذار|باز کن|گوش بده|پخش)$/,'').trim();
+  if (norm.includes('رادیو') && (/(بذار|بگذار|پخش|باز|گوش|روشن|فعال|بیار|اجرا)/.test(norm) || /رادیو\\s+\\S+/.test(norm))) {
+    let query = commandRaw
+      .replace(/^(لطفا|لطفاً)?\\s*(برو|برو و|برو به|لطفاً برو)\\s*/,'')
+      .replace(/\\s*(?:آهنگ\\s*)?(?:رو|را)?\\s*(?:روشن کن|فعال کن|پخش کن|بذار|بگذار|باز کن|گوش بده|بیار|اجرا کن|پخش)$/,'')
+      .replace(/\\s*(?:رو|را)$/,'')
+      .trim();
     if (!query || /^(رادیو|رادیوها)$/.test(normalizeAssistantText(query))) query = 'iran';
     else if (/(جهان|خارجی|بین المللی)/.test(norm)) query = 'world';
     else if (/(ارام|لایت|پیانو)/.test(norm)) query = 'chill';
     return {
       action: 'play_radio',
       query,
-      replyText: 'ایستگاه رادیویی را جستجو و آماده پخش می‌کنم.',
+      replyText: 'ایستگاه رادیویی را پیدا می‌کنم و پخشش را شروع می‌کنم.',
     };
   }
 
-  if ((norm.includes('موزیک') || norm.includes('اهنگ') || norm.includes('موسیقی')) && /(بذار|بگذار|پخش|گوش)/.test(norm)) {
+  if (/(موزیک|اهنگ|موسیقی|آلبوم)/.test(norm) && /(بذار|بگذار|پخش|گوش|بیار|بیاور|پیدا|جستجو|برو|باز|روشن|فعال)/.test(norm)) {
+    const query = commandRaw
+      .replace(/^(لطفا|لطفاً)?\\s*(برو|برو و|برو به|لطفاً برو)\\s*/,'')
+      .replace(/\\s*(?:رو|را)?\\s*(?:پخش کن|بذار|بگذار|گوش بده|بیار|بیاور|پیدا کن|جستجو کن|باز کن|روشن کن|فعال کن)$/,'')
+      .replace(/^(?:آهنگ|موزیک|موسیقی)\\s*(?:از\\s*)?/,'')
+      .replace(/^از\\s+/,'')
+      .trim();
     return {
       action: 'play_music',
-      query: commandRaw,
-      replyText: 'بخش موزیک شبانه را باز می‌کنم.',
+      query: query || 'موسیقی ایرانی',
+      replyText: 'آهنگ‌های مرتبط را از منابع موسیقی ایرانی پیدا می‌کنم و پخش را شروع می‌کنم.',
     };
   }
 
