@@ -666,6 +666,7 @@ export function parseOfflineAssistantCommand(
       .replace(/\s*(?:آهنگ\s*)?(?:رو|را)?\s*(?:روشن کن|فعال کن|پخش کن|بذار|بگذار|باز کن|گوش بده|بیار|اجرا کن|پخش)$/,'')
       .replace(/\s*(?:رو|را)$/,'')
       .trim();
+    if (/رادیو\s*(?:نما\s*آهنگ|نما)$/.test(normalizeAssistantText(query))) query = 'رادیو نواهنگ';
     if (!query || /^(رادیو|رادیوها)$/.test(normalizeAssistantText(query))) query = 'iran';
     else if (/(جهان|خارجی|بین المللی)/.test(norm)) query = 'world';
     else if (/(ارام|لایت|پیانو)/.test(norm)) query = 'chill';
