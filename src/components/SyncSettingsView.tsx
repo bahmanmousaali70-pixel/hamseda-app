@@ -14,7 +14,6 @@ import {
   Lock,
   LogIn,
   LogOut,
-  MapPin,
   Moon,
   Play,
   Plus,
@@ -257,7 +256,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
   const [newCustomText, setNewCustomText] = useState('');
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
-  // Anti-Theft Power-Off Guard & Personal Address/VoIP Profile
+  // Anti-Theft Power-Off Guard
   const initialCallProfile = loadPersonalCallProfile();
   const [securityStatus, setSecurityStatus] = useState<SecurityGuardStatus | null>(null);
   const [guardEnabledDraft, setGuardEnabledDraft] = useState(false);
@@ -277,9 +276,6 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
   const [showAppsScriptGuide, setShowAppsScriptGuide] = useState(false);
   const [copiedAppsScript, setCopiedAppsScript] = useState(false);
 
-  const [homeAddressDraft, setHomeAddressDraft] = useState(initialCallProfile.homeAddress);
-  const [callbackPhoneDraft, setCallbackPhoneDraft] = useState(initialCallProfile.callbackPhone);
-  const [voipWebhookDraft, setVoipWebhookDraft] = useState(initialCallProfile.voipWebhookUrl);
 
   const refreshServerSecurityStatus = async () => {
     try {
@@ -319,9 +315,6 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
     void refreshServerSecurityStatus();
     const onProfileUpdated = () => {
       const p = loadPersonalCallProfile();
-      setHomeAddressDraft(p.homeAddress);
-      setCallbackPhoneDraft(p.callbackPhone);
-      setVoipWebhookDraft(p.voipWebhookUrl);
       setBackupSecurityEmail(p.backupSecurityEmail);
       setSecurityWebhookUrl(p.securityWebhookUrl);
     };
@@ -1620,77 +1613,6 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
             <li>اندروید به برنامه‌های عادی اجازه روشن کردن خودکار دیتای موبایل، GPS یا اپلیکیشن VPN دیگر را نمی‌دهد؛ اما روی وای‌فای یا دیتای موبایل به‌محض اتصال، عکس‌ها و لوکیشن ارسال می‌شوند.</li>
           </ul>
         </div>
-      </section>
-
-      {/* Saved Address, Callback Phone & Proxy Calling Bridge */}
-      <section className="rounded-2xl bg-white dark:bg-[#121E1C] border border-slate-200/80 dark:border-emerald-950/70 p-6 sm:p-8 space-y-4">
-        <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
-          <MapPin className="w-4 h-4" />
-          <span>اطلاعات ثابت سفارش و تماس نیابتی</span>
-        </div>
-        <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-          نشانی تحویل، شماره بازگشت و پل تماس VoIP خودکار
-        </h2>
-        <p className="text-xs leading-6 text-slate-600 dark:text-slate-300">
-          یک‌بار آدرس و شماره تماس را ذخیره کنید تا در فرمان‌هایی مثل «به پیتزافروشی زنگ بزن سفارش بده با آدرسم»، متن آماده تماس با نشانی شما ساخته شود.
-        </p>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="md:col-span-2">
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
-              نشانی کامل تحویل سفارش
-            </label>
-            <input
-              type="text"
-              value={homeAddressDraft}
-              onChange={(e) => setHomeAddressDraft(e.target.value)}
-              placeholder="تهران، خیابان ... کوچه ... پلاک ... واحد ..."
-              className="w-full min-h-[44px] px-3.5 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50/70 dark:bg-[#0B1312] text-sm text-slate-900 dark:text-white"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
-              شماره تماس هماهنگی
-            </label>
-            <input
-              type="tel"
-              dir="ltr"
-              value={callbackPhoneDraft}
-              onChange={(e) => setCallbackPhoneDraft(e.target.value)}
-              placeholder="0912..."
-              className="w-full min-h-[44px] px-3.5 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50/70 dark:bg-[#0B1312] text-sm font-mono-num text-slate-900 dark:text-white"
-            />
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
-            نشانی وب‌هوک VoIP / SIP ابری برای تماس خودکار دوطرفه (اختیاری - HTTPS)
-          </label>
-          <input
-            type="url"
-            dir="ltr"
-            value={voipWebhookDraft}
-            onChange={(e) => setVoipWebhookDraft(e.target.value)}
-            placeholder="https://your-voip-bridge.example.com/call"
-            className="w-full min-h-[44px] px-3.5 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50/70 dark:bg-[#0B1312] text-xs font-mono-num text-slate-900 dark:text-white"
-          />
-        </div>
-
-        <button
-          type="button"
-          onClick={() => {
-            savePersonalCallProfile({
-              homeAddress: homeAddressDraft.trim(),
-              callbackPhone: callbackPhoneDraft.trim(),
-              voipWebhookUrl: voipWebhookDraft.trim(),
-            });
-            onStatusToast('نشانی تحویل، تلفن تماس و وب‌هوک VoIP ذخیره شد.');
-          }}
-          className="min-h-[44px] px-5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs sm:text-sm font-semibold cursor-pointer"
-        >
-          ذخیره نشانی و تنظیمات تماس
-        </button>
       </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
