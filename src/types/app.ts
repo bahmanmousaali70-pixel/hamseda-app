@@ -340,8 +340,6 @@ export interface AssistantCommandResult {
   targetName?: string;
   targetPhone?: string;
   smsBody?: string;
-  callScript?: string;
-  includeAddressAndPhone?: boolean;
   tab?: AppTab;
   todaySection?: TodaySubSection;
   query?: string;
