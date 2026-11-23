@@ -4,6 +4,7 @@ import {AssistantView} from './components/AssistantView';
 import {CallerAnnouncerView} from './components/CallerAnnouncerView';
 import {DriveModeModal} from './components/DriveModeModal';
 import {GratitudeView} from './components/GratitudeView';
+import {HamsedaFreeCallPanel} from './components/HamsedaFreeCallPanel';
 import {FamilyLifeSuite} from './components/FamilyLifeSuite';
 import {advanceDateKey} from './components/LifeToolsView';
 import {NightAndMessagesView} from './components/NightAndMessagesView';
@@ -2071,6 +2072,14 @@ export default function App() {
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-20 lg:pb-8">
         {activeTab === 'family' && <FamilyLifeSuite />}
+
+        {activeTab === 'freecall' && (
+          <HamsedaFreeCallPanel
+            selfName={selfName}
+            partnerName={getPartnerNameForDevice(settings, deviceOwner)}
+            onStatusToast={showToast}
+          />
+        )}
 
         {activeTab === 'today' && (
           <TodayView
