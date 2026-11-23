@@ -1784,30 +1784,31 @@ function normalizeMusicMatchText(value: string): string {
     .replace(/[^\p{L}\p{N}]+/gu, ' ').replace(/\s+/g, ' ').trim();
 }
 
-function rankMusicTrack(track: ServerMusicTrack, rawQuery: string, fallbackTerms: string): number {
-  const haystack = normalizeMusicMatchText([track.title, track.artist, track.album || '', track.tags || ''].join(' '));
+function rankMusicTrack(track: ServerMusicTrack, rawQuery: string): number {
+  const titleArtist = normalizeMusicMatchText([track.title, track.artist].join(' '));
+  const metadata = normalizeMusicMatchText([track.album || '', track.tags || ''].join(' '));
+  const haystack = `${titleArtist} ${metadata}`.trim();
   if (!haystack) return 0;
-  const stopWords = new Set(['آهنگ','موزیک','موسیقی','خواننده','ترانه','لطفا','برای','پخش','کن','بده','برام','میخوام','میخواهم','please','music','song','songs','track','tracks']);
-  const candidates = [rawQuery, fallbackTerms].map((query) =>
-    normalizeMusicMatchText(query).split(' ').filter((word) => word.length > 1 && !stopWords.has(word))
-  ).filter((terms) => terms.length > 0);
-  let best = 0;
-  for (const terms of candidates) {
-    const unique = [...new Set(terms)];
-    let matched = 0;
-    let score = haystack.includes(normalizeMusicMatchText(unique.join(' '))) ? 8 : 0;
-    for (const term of unique) {
-      if (haystack.includes(term)) {
-        matched += 1;
-        score += term.length >= 5 ? 2.5 : 1.5;
-      }
-    }
-    const coverage = matched / unique.length;
-    if (coverage >= (unique.length >= 3 ? 0.5 : 1)) {
-      best = Math.max(best, score + coverage * 3);
-    }
+  const stopWords = new Set([
+    'آهنگ','آهنگهای','آهنگ‌های','موزیک','موسیقی','خواننده','ترانه','لطفا','لطفاً','برای','پخش','کن','بده','برام',
+    'میخوام','میخواهم','میخوام','و','از','با','در','به','یک','the','a','an','please','music','song','songs','track','tracks'
+  ]);
+  const terms = [...new Set(normalizeMusicMatchText(rawQuery).split(' ').filter((word) => word.length > 1 && !stopWords.has(word)))];
+  if (terms.length === 0) return 0;
+  let titleMatches = 0;
+  let metadataMatches = 0;
+  for (const term of terms) {
+    if (titleArtist.includes(term)) titleMatches += 1;
+    else if (metadata.includes(term)) metadataMatches += 1;
   }
-  return best;
+  const matched = titleMatches + metadataMatches;
+  const coverage = matched / terms.length;
+  // Artist/title searches must match every word for short queries; longer descriptions need at least 75% coverage.
+  const requiredCoverage = terms.length <= 2 ? 1 : 0.75;
+  if (coverage < requiredCoverage) return 0;
+  // A lone artist/name must occur in the title or artist, never just in generic tags.
+  if (terms.length === 1 && titleMatches === 0) return 0;
+  return titleMatches * 5 + metadataMatches * 1.5 + coverage * 4;
 }
 
 async function fetchPlayableMusicPlaylist(moodOrGenre: string, _ai: GoogleGenAI | null): Promise<{tracks: ServerMusicTrack[]; links: {title: string; url: string}[]}> {
@@ -1857,7 +1858,7 @@ async function fetchPlayableMusicPlaylist(moodOrGenre: string, _ai: GoogleGenAI 
     }
   }
   const ranked = tracks
-    .map((track) => ({track, score: rankMusicTrack(track, rawQuery, matchTerms)}))
+    .map((track) => ({track, score: rankMusicTrack(track, rawQuery)}))
     .filter((entry) => entry.score > 0)
     .sort((a, b) => b.score - a.score)
     .map((entry) => entry.track);
@@ -2074,11 +2075,8 @@ app.post('/api/night-discover', async (req, res) => {
     try {
       const discovery = await fetchPlayableMusicPlaylist(moodOrGenre || 'پیانو و موسیقی آرامش‌بخش ایرانی', ai ?? betaAi);
       const tracks = discovery.tracks;
-      const links = [
-        ...tracks.filter((t) => t.externalUrl).slice(0, 6)
-          .map((t) => ({title: `${t.title} — ${t.artist}`, url: t.externalUrl!})),
-        ...discovery.links.filter((item) => !tracks.some((track) => track.externalUrl === item.url)).slice(0, 12),
-      ];
+      const links = tracks.filter((t) => t.externalUrl).slice(0, 6)
+        .map((t) => ({title: `${t.title} — ${t.artist}`, url: t.externalUrl!}));
 
       const summaryList = tracks
         .slice(0, 5)
