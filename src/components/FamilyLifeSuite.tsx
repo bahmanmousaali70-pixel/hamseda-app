@@ -1,74 +1,72 @@
-import React, {useEffect, useMemo, useState} from 'react';
-import {UpdateCenter} from './UpdateCenter';
-import {Activity, AlertTriangle, Brain, BriefcaseBusiness, CalendarDays, Check, CircleDollarSign, FileClock, GraduationCap, Home, Search, ShieldCheck, ShoppingBasket, Sparkles, Target, Trash2} from 'lucide-react';
+import React, {useState} from 'react';
+import {Activity, AlertCircle, CalendarDays, HeartPulse, Plus, Trash2} from 'lucide-react';
 
-type TabId='health'|'loan'|'emergency'|'documents'|'academy'|'brain'|'calendar'|'career'|'prices'|'usage'|'shopping'|'savings';
-type Item={id:string;title:string;detail:string;date?:string;amount?:number;done?:boolean};
-type Price={id:string;product:string;shop:string;price:number;quantity:number;unit:string};
-type Saved={documents:Item[];calendar:Item[];career:Item[];prices:Price[];usage:Item[];shopping:Item[];savings:Item[];academyDone:string[];brainScore:number};
-const KEY='hamseda_family_suite_v1';
-const id=()=>String(Date.now())+String(Math.random()).slice(2);
-const money=(n:number)=>Math.round(n||0).toLocaleString('fa-IR');
-const tabs:{id:TabId;label:string;desc:string;icon:React.FC<{className?:string}>}[]=[
-{id:'health',label:'پرونده سلامت',desc:'سوابق و مراقبت خانواده',icon:Activity},
-{id:'loan',label:'محاسبه‌گر وام',desc:'قسط، سود و بازپرداخت',icon:CircleDollarSign},
-{id:'emergency',label:'کارت اضطراری',desc:'اطلاعات ضروری',icon:ShieldCheck},
-{id:'documents',label:'مدارک و انقضا',desc:'یادآور تمدید مدارک',icon:FileClock},
-{id:'academy',label:'آکادمی هوشمند',desc:'مسیرهای یادگیری',icon:GraduationCap},
-{id:'brain',label:'باشگاه مغز',desc:'تمرین حافظه و منطق',icon:Brain},
-{id:'calendar',label:'تقویم خانواده',desc:'قرارها و رویدادها',icon:CalendarDays},
-{id:'career',label:'شغل و مهارت',desc:'رزومه و توانمندی‌ها',icon:BriefcaseBusiness},
-{id:'prices',label:'مقایسه قیمت',desc:'قیمت واحد کالاها',icon:Search},
-{id:'usage',label:'مصرف خانه',desc:'قرائت و هزینه‌ها',icon:Home},
-{id:'shopping',label:'دستیار خرید',desc:'تبدیل متن به فهرست',icon:ShoppingBasket},
-{id:'savings',label:'اهداف و پس‌انداز',desc:'برنامه هدف مالی',icon:Target}
-];
-function load():Saved{try{const x=localStorage.getItem(KEY);if(x)return JSON.parse(x) as Saved;}catch{}return {documents:[],calendar:[],career:[],prices:[],usage:[],shopping:[],savings:[],academyDone:[],brainScore:0};}
-const input='w-full min-h-11 rounded-xl border border-slate-200 dark:border-emerald-900 bg-white dark:bg-[#101c19] px-3 py-2 text-sm text-slate-900 dark:text-white';
-const btn='rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white px-4 py-2.5 text-sm font-bold';
-const Field:React.FC<{label:string;value:string;onChange:(v:string)=>void;type?:string}> = p=><label className="block space-y-1.5"><span className="text-xs text-slate-600 dark:text-slate-300">{p.label}</span><input className={input} type={p.type||'text'} value={p.value} onChange={e=>p.onChange(e.target.value)}/></label>;
-const List:React.FC<{items:Item[];remove:(id:string)=>void}> = ({items,remove})=><div className="space-y-2">{items.length===0?<p className="text-sm text-slate-500 py-3">هنوز موردی ثبت نشده است.</p>:items.map(x=><div key={x.id} className="flex justify-between items-center gap-3 rounded-xl bg-slate-50 dark:bg-[#14221e] p-3"><div><b className="text-sm">{x.title}</b><p className="text-xs text-slate-500 mt-1">{x.detail}{x.date?' · '+x.date:''}{x.amount!==undefined?' · '+money(x.amount):''}</p></div><button onClick={()=>remove(x.id)} className="text-rose-600"><Trash2 className="w-4 h-4"/></button></div>)}</div>;
+type HealthRecord = {id: string; name: string; detail: string; date: string};
 
-export const FamilyLifeSuite:React.FC=()=>{
- const saved=useMemo(load,[]);
- const [tab,setTab]=useState<TabId>('loan');
- const [documents,setDocuments]=useState(saved.documents),[calendar,setCalendar]=useState(saved.calendar),[career,setCareer]=useState(saved.career),[prices,setPrices]=useState(saved.prices),[usage,setUsage]=useState(saved.usage),[shopping,setShopping]=useState(saved.shopping),[savings,setSavings]=useState(saved.savings),[academyDone,setAcademyDone]=useState(saved.academyDone),[brainScore,setBrainScore]=useState(saved.brainScore);
- const [health,setHealth]=useState<Item[]>([]);
- const [emergency,setEmergency]=useState({name:'',phone:'',doctor:'',allergy:'',blood:''});
- const [a,setA]=useState({title:'',detail:'',date:''}),[b,setB]=useState({title:'',detail:'',date:''}),[c,setC]=useState({title:'',detail:''});
- const [price,setPrice]=useState({product:'',shop:'',price:'',quantity:'1',unit:'عدد'});
- const [usageDraft,setUsageDraft]=useState({title:'برق',detail:'',amount:'',date:new Date().toISOString().slice(0,10)});
- const [shoppingText,setShoppingText]=useState('');
- const [saving,setSaving]=useState({title:'',target:'',current:'0',date:''});
- const [principal,setPrincipal]=useState('100000000'),[rate,setRate]=useState('23'),[months,setMonths]=useState('24'),[fee,setFee]=useState('0'),[currency,setCurrency]=useState('تومان');
- const [answer,setAnswer]=useState(''),[question,setQuestion]=useState(17),[toast,setToast]=useState('');
- const [academyFilter,setAcademyFilter]=useState('همه');
- useEffect(()=>{localStorage.setItem(KEY,JSON.stringify({documents,calendar,career,prices,usage,shopping,savings,academyDone,brainScore}));},[documents,calendar,career,prices,usage,shopping,savings,academyDone,brainScore]);
- useEffect(()=>{if(!toast)return;const t=window.setTimeout(()=>setToast(''),2600);return()=>window.clearTimeout(t);},[toast]);
- const p=Math.max(0,Number(principal)||0),r=Math.max(0,Number(rate)||0)/1200,n=Math.max(1,Math.min(600,Number(months)||1));
- const payment=r===0?p/n:p*r/(1-Math.pow(1+r,-n)),total=payment*n+Math.max(0,Number(fee)||0);
- const add=(setter:React.Dispatch<React.SetStateAction<Item[]>>,v:{title:string;detail:string;date?:string})=>{if(v.title.trim())setter(old=>[{id:id(),title:v.title.trim(),detail:v.detail.trim(),date:v.date},...old]);};
- const remove=(setter:React.Dispatch<React.SetStateAction<Item[]>>,key:string)=>setter(old=>old.filter(x=>x.id!==key));
- const current=tabs.find(x=>x.id===tab)!;
- const courses=[{id:'digital',title:'مهارت‌های دیجیتال',category:'فناوری',detail:'امنیت حساب‌ها و سواد دیجیتال'},{id:'language',title:'زبان روزمره',category:'زبان',detail:'واژگان و مکالمه کاربردی'},{id:'finance',title:'سواد مالی خانواده',category:'مالی',detail:'بودجه‌بندی و پس‌انداز'},{id:'job',title:'آمادگی شغلی',category:'شغل',detail:'رزومه و مصاحبه'}];
- return <div dir="rtl" className="space-y-5">
-  <header><div className="flex items-center gap-2 text-xs font-bold text-emerald-700 dark:text-amber-300"><Sparkles className="w-4 h-4"/> مجموعه زندگی و خانواده</div><h1 className="text-2xl sm:text-3xl font-black mt-1">هم‌صدا؛ همراه زندگی</h1><p className="text-sm text-slate-500 mt-1">۱۲ ابزار کاربردی در یک فضای یکپارچه و رایگان</p></header>
-  <UpdateCenter/>
-  <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2">{tabs.map(x=><button key={x.id} onClick={()=>setTab(x.id)} className={'text-right rounded-xl border p-3 '+(tab===x.id?'border-emerald-700 bg-emerald-50 dark:bg-emerald-950/50':'border-slate-200 dark:border-emerald-950 bg-white dark:bg-[#0e1816]')}><span className="flex items-center gap-2 text-sm font-bold"><x.icon className="w-4 h-4 text-emerald-700 dark:text-amber-300"/>{x.label}</span><span className="block text-[11px] text-slate-500 mt-1">{x.desc}</span></button>)}</div>
-  <section className="luxury-card p-4 sm:p-6 space-y-4"><div><h2 className="text-xl font-extrabold">{current.label}</h2><p className="text-xs text-slate-500 mt-1">{current.desc}</p></div>
-  {tab==='loan'&&<div className="space-y-4"><div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3"><Field label="مبلغ وام" value={principal} onChange={setPrincipal} type="number"/><Field label="سود سالانه درصد" value={rate} onChange={setRate} type="number"/><Field label="مدت به ماه" value={months} onChange={setMonths} type="number"/><Field label="کارمزد" value={fee} onChange={setFee} type="number"/></div><label className="block text-xs">واحد پول<select className={input} value={currency} onChange={e=>setCurrency(e.target.value)}><option>تومان</option><option>ریال</option></select></label><div className="grid sm:grid-cols-3 gap-3">{[{l:'قسط ماهانه',v:payment},{l:'سود تقریبی کل',v:total-p-(Number(fee)||0)},{l:'کل پرداختی',v:total}].map(x=><div key={x.l} className="rounded-xl bg-emerald-50 dark:bg-emerald-950/40 p-4"><p className="text-xs text-slate-500">{x.l}</p><b className="block text-xl mt-2 text-emerald-800 dark:text-amber-300">{money(x.v)} {currency}</b></div>)}</div><p className="text-xs text-slate-500">بر پایه اقساط مساوی ماهانه و نرخ اسمی سالانه؛ مالیات، بیمه و فرمول اختصاصی بانک ممکن است نتیجه را تغییر دهد.</p></div>}
-  {tab==='health'&&<div className="space-y-3"><div className="rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 p-3 text-xs text-amber-900 dark:text-amber-200 flex gap-2"><AlertTriangle className="w-4 h-4 shrink-0"/> اطلاعات سلامت فعلاً فقط در حافظه همین نشست است؛ تا آماده‌شدن خزانه رمزنگاری‌شده روی دستگاه یا فضای ابری ذخیره نمی‌شود.</div><div className="grid sm:grid-cols-3 gap-3"><Field label="نام عضو" value={a.title} onChange={v=>setA(x=>({...x,title:v}))}/><Field label="سابقه، دارو یا حساسیت" value={a.detail} onChange={v=>setA(x=>({...x,detail:v}))}/><Field label="تاریخ" value={a.date} onChange={v=>setA(x=>({...x,date:v}))} type="date"/></div><button className={btn} onClick={()=>{add(setHealth,a);setA({title:'',detail:'',date:''});}}>ثبت سابقه</button><List items={health} remove={key=>remove(setHealth,key)}/><p className="text-xs text-slate-500">این بخش ابزار ثبت اطلاعات است و تشخیص یا توصیه درمانی ارائه نمی‌کند.</p></div>}
-  {tab==='emergency'&&<div className="space-y-3"><div className="rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 p-3 text-xs">کارت تا تکمیل ذخیره‌سازی امن فقط در همین نشست فعال است.</div><div className="grid sm:grid-cols-2 gap-3"><Field label="نام" value={emergency.name} onChange={v=>setEmergency(x=>({...x,name:v}))}/><Field label="شماره تماس اضطراری" value={emergency.phone} onChange={v=>setEmergency(x=>({...x,phone:v}))}/><Field label="پزشک" value={emergency.doctor} onChange={v=>setEmergency(x=>({...x,doctor:v}))}/><Field label="حساسیت‌ها" value={emergency.allergy} onChange={v=>setEmergency(x=>({...x,allergy:v}))}/><Field label="گروه خونی اختیاری" value={emergency.blood} onChange={v=>setEmergency(x=>({...x,blood:v}))}/></div><div className="border-2 border-rose-200 dark:border-rose-900 rounded-2xl p-4"><b className="text-lg">{emergency.name||'کارت اضطراری'}</b><p className="text-sm mt-2">تماس: {emergency.phone||'ثبت نشده'}</p><p className="text-sm">پزشک: {emergency.doctor||'ثبت نشده'}</p><p className="text-sm">حساسیت: {emergency.allergy||'ثبت نشده'}</p><p className="text-sm">گروه خون: {emergency.blood||'ثبت نشده'}</p></div></div>}
-  {tab==='documents'&&<div className="space-y-3"><div className="grid sm:grid-cols-3 gap-3"><Field label="عنوان مدرک" value={a.title} onChange={v=>setA(x=>({...x,title:v}))}/><Field label="نوع / محل نگهداری" value={a.detail} onChange={v=>setA(x=>({...x,detail:v}))}/><Field label="تاریخ انقضا" value={a.date} onChange={v=>setA(x=>({...x,date:v}))} type="date"/></div><button className={btn} onClick={()=>{add(setDocuments,a);setA({title:'',detail:'',date:''});}}>افزودن یادآور</button><List items={documents} remove={key=>remove(setDocuments,key)}/><p className="text-xs text-slate-500">فایل اسکن، شماره کامل کارت بانکی، رمز و کد یک‌بارمصرف ذخیره نمی‌شود.</p></div>}
-  {tab==='academy'&&<div className="space-y-3"><div className="flex flex-wrap gap-2">{['همه','فناوری','زبان','مالی','شغل'].map(x=><button key={x} onClick={()=>setAcademyFilter(x)} className="rounded-full bg-slate-100 dark:bg-[#14221e] px-3 py-2 text-xs">{x}</button>)}</div>{courses.filter(x=>academyFilter==='همه'||x.category===academyFilter).map(x=><div key={x.id} className="rounded-xl bg-slate-50 dark:bg-[#14221e] p-4 flex justify-between items-center gap-3"><div><b className="text-sm">{x.title}</b><p className="text-xs text-slate-500 mt-1">{x.detail}</p></div><button className={btn} onClick={()=>setAcademyDone(old=>old.includes(x.id)?old.filter(k=>k!==x.id):[...old,x.id])}>{academyDone.includes(x.id)?'تکمیل شد':'شروع / تکمیل'}</button></div>)}</div>}
-  {tab==='brain'&&<div className="space-y-3"><div className="rounded-xl bg-slate-50 dark:bg-[#14221e] p-5"><p className="text-xs text-slate-500">تمرین محاسبه سریع</p><b className="text-2xl block my-3">{question} + 8 = ؟</b><div className="flex gap-2"><input className={input} value={answer} onChange={e=>setAnswer(e.target.value)} inputMode="numeric"/><button className={btn} onClick={()=>{if(Number(answer)===question+8){setBrainScore(s=>s+1);setToast('پاسخ درست بود!');}else setToast('دوباره تلاش کن.');setQuestion(Math.floor(Math.random()*40)+5);setAnswer('');}}>بررسی</button></div></div><p className="text-sm">امتیاز پاسخ درست: {brainScore.toLocaleString('fa-IR')}</p><p className="text-xs text-slate-500">تمرین سرگرمی و یادگیری است و ادعای درمان یا افزایش IQ ندارد.</p></div>}
-  {tab==='calendar'&&<div className="space-y-3"><div className="grid sm:grid-cols-3 gap-3"><Field label="عنوان رویداد" value={a.title} onChange={v=>setA(x=>({...x,title:v}))}/><Field label="توضیحات" value={a.detail} onChange={v=>setA(x=>({...x,detail:v}))}/><Field label="تاریخ" value={a.date} onChange={v=>setA(x=>({...x,date:v}))} type="date"/></div><button className={btn} onClick={()=>{add(setCalendar,a);setA({title:'',detail:'',date:''});}}>ثبت رویداد</button><List items={calendar} remove={key=>remove(setCalendar,key)}/><p className="text-xs text-slate-500">تاریخ‌ها فعلاً ISO ذخیره می‌شوند؛ نمایش شمسی و همگام‌سازی مشترک در تکمیل یکپارچه‌سازی افزوده می‌شود.</p></div>}
-  {tab==='career'&&<div className="space-y-3"><div className="grid sm:grid-cols-2 gap-3"><Field label="مهارت، تجربه یا پروژه" value={c.title} onChange={v=>setC(x=>({...x,title:v}))}/><Field label="شرح و نتیجه واقعی" value={c.detail} onChange={v=>setC(x=>({...x,detail:v}))}/></div><button className={btn} onClick={()=>{add(setCareer,c);setC({title:'',detail:''});}}>افزودن به پروفایل</button><List items={career} remove={key=>remove(setCareer,key)}/><p className="text-xs text-slate-500">رزومه بر پایه تجربه واقعی ساخته می‌شود.</p></div>}
-  {tab==='prices'&&<div className="space-y-3"><div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2"><Field label="کالا" value={price.product} onChange={v=>setPrice(x=>({...x,product:v}))}/><Field label="فروشگاه" value={price.shop} onChange={v=>setPrice(x=>({...x,shop:v}))}/><Field label="قیمت کل تومان" value={price.price} onChange={v=>setPrice(x=>({...x,price:v}))} type="number"/><Field label="مقدار" value={price.quantity} onChange={v=>setPrice(x=>({...x,quantity:v}))} type="number"/><Field label="واحد" value={price.unit} onChange={v=>setPrice(x=>({...x,unit:v}))}/></div><button className={btn} onClick={()=>{if(price.product&&price.shop&&Number(price.price)>0&&Number(price.quantity)>0){setPrices(old=>[{id:id(),product:price.product,shop:price.shop,price:Number(price.price),quantity:Number(price.quantity),unit:price.unit},...old]);setPrice({product:'',shop:'',price:'',quantity:'1',unit:'عدد'});}}}>ثبت قیمت</button>{prices.map(x=><div key={x.id} className="flex justify-between bg-slate-50 dark:bg-[#14221e] rounded-xl p-3 text-sm"><span>{x.product} · {x.shop} · {money(x.price/x.quantity)} تومان / {x.unit}</span><button className="text-rose-600" onClick={()=>setPrices(old=>old.filter(y=>y.id!==x.id))}>حذف</button></div>)}<p className="text-xs text-slate-500">قیمت‌ها دستی‌اند و قیمت زنده یا منبع تأییدنشده نمایش داده نمی‌شود.</p></div>}
-  {tab==='usage'&&<div className="space-y-3"><div className="grid sm:grid-cols-4 gap-2"><Field label="نوع مصرف" value={usageDraft.title} onChange={v=>setUsageDraft(x=>({...x,title:v}))}/><Field label="قرائت / مقدار" value={usageDraft.detail} onChange={v=>setUsageDraft(x=>({...x,detail:v}))}/><Field label="مبلغ قبض تومان" value={usageDraft.amount} onChange={v=>setUsageDraft(x=>({...x,amount:v}))} type="number"/><Field label="تاریخ" value={usageDraft.date} onChange={v=>setUsageDraft(x=>({...x,date:v}))} type="date"/></div><button className={btn} onClick={()=>{if(usageDraft.title&&usageDraft.amount)setUsage(old=>[{id:id(),title:usageDraft.title,detail:usageDraft.detail,date:usageDraft.date,amount:Number(usageDraft.amount)},...old]);}}>ثبت مصرف</button><b className="text-xl text-emerald-700">جمع مبالغ: {money(usage.reduce((s,x)=>s+(x.amount||0),0))} تومان</b><List items={usage} remove={key=>remove(setUsage,key)}/><p className="text-xs text-slate-500">محاسبه مصرف واقعی نیازمند قرائت ابتدا و انتهای دوره و تعرفه معتبر منطقه است.</p></div>}
-  {tab==='shopping'&&<div className="space-y-3"><label className="block text-xs">متن خرید را با ویرگول یا خط جدید جدا کن<textarea className={input+' min-h-28 mt-2'} value={shoppingText} onChange={e=>setShoppingText(e.target.value)} placeholder="شیر، نان، برنج، مایع ظرفشویی"/></label><button className={btn} onClick={()=>{const parts=shoppingText.split(/[،,؛;\n]+/).map(x=>x.trim()).filter(Boolean);setShopping(old=>[...parts.map(title=>({id:id(),title,detail:'افزوده از متن'})),...old]);setShoppingText('');}}>تبدیل به فهرست خرید</button>{shopping.map(x=><div key={x.id} className="flex items-center gap-2 bg-slate-50 dark:bg-[#14221e] p-3 rounded-xl"><button onClick={()=>setShopping(old=>old.map(y=>y.id===x.id?{...y,done:!y.done}:y))}>{x.done?<Check className="text-emerald-700"/>:<span className="w-4 h-4 border rounded"/>}</button><span className={'flex-1 text-sm '+(x.done?'line-through text-slate-400':'')}>{x.title}</span><button onClick={()=>setShopping(old=>old.filter(y=>y.id!==x.id))} className="text-rose-600"><Trash2 className="w-4 h-4"/></button></div>)}</div>}
-  {tab==='savings'&&<div className="space-y-3"><div className="grid sm:grid-cols-4 gap-2"><Field label="هدف" value={saving.title} onChange={v=>setSaving(x=>({...x,title:v}))}/><Field label="مبلغ هدف تومان" value={saving.target} onChange={v=>setSaving(x=>({...x,target:v}))} type="number"/><Field label="موجودی فعلی تومان" value={saving.current} onChange={v=>setSaving(x=>({...x,current:v}))} type="number"/><Field label="موعد" value={saving.date} onChange={v=>setSaving(x=>({...x,date:v}))} type="date"/></div><button className={btn} onClick={()=>{if(saving.title&&Number(saving.target)>0){setSavings(old=>[{id:id(),title:saving.title,detail:'پیشرفت هدف از '+saving.target+' تومان',amount:Number(saving.current),date:saving.date},...old]);setSaving({title:'',target:'',current:'0',date:''});}}}>ثبت هدف</button><List items={savings} remove={key=>remove(setSavings,key)}/><p className="text-xs text-slate-500">ابزار برنامه‌ریزی پس‌انداز است و توصیه سرمایه‌گذاری یا تضمین بازده نمی‌دهد.</p></div>}
-  </section>
-  {toast&&<div role="status" className="fixed bottom-24 right-4 z-50 rounded-xl bg-slate-900 text-white px-4 py-3 text-sm">{toast}</div>}
- </div>;
+const fieldClass = 'w-full min-h-12 rounded-2xl border border-[#E6E2D8] dark:border-emerald-900/70 bg-white/90 dark:bg-[#0B1512] px-4 py-3 text-sm text-slate-900 dark:text-white outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-600/10';
+const cardClass = 'rounded-3xl border border-[#E6E2D8] dark:border-emerald-950/80 bg-white/90 dark:bg-[#0E1816] shadow-[0_18px_50px_-34px_rgba(11,70,54,.3)]';
+
+export const FamilyLifeSuite: React.FC = () => {
+  const [records, setRecords] = useState<HealthRecord[]>([]);
+  const [name, setName] = useState('');
+  const [detail, setDetail] = useState('');
+  const [date, setDate] = useState('');
+
+  const addRecord = () => {
+    if (!name.trim()) return;
+    setRecords((items) => [{id: String(Date.now()) + Math.random().toString(16).slice(2), name: name.trim(), detail: detail.trim(), date}, ...items]);
+    setName('');
+    setDetail('');
+    setDate('');
+  };
+
+  return (
+    <div dir="rtl" className="space-y-6">
+      <section className="relative overflow-hidden rounded-[2rem] border border-emerald-900/15 dark:border-emerald-400/15 bg-gradient-to-br from-[#102F27] via-[#0D4938] to-[#10251F] p-6 sm:p-9 text-white shadow-[0_28px_70px_-35px_rgba(5,55,39,.65)]">
+        <div className="absolute -left-16 -top-20 h-64 w-64 rounded-full bg-amber-300/10 blur-3xl" />
+        <div className="absolute -right-16 -bottom-24 h-64 w-64 rounded-full bg-emerald-300/10 blur-3xl" />
+        <div className="relative flex flex-col sm:flex-row sm:items-end justify-between gap-5">
+          <div className="max-w-2xl">
+            <div className="inline-flex items-center gap-2 rounded-full border border-amber-200/25 bg-white/10 px-3 py-1.5 text-[11px] font-semibold text-amber-100">
+              <HeartPulse className="h-4 w-4" /> مراقبت و سلامت خانواده
+            </div>
+            <h1 className="mt-4 text-2xl sm:text-4xl font-black tracking-tight">پرونده سلامت</h1>
+            <p className="mt-3 max-w-xl text-sm leading-7 text-emerald-50/80">
+              یادداشت سوابق، داروها و حساسیت‌های مهم اعضای خانواده در یک فضای ساده و مرتب.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur">
+            <Activity className="h-6 w-6 text-amber-200" />
+            <div><div className="text-2xl font-black tabular-nums">{records.length.toLocaleString('fa-IR')}</div><div className="text-[11px] text-emerald-50/70">یادداشت این نشست</div></div>
+          </div>
+        </div>
+      </section>
+
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,.72fr)]">
+        <section className={cardClass + ' p-5 sm:p-7 space-y-5'}>
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300"><Plus className="h-5 w-5" /></div>
+            <div><h2 className="font-extrabold text-lg">ثبت یادداشت سلامت</h2><p className="text-xs text-slate-500 mt-1">اطلاعات ضروری را کوتاه و دقیق وارد کن</p></div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="space-y-2 text-xs font-semibold text-slate-600 dark:text-slate-300">نام عضو خانواده<input className={fieldClass} value={name} onChange={(e) => setName(e.target.value)} placeholder="مثلاً نام عضو خانواده" /></label>
+            <label className="space-y-2 text-xs font-semibold text-slate-600 dark:text-slate-300">تاریخ<input className={fieldClass} type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
+          </div>
+          <label className="block space-y-2 text-xs font-semibold text-slate-600 dark:text-slate-300">سابقه، دارو یا حساسیت<textarea className={fieldClass + ' min-h-28 resize-y'} value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="توضیح کوتاه و کاربردی..." /></label>
+          <button type="button" onClick={addRecord} disabled={!name.trim()} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-gradient-to-l from-emerald-800 to-emerald-700 px-6 text-sm font-bold text-white shadow-lg shadow-emerald-900/15 transition hover:-translate-y-0.5 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-40"><Plus className="h-4 w-4" /> ثبت یادداشت</button>
+        </section>
+
+        <aside className={cardClass + ' p-5 sm:p-6 space-y-4'}>
+          <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"><AlertCircle className="h-5 w-5" /></div><h2 className="font-extrabold">نکته مهم درباره حریم خصوصی</h2></div>
+          <p className="text-sm leading-7 text-slate-600 dark:text-slate-300">این نسخه یادداشت‌ها را فقط تا زمان باز بودن همین صفحه نگه می‌دارد و آن‌ها را در فضای ابری یا حافظه دائمی ذخیره نمی‌کند. اطلاعات حساس پزشکی را فقط در محیط امن و مورد اعتماد ثبت کن.</p>
+          <div className="rounded-2xl bg-[#F7F6F2] dark:bg-[#09110F] p-4 text-xs leading-6 text-slate-500 dark:text-slate-400">این ابزار برای یادداشت‌برداری است و جایگزین تشخیص، نسخه یا توصیه پزشک نیست.</div>
+        </aside>
+      </div>
+
+      <section className={cardClass + ' p-5 sm:p-7 space-y-4'}>
+        <div className="flex items-center justify-between gap-3"><div><h2 className="text-lg font-extrabold">یادداشت‌های ثبت‌شده</h2><p className="mt-1 text-xs text-slate-500">مرتب‌شده از جدید به قدیم</p></div><span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300">{records.length.toLocaleString('fa-IR')} مورد</span></div>
+        {records.length === 0 ? <div className="rounded-2xl border border-dashed border-[#D9D4C8] dark:border-emerald-900/70 px-4 py-10 text-center"><CalendarDays className="mx-auto h-7 w-7 text-slate-400" /><p className="mt-3 text-sm font-semibold text-slate-600 dark:text-slate-300">هنوز یادداشتی ثبت نشده</p><p className="mt-1 text-xs text-slate-500">اولین یادداشت سلامت را از فرم بالا اضافه کن.</p></div> : <div className="space-y-3">{records.map((record) => <article key={record.id} className="flex items-start gap-3 rounded-2xl bg-[#F7F6F2] dark:bg-[#09110F] p-4"><div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-800 dark:bg-[#14231E] dark:text-emerald-300"><HeartPulse className="h-4 w-4" /></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-bold">{record.name}</h3>{record.date && <span className="text-[11px] text-slate-500">{record.date}</span>}</div><p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-600 dark:text-slate-300">{record.detail || 'بدون توضیحات تکمیلی'}</p></div><button type="button" onClick={() => setRecords((items) => items.filter((x) => x.id !== record.id))} aria-label="حذف یادداشت" className="rounded-xl p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40"><Trash2 className="h-4 w-4" /></button></article>)}</div>}
+      </section>
+    </div>
+  );
 };
