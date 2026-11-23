@@ -160,6 +160,7 @@ function formatTrackClock(seconds: number): string {
 function sourceLabel(track: MusicTrack): string {
   if (track.isLiveStream || track.source === 'radio') return 'رادیو زنده';
   if (!track.streamUrl) return 'مشاهده در سایت منبع';
+  if (track.source === 'radiojavan') return 'رادیوجوان · پخش مستقیم';
   if (track.source === 'archive') return 'پخش مستقیم از منبع';
   return 'پخش کامل';
 }
@@ -598,7 +599,7 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
     onStatusToast(`رادیو «${removedTitle}» حذف شد (هر زمان با جستجو دوباره برمی‌گردد).`);
   };
 
-  const handleFetchRadio = async (category: RadioCategory, customQueryText?: string) => {
+  const handleFetchRadio = async (category: RadioCategory, customQueryText?: string, autoPlayFirst = false) => {
     if (!isOnline) {
       onStatusToast('اتصال به ایستگاه‌های رادیویی زنده نیازمند اینترنت است.');
       return;
@@ -626,6 +627,7 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
       setCurrentRadioIndex(-1);
       setRadioStations(list);
       setRadioNotice(data.notice || '');
+      if (autoPlayFirst && list.length > 0) startRadioAtIndex(0, list);
       if (data.notice) {
         onStatusToast(data.notice);
       } else if (list.length > 0) {
@@ -703,7 +705,7 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
     }
   };
 
-  const handleDiscoverNight = async (mode: 'music' | 'movies', customMoodOverride?: string) => {
+  const handleDiscoverNight = async (mode: 'music' | 'movies', customMoodOverride?: string, autoPlayFirst = false) => {
     if (!isOnline) {
       onStatusToast(
         mode === 'music'
@@ -742,6 +744,7 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
           onStatusToast(`${toPersianDigits(list.length)} قطعه موسیقی پیدا شد — روی هر کدام بزنید تا پخش شود.`);
           stopMusicPlayback();
           setCurrentMusicIndex(-1);
+          if (autoPlayFirst) startMusicAtIndex(0, list);
         } else {
           onStatusToast('قطعه‌ای پیدا نشد؛ عبارت ساده‌تری مثل «پیانو» یا «شجریان» را امتحان کنید.');
         }
@@ -771,7 +774,7 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
       const cat: RadioCategory =
         requested === 'world' ? 'world' : requested === 'chill' ? 'chill' : requested === 'iran' ? 'iran' : 'custom';
       if (isOnline) {
-        handleFetchRadio(cat, cat === 'custom' ? requested : '');
+        handleFetchRadio(cat, cat === 'custom' ? requested : '', true);
       } else if (radioStations.length > 0) {
         startRadioAtIndex(0, radioStations);
       }
@@ -779,7 +782,7 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
       const q = assistantMediaTrigger.query?.trim();
       if (q && isOnline) {
         setMusicMood(q);
-        handleDiscoverNight('music', q);
+        handleDiscoverNight('music', q, true);
       } else if (tracks.length > 0 && currentMusicIndex === -1) {
         startMusicAtIndex(0, tracks);
       }
