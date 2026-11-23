@@ -617,14 +617,6 @@ public class RoozhayeNativePlugin extends Plugin {
                         call.resolve(ret);
                         return;
                     }
-                    String callScript = call.getString("callScript", "");
-                    if (callScript == null || callScript.trim().isEmpty()) {
-                        callScript = smsBody != null ? smsBody : "";
-                    }
-                    boolean hasCallScript = !callScript.trim().isEmpty();
-                    if (hasCallScript) {
-                        CallProxyController.armAndShow(ctx, name, phone, callScript.trim());
-                    }
                     boolean hasCallPerm = ContextCompat.checkSelfPermission(ctx, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED;
                     if (!hasCallPerm && getActivity() != null) {
                         ActivityCompat.requestPermissions(getActivity(), new String[]{Manifest.permission.CALL_PHONE}, PERM_REQ_CODE + 3);
@@ -634,9 +626,7 @@ public class RoozhayeNativePlugin extends Plugin {
                     ctx.startActivity(callIntent);
                     ret.put("ok", true);
                     if (hasCallPerm) {
-                        ret.put("message", hasCallScript
-                                ? "در حال تماس با " + (name.isEmpty() ? phone : name) + " — پنجره خواندن پیام روی صفحه تماس باز شد (پس از چند ثانیه به‌صورت خودکار یا با یک لمس روی بلندگو خوانده می‌شود)."
-                                : "در حال برقراری تماس با " + (name.isEmpty() ? phone : name));
+                        ret.put("message", "در حال برقراری تماس با " + (name.isEmpty() ? phone : name));
                     } else {
                         ret.put("message", "شماره‌گیر برای " + (name.isEmpty() ? phone : name) + " باز شد (برای تماس مستقیم بدون لمس، اجازه تلفن را تایید کنید).");
                     }
