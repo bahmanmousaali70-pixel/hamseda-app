@@ -115,6 +115,10 @@ public class IncomingCallReceiver extends BroadcastReceiver {
 
         String displayOrPhonetic = FinglishPhoneticHelper.resolveSenderDisplayName(context, callerName);
         String spokenText = "تماس ورودی از طرف " + displayOrPhonetic;
+        String riskWarning = detectCallRisk(incomingNumber, callerName);
+        if (!riskWarning.isEmpty()) {
+            spokenText = riskWarning + ". " + spokenText;
+        }
         boolean isMale = "male".equals(prefs.getString("default_voice_gender", "female"));
         String voiceName = prefs.getString("default_voice_name", isMale ? "Charon" : "Kore");
         int repeat = 2;
@@ -149,7 +153,7 @@ public class IncomingCallReceiver extends BroadcastReceiver {
 
         CallAnnouncerService.announce(
                 context,
-                "تماس ورودی: " + callerName,
+                riskWarning.isEmpty() ? "تماس ورودی: " + callerName : "⚠️ هشدار تماس مشکوک",
                 spokenText,
                 voiceName,
                 isMale,
@@ -157,6 +161,24 @@ public class IncomingCallReceiver extends BroadcastReceiver {
                 true
         );
     }
+
+
+    // Local prefix screening only; no phone number is sent to external services.
+    private String detectCallRisk(String number, String resolvedName) {
+        if (number == null || number.trim().isEmpty()) return "";
+        if (resolvedName != null && !resolvedName.equals(number) && !resolvedName.equals("تماس ناشناس")) return "";
+        String normalized = number.replaceAll("[^0-9+]", "");
+        String digits = normalized.replace("+", "");
+        boolean premiumOrUnusual =
+                normalized.startsWith("+881") || normalized.startsWith("+882") ||
+                normalized.startsWith("+870") || normalized.startsWith("+979") ||
+                digits.startsWith("0900") || digits.startsWith("449");
+        if (premiumOrUnusual) {
+            return "هشدار احتیاطی: این شماره ناشناس دارای پیش‌شماره پرهزینه یا غیرمعمول است؛ با احتیاط پاسخ دهید";
+        }
+        return "";
+    }
+
 
     private String lookupContactName(Context context, String phoneNumber) {
         if (phoneNumber == null || phoneNumber.trim().isEmpty()) return null;
