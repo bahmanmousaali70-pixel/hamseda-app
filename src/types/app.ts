@@ -214,7 +214,7 @@ export type PersonalityFocusId = 'analytical' | 'creative' | 'sensitive' | 'acti
 export type TodaySubSection = 'planner' | 'reminders' | 'shopping_meals' | 'finance_bills' | 'health_vault' | 'growth_lab';
 
 export interface AppSettings {
-  theme: 'light' | 'dark';
+  theme: 'light' | 'dark' | 'obsidian-gold' | 'royal-navy' | 'midnight-purple' | 'graphite' | 'ivory-champagne' | 'arctic-silver';
   defaultVoice: VoiceName;
   speechRate: number;
   myName: string;
