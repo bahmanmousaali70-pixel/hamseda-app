@@ -1252,7 +1252,7 @@ interface ServerMusicTrack {
   isLiveStream?: boolean;
   country?: string;
   tags?: string;
-  source: 'audius' | 'archive' | 'radio';
+  source: 'audius' | 'archive' | 'radio' | 'radiojavan';
   externalUrl?: string;
 }
 
@@ -1676,7 +1676,7 @@ async function fetchArchiveFullTracks(query: string): Promise<ServerMusicTrack[]
 }
 
 const IRANIAN_MUSIC_SEARCH_HOSTS = [
-  'radiojavan.com', 'radiojavan.top', 'navahang.com', 'avayeirani.com',
+  'radiojavan.com', 'radiojavan.top', 'play.radiojavan.com', 'navahang.com', 'avayeirani.com',
   'iranimusic.com', 'donyayeahang.ir', 'sonalos.com', 'iranibeat.ir',
   'iromusic.live', 'hailymusic.ir', 'biya2ahang.ir', 'music.iranseda.ir',
   'beeptunes.com', 'navaak.com',
@@ -1691,7 +1691,11 @@ function musicQueryVariants(raw: string): string[] {
   if (artist && artist !== cleaned) variants.push(artist);
   if (/(آریان|arian)/i.test(q)) variants.push('Arian', 'Arian Band', 'گروه آریان آلبوم', 'Arian Band albums');
   if (/(قدیمی|نوستالژی|خاطره|کالکشن|مجموعه)/.test(q)) variants.push('آهنگ های قدیمی ایرانی آلبوم', 'Persian oldies album', 'Iranian classic albums');
-  return [...new Set(variants.filter((v) => v.length >= 2))].slice(0, 5);
+  if (/(غمگین|غم|دلتنگ|حزین)/.test(q)) variants.push('آهنگ غمگین ایرانی', 'Persian sad songs');
+  if (/(شاد|رقص|انرژی|پارتی)/.test(q)) variants.push('آهنگ شاد ایرانی', 'Persian upbeat dance songs');
+  if (/(آرامش|آرام|ریلکس|ملایم)/.test(q)) variants.push('موسیقی آرام ایرانی', 'Persian relaxing music');
+  if (/(عاشقانه|رمانتیک|عشق)/.test(q)) variants.push('آهنگ عاشقانه ایرانی', 'Persian romantic songs');
+  return [...new Set(variants.filter((v) => v.length >= 2))].slice(0, 7);
 }
 
 async function extractPublicMusicPage(result: PublicSearchResult): Promise<ServerMusicTrack | null> {
@@ -1777,6 +1781,110 @@ async function searchIranianMusicWeb(query: string): Promise<{tracks: ServerMusi
   };
 }
 
+const RADIO_JAVAN_ARTIST_ALIASES: Array<{fa: string; queries: string[]; match: string[]}> = [
+  {fa: 'رضا صادقی', queries: ['Reza Sadeghi'], match: ['reza sadeghi', 'رضا صادقی']},
+  {fa: 'شجریان', queries: ['Mohammad Reza Shajarian', 'Shajarian'], match: ['mohammad reza shajarian', 'reza shajarian', 'shajarian', 'شجریان']},
+  {fa: 'همایون شجریان', queries: ['Homayoun Shajarian'], match: ['homayoun shajarian', 'همایون شجریان']},
+  {fa: 'سیاوش قمیشی', queries: ['Siavash Ghomayshi', 'Siavash Ghomeishi'], match: ['siavash ghomayshi', 'siavash ghomeishi', 'سیاوش قمیشی']},
+  {fa: 'ابی', queries: ['Ebi'], match: ['ebi', 'ابی']},
+  {fa: 'داریوش', queries: ['Dariush'], match: ['dariush', 'داریوش']},
+  {fa: 'گوگوش', queries: ['Googoosh'], match: ['googoosh', 'گوگوش']},
+  {fa: 'معین', queries: ['Moein'], match: ['moein', 'معین']},
+  {fa: 'محسن چاوشی', queries: ['Mohsen Chavoshi'], match: ['mohsen chavoshi', 'محسن چاوشی']},
+  {fa: 'محسن ابراهیم زاده', queries: ['Mohsen Ebrahimzadeh'], match: ['mohsen ebrahimzadeh', 'محسن ابراهیم زاده']},
+  {fa: 'فریدون فروغی', queries: ['Fereydoun Foroughi'], match: ['fereydoun foroughi', 'فریدون فروغی']},
+  {fa: 'هایده', queries: ['Hayedeh'], match: ['hayedeh', 'هایده']},
+  {fa: 'مهستی', queries: ['Mahasti'], match: ['mahasti', 'مهستی']},
+  {fa: 'شادمهر', queries: ['Shadmehr Aghili'], match: ['shadmehr aghili', 'shadmehr', 'شادمهر']},
+  {fa: 'سیروان خسروی', queries: ['Sirvan Khosravi'], match: ['sirvan khosravi', 'سیروان خسروی']},
+];
+
+function findMusicArtistAlias(rawQuery: string): {queries: string[]; match: string[]} | null {
+  const normalized = normalizeMusicMatchText(rawQuery);
+  for (const alias of RADIO_JAVAN_ARTIST_ALIASES) {
+    const fa = normalizeMusicMatchText(alias.fa);
+    if (normalized.includes(fa) || alias.match.some((name) => normalized.includes(normalizeMusicMatchText(name)))) {
+      return {queries: alias.queries, match: alias.match.map(normalizeMusicMatchText)};
+    }
+  }
+  return null;
+}
+
+async function searchRadioJavanTracks(rawQuery: string): Promise<ServerMusicTrack[]> {
+  const artistAlias = findMusicArtistAlias(rawQuery);
+  const queries = [...new Set([...(artistAlias?.queries ?? []), ...musicQueryVariants(rawQuery)])].slice(0, 4);
+  const headers = {
+    Accept: 'application/json, text/plain, */*',
+    'Accept-Language': 'fa-IR,fa;q=0.9,en-US;q=0.8',
+    'x-rj-user-agent': 'Radio Javan/5.0.0 (Desktop) com.radioJavan.rj.desktop',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36',
+  };
+  const songIds = new Set<string>();
+  const searchTasks = queries.map(async (query) => {
+    const response = await fetch(`https://rj-deskcloud.com/api2/search?query=${encodeURIComponent(query)}`, {
+      headers,
+      signal: AbortSignal.timeout(6500),
+    });
+    if (!response.ok) return;
+    const payload = await response.json() as {mp3s?: Array<{id?: string | number}>};
+    for (const item of payload.mp3s ?? []) {
+      if (item?.id !== undefined && item?.id !== null) songIds.add(String(item.id));
+      if (songIds.size >= 24) break;
+    }
+  });
+  const artistTasks = (artistAlias?.queries ?? []).slice(0, 2).map(async (query) => {
+    const response = await fetch(`https://rj-deskcloud.com/api2/artist?query=${encodeURIComponent(query)}`, {
+      headers,
+      signal: AbortSignal.timeout(6500),
+    });
+    if (!response.ok) return;
+    const payload = await response.json() as {mp3s?: Array<{id?: string | number}>};
+    for (const item of payload.mp3s ?? []) {
+      if (item?.id !== undefined && item?.id !== null) songIds.add(String(item.id));
+      if (songIds.size >= 24) break;
+    }
+  });
+  await Promise.allSettled([...searchTasks, ...artistTasks]);
+  const ids = [...songIds].slice(0, 24);
+  const details = await Promise.allSettled(ids.map(async (id): Promise<ServerMusicTrack | null> => {
+    const response = await fetch(`https://rj-deskcloud.com/api2/mp3?id=${encodeURIComponent(id)}`, {
+      headers,
+      signal: AbortSignal.timeout(6500),
+    });
+    if (!response.ok) return null;
+    const song = await response.json() as Record<string, unknown>;
+    const pick = (...keys: string[]) => {
+      for (const key of keys) {
+        const value = song[key];
+        if (typeof value === 'string' && value.startsWith('http')) return value;
+      }
+      return '';
+    };
+    const streamUrl = pick('link', 'hq_link', 'lq_link', 'hls_link', 'hq_hls', 'lq_hls');
+    if (!streamUrl || !isSafePublicAudioUrl(streamUrl)) return null;
+    const title = String(song.song || song.name || song.title || '').trim();
+    const artist = String(song.artist || '').trim();
+    if (!title || !artist) return null;
+    const duration = Number(song.duration || 0);
+    const artwork = pick('thumbnail', 'photo');
+    return {
+      id: `radiojavan_${id}`,
+      title,
+      artist,
+      album: typeof song.album === 'string' ? song.album : undefined,
+      artworkUrl: artwork || undefined,
+      streamUrl,
+      durationSec: Number.isFinite(duration) && duration > 0 ? Math.round(duration) : undefined,
+      source: 'radiojavan',
+      externalUrl: typeof song.share_link === 'string' ? song.share_link : undefined,
+    };
+  }));
+  return details
+    .filter((result): result is PromiseFulfilledResult<ServerMusicTrack | null> => result.status === 'fulfilled')
+    .map((result) => result.value)
+    .filter((track): track is ServerMusicTrack => track !== null);
+}
+
 function normalizeMusicMatchText(value: string): string {
   return value.toLowerCase()
     .replace(/[يى]/g, 'ی').replace(/ك/g, 'ک')
@@ -1787,87 +1895,56 @@ function normalizeMusicMatchText(value: string): string {
 function rankMusicTrack(track: ServerMusicTrack, rawQuery: string): number {
   const titleArtist = normalizeMusicMatchText([track.title, track.artist].join(' '));
   const metadata = normalizeMusicMatchText([track.album || '', track.tags || ''].join(' '));
-  const haystack = `${titleArtist} ${metadata}`.trim();
-  if (!haystack) return 0;
+  if (!titleArtist && !metadata) return 0;
+  const artistAlias = findMusicArtistAlias(rawQuery);
+  if (artistAlias) {
+    const artistMatch = artistAlias.match.some((name) => name.length > 2 && titleArtist.includes(name));
+    if (!artistMatch) return 0;
+    const queryTerms = normalizeMusicMatchText(rawQuery).split(' ').filter((word) => word.length > 2);
+    const titleMatches = queryTerms.filter((word) => titleArtist.includes(word)).length;
+    return 100 + titleMatches * 2;
+  }
   const stopWords = new Set([
     'آهنگ','آهنگهای','آهنگ‌های','موزیک','موسیقی','خواننده','ترانه','لطفا','لطفاً','برای','پخش','کن','بده','برام',
-    'میخوام','میخواهم','میخوام','و','از','با','در','به','یک','the','a','an','please','music','song','songs','track','tracks'
+    'میخوام','میخواهم','میخوام','و','از','با','در','به','یک','آلبوم','آلبومهای','the','a','an','please','music','song','songs','track','tracks'
   ]);
   const terms = [...new Set(normalizeMusicMatchText(rawQuery).split(' ').filter((word) => word.length > 1 && !stopWords.has(word)))];
-  const queryAliases = /آریان|arian/i.test(rawQuery) ? ['arian', 'band'] : /شجریان|shajarian/i.test(rawQuery) ? ['shajarian'] : [];
-  const matchSets = [terms, queryAliases].filter((set) => set.length > 0);
-  if (matchSets.length === 0) return 0;
-  let bestScore = 0;
-  for (const matchTerms of matchSets) {
-    let titleMatches = 0;
-    let metadataMatches = 0;
-    for (const term of matchTerms) {
+  if (terms.length === 0) return 0;
+  let titleMatches = 0;
+  let metadataMatches = 0;
+  for (const term of terms) {
     if (titleArtist.includes(term)) titleMatches += 1;
     else if (metadata.includes(term)) metadataMatches += 1;
   }
-    const matched = titleMatches + metadataMatches;
-    const coverage = matched / matchTerms.length;
-    // Artist/title searches must match every word for short queries; longer descriptions need at least 75% coverage.
-    const requiredCoverage = matchTerms.length <= 2 ? 1 : 0.75;
-    if (coverage < requiredCoverage) continue;
-    // A lone artist/name must occur in the title or artist, never just in generic tags.
-    if (matchTerms.length === 1 && titleMatches === 0) continue;
-    bestScore = Math.max(bestScore, titleMatches * 5 + metadataMatches * 1.5 + coverage * 4);
-  }
-  return bestScore;
+  const coverage = (titleMatches + metadataMatches) / terms.length;
+  if (coverage < (terms.length <= 2 ? 1 : 0.8)) return 0;
+  const moodQuery = /(غمگین|غم|دلتنگ|حزین|شاد|رقص|انرژی|پارتی|آرامش|آرام|ریلکس|ملایم|عاشقانه|رمانتیک)/.test(rawQuery);
+  if (terms.length === 1 && titleMatches === 0 && !(moodQuery && metadataMatches > 0)) return 0;
+  return titleMatches * 6 + metadataMatches * 2 + coverage * 5;
 }
 
 async function fetchPlayableMusicPlaylist(moodOrGenre: string, _ai: GoogleGenAI | null): Promise<{tracks: ServerMusicTrack[]; links: {title: string; url: string}[]}> {
   const rawQuery = moodOrGenre.trim().slice(0, 180);
   if (!rawQuery) return {tracks: [], links: []};
-  const fallback = buildFallbackMusicQueries(rawQuery);
-  const [iranian, audiusResults, archiveResults] = await Promise.all([
+  const [radioJavanTracks, iranian] = await Promise.all([
+    searchRadioJavanTracks(rawQuery),
     searchIranianMusicWeb(rawQuery),
-    Promise.allSettled(musicQueryVariants(rawQuery).slice(0, 3).map(async (query) => {
-      const response = await fetch(
-        `https://api.audius.co/v1/tracks/search?query=${encodeURIComponent(query)}&limit=15&app_name=roozhaye`,
-        {signal: AbortSignal.timeout(6500)}
-      );
-      if (!response.ok) return [];
-      const payload = await response.json();
-      return Array.isArray(payload?.data) ? payload.data : [];
-    })),
-    Promise.allSettled([fallback.archiveQuery, ...musicQueryVariants(rawQuery).slice(0, 2)].map((query) => fetchArchiveFullTracks(query))),
   ]);
-  const tracks: ServerMusicTrack[] = [...iranian.tracks];
-  const seen = new Set(tracks.map((track) => track.id));
-  for (const result of audiusResults) {
-    if (result.status !== 'fulfilled') continue;
-    for (const item of result.value) {
-      if (!item?.id || !item?.title) continue;
-      const duration = typeof item.duration === 'number' ? item.duration : 0;
-      if (duration > 0 && duration < 60) continue;
-      const id = `audius_${item.id}`;
-      if (seen.has(id)) continue;
-      seen.add(id);
-      tracks.push({
-        id, title: String(item.title), artist: String(item.user?.name || item.user?.handle || 'Audius Artist'),
-        artworkUrl: item.artwork?.['150x150'] || item.artwork?.['480x480'] || undefined,
-        streamUrl: `https://api.audius.co/v1/tracks/${encodeURIComponent(item.id)}/stream?app_name=roozhaye`,
-        durationSec: duration >= 60 ? duration : undefined, source: 'audius',
-        externalUrl: item.permalink ? `https://audius.co${item.permalink}` : undefined,
-      });
-    }
+  const candidates: ServerMusicTrack[] = [];
+  const seenStreams = new Set<string>();
+  for (const track of [...radioJavanTracks, ...iranian.tracks]) {
+    if (!track.streamUrl || !isSafePublicAudioUrl(track.streamUrl)) continue;
+    const key = track.streamUrl.split('?')[0].toLowerCase();
+    if (seenStreams.has(key)) continue;
+    seenStreams.add(key);
+    candidates.push(track);
   }
-  for (const result of archiveResults) {
-    if (result.status !== 'fulfilled') continue;
-    for (const track of result.value) {
-      if (seen.has(track.id)) continue;
-      seen.add(track.id);
-      tracks.push(track);
-    }
-  }
-  const ranked = tracks
+  const ranked = candidates
     .map((track) => ({track, score: rankMusicTrack(track, rawQuery)}))
     .filter((entry) => entry.score > 0)
     .sort((a, b) => b.score - a.score)
     .map((entry) => entry.track);
-  return {tracks: ranked.slice(0, 35), links: iranian.links};
+  return {tracks: ranked.slice(0, 35), links: []};
 }
 app.post('/api/radio-stations', async (req, res) => {
   const category = typeof req.body?.category === 'string' ? req.body.category : 'iran';
@@ -1955,7 +2032,7 @@ app.post('/api/radio-stations', async (req, res) => {
         notice = isClosedPersianBroadcaster
           ? `ایستگاه «${rawQuery}» استریم عمومی باز در دایرکتوری‌های رادیویی ندارد؛ رادیوهای زنده موسیقی فارسی جایگزین برای پخش فوری آورده شدند.`
           : `ایستگاه مستقیمی با عبارت «${rawQuery}» در دایرکتوری‌های آزاد پیدا نشد؛ رادیوهای زنده فارسی زیر آماده پخش هستند.`;
-        tracks = CURATED_IRAN_STATIONS.slice(0, 8);
+        tracks = category === 'custom' ? [] : CURATED_IRAN_STATIONS.slice(0, 8);
       }
     } else if (category === 'persian_music') {
       const [persianTag, iranianTag, persianName, irStations] = await Promise.all([
