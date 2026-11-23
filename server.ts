@@ -1684,7 +1684,7 @@ const IRANIAN_MUSIC_SEARCH_HOSTS = [
 
 function musicQueryVariants(raw: string): string[] {
   const q = raw.replace(/[يى]/g, 'ی').replace(/ك/g, 'ک').replace(/\s+/g, ' ').trim();
-  const cleaned = q.replace(/^(?:لطفا\s*)?(?:آهنگ|موزیک|موسیقی)\s+/,'').trim();
+  const cleaned = q.replace(/^(?:لطفا\s*)?(?:آهنگ|اهنگ|موزیک|موسیقی)\s+/,'').trim();
   const variants = [q, cleaned];
   const searchStopWords = new Set(['آلبوم', 'آلبوم‌های', 'آلبومهای', 'کالکشن', 'کالکشن‌های', 'مجموعه', 'آهنگ', 'آهنگ‌های', 'ترانه', 'گروه', 'خواننده', 'سبک', 'موزیک', 'موسیقی', 'جدید', 'قدیمی', 'های', 'ترین']);
   const artist = cleaned.split(/\s+/).filter((word) => !searchStopWords.has(word.replace(/[،,.!?؟]/g, ''))).join(' ').trim();
