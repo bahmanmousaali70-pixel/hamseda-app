@@ -1936,10 +1936,10 @@ function rankMusicTrack(track: ServerMusicTrack, rawQuery: string): number {
     if (titleArtist.includes(term)) titleMatches += 1;
     else if (metadata.includes(term)) metadataMatches += 1;
   }
+  if (moodQuery && track.source === 'radiojavan') return 12 + titleMatches * 2 + metadataMatches;
   const coverage = (titleMatches + metadataMatches) / terms.length;
   if (coverage < (terms.length <= 2 ? 1 : 0.8)) return 0;
-  if (terms.length === 1 && titleMatches === 0 && !(moodQuery && (metadataMatches > 0 || track.source === 'radiojavan'))) return 0;
-  if (moodQuery && titleMatches + metadataMatches === 0 && track.source === 'radiojavan') return 12;
+  if (terms.length === 1 && titleMatches === 0 && !(moodQuery && metadataMatches > 0)) return 0;
   return titleMatches * 6 + metadataMatches * 2 + coverage * 5;
 }
 
