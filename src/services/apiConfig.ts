@@ -1,5 +1,3 @@
-import {Capacitor} from '@capacitor/core';
-
 const SERVER_URL_KEY = 'rmz_cloud_api_base_v1';
 const DEFAULT_API_BASE = 'https://hamseda-app-518643423697.europe-west2.run.app';
 const LEGACY_API_BASES = new Set([
