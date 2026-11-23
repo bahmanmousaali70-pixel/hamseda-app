@@ -167,7 +167,6 @@ interface RoozhayeNativePlugin {
     action: string;
     phone?: string;
     smsBody?: string;
-    callScript?: string;
     confirmed?: boolean;
     name?: string;
     url?: string;
@@ -914,7 +913,6 @@ export async function executeDeviceActionNative(options: {
   action: string;
   phone?: string;
   smsBody?: string;
-  callScript?: string;
   confirmed?: boolean;
   name?: string;
   url?: string;
