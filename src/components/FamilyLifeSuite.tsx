@@ -1,5 +1,6 @@
 import React, {useState} from 'react';
 import {Activity, AlertCircle, CalendarDays, HeartPulse, Plus, Trash2} from 'lucide-react';
+import {UpdateCenter} from './UpdateCenter';
 
 type HealthRecord = {id: string; name: string; detail: string; date: string};
 
@@ -41,6 +42,8 @@ export const FamilyLifeSuite: React.FC = () => {
           </div>
         </div>
       </section>
+
+      <UpdateCenter />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,.72fr)]">
         <section className={cardClass + ' p-5 sm:p-7 space-y-5'}>
