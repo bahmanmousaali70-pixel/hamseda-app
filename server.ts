@@ -3137,8 +3137,6 @@ app.post('/api/assistant-command', async (req, res) => {
 
   const localTimeText = typeof req.body?.localTimeText === 'string' ? req.body.localTimeText.trim() : '';
   const jalaliDate = typeof req.body?.jalaliDate === 'string' ? req.body.jalaliDate.trim() : '';
-  const homeAddress = typeof req.body?.homeAddress === 'string' ? req.body.homeAddress.trim() : '';
-  const callbackPhone = typeof req.body?.callbackPhone === 'string' ? req.body.callbackPhone.trim() : '';
   const rawContacts = Array.isArray(req.body?.contacts) ? (req.body.contacts as {name?: string; phone?: string; persianPhonetic?: string}[]) : [];
   const needsContactsInPrompt = /(تماس|زنگ|شماره|پیام|مسیج|اس ام اس|اس‌ام‌اس|بفرست|بگو به|به .* بگو)/.test(
     utterance
@@ -3171,8 +3169,6 @@ app.post('/api/assistant-command', async (req, res) => {
   try {
     const prompt = `تو «${assistantName}» دستیار صوتی شخصی و همه‌کاره روی گوشی «${ownerSelf}» هستی (همراه زندگی او: «${partnerOther}»).
 زمان فعلی گوشی: ${localTimeText || 'نامشخص'} — تاریخ امروز: ${jalaliDate || 'امروز'}.
-${homeAddress ? `نشانی ذخیره‌شده کاربر برای سفارش‌ها و تماس: ${homeAddress}` : ''}
-${callbackPhone ? `شماره تماس بازگشت ذخیره‌شده کاربر: ${callbackPhone}` : ''}
 ${compactContacts.length > 0 ? `مخاطبین دفترچه تلفن برای تطبیق نام و شماره:\n${JSON.stringify(compactContacts)}` : ''}
 
 درخواست ${ownerSelf}:
@@ -3192,7 +3188,7 @@ ${compactContacts.length > 0 ? `مخاطبین دفترچه تلفن برای ت
 - tell_time: پرسیدن ساعت یا تاریخ امروز.
 - ask_sms_body: درخواست ارسال پیامک به یک شخص وقتی متن پیامک هنوز گفته نشده.
 - send_sms: ارسال پیامک وقتی هم مخاطب و هم متن پیام هر دو مشخص هستند (smsBody پر شود).
-- make_call / end_call: برقراری تماس یا قطع تماس تلفنی. اگر کاربر از هم‌صدا خواست حین تماس پیامی را به طرف مقابل بگوید یا سفارشی ثبت کند (مثلاً پیتزا سفارش بده یا به خانومی پیام بده)، متن دقیق و مؤدبانه پیام تلفنی را در callScript بنویس و اگر سفارش یا آدرس خواست includeAddressAndPhone را true کن (و آدرس/تلفن ذخیره‌شده را در callScript بگنجان).
+- make_call / end_call: فقط برقراری تماس عادی از طریق شماره‌گیر سیم‌کارت یا قطع تماس تلفنی. هم‌صدا نباید به‌جای کاربر صحبت کند یا سفارش ثبت کند.
 - volume_up / volume_down / volume_max / volume_mute: تنظیم بلندی صدا.
 - ringer_silent / ringer_vibrate / ringer_normal: گذاشتن گوشی روی سایلنت، ویبره یا حالت عادی.
 - take_photo / record_video: باز کردن دوربین عکس یا فیلم‌برداری.
@@ -3271,8 +3267,6 @@ ${compactContacts.length > 0 ? `مخاطبین دفترچه تلفن برای ت
         targetName: {type: Type.STRING, description: 'Matched contact name or app name'},
         targetPhone: {type: Type.STRING, description: 'Matched phone number if call/SMS'},
         smsBody: {type: Type.STRING, description: 'SMS body text if already spoken'},
-        callScript: {type: Type.STRING, description: 'Polite Persian message or order script to be spoken during the phone call'},
-        includeAddressAndPhone: {type: Type.BOOLEAN, description: 'True when call is for ordering/delivery or explicitly needs saved address & phone'},
         tab: {type: Type.STRING, description: 'Target app tab id if open_tab'},
         todaySection: {type: Type.STRING, description: 'Sub-section inside today tab: planner | shopping_meals | finance_bills | health_vault | growth_lab'},
         query: {type: Type.STRING, description: 'Search, music, radio, or navigation query'},
@@ -3298,7 +3292,6 @@ ${compactContacts.length > 0 ? `مخاطبین دفترچه تلفن برای ت
       targetName?: string;
       targetPhone?: string;
       smsBody?: string;
-      callScript?: string;
       includeAddressAndPhone?: boolean;
       tab?: string;
       todaySection?: string;
@@ -3998,82 +3991,6 @@ app.get('/api/security-alerts', (_req, res) => {
     ok: true,
     alerts: recentSecurityAlerts,
   });
-});
-
-app.post('/api/voip-proxy-call', async (req, res) => {
-  const webhookUrl = typeof req.body?.webhookUrl === 'string' ? req.body.webhookUrl.trim() : '';
-  const targetName = typeof req.body?.targetName === 'string' ? req.body.targetName.trim() : '';
-  const targetPhone = typeof req.body?.targetPhone === 'string' ? req.body.targetPhone.trim() : '';
-  const script = typeof req.body?.script === 'string' ? req.body.script.trim() : '';
-  const homeAddress = typeof req.body?.homeAddress === 'string' ? req.body.homeAddress.trim() : '';
-  const callbackPhone = typeof req.body?.callbackPhone === 'string' ? req.body.callbackPhone.trim() : '';
-  const ownerName = typeof req.body?.ownerName === 'string' ? req.body.ownerName.trim() : 'کاربر هم‌صدا';
-
-  if (!targetPhone || !script) {
-    res.status(400).json({error: 'شماره مقصد و متن پیام تلفنی لازم است.'});
-    return;
-  }
-
-  if (!webhookUrl) {
-    res.status(400).json({
-      error:
-        'نشانی وب‌هوک سرویس تماس VoIP (مثل Twilio / پل SIP) تنظیم نشده است. می‌توانید در بخش «تنظیم و نصب» نشانی وب‌هوک VoIP خود را وارد کنید یا از شماره‌گیری روی گوشی + پخش متن روی اسپیکر استفاده کنید.',
-    });
-    return;
-  }
-
-  const safeUrl = isSafePublicAudioUrl(webhookUrl);
-  if (!safeUrl || safeUrl.protocol !== 'https:') {
-    res.status(400).json({error: 'نشانی وب‌هوک VoIP باید یک آدرس معتبر https:// باشد.'});
-    return;
-  }
-
-  try {
-    const upstream = await fetch(safeUrl.href, {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        event: 'hamseda_proxy_call',
-        ownerName,
-        targetName,
-        targetPhone,
-        script,
-        homeAddress,
-        callbackPhone,
-      }),
-      signal: AbortSignal.timeout(15000),
-    });
-
-    const rawText = await upstream.text();
-    let parsedJson: {status?: string; callStatus?: string; reply?: string; calleeReply?: string; transcript?: string; message?: string} = {};
-    try {
-      parsedJson = JSON.parse(rawText);
-    } catch {
-      // Plain text reply fallback
-    }
-
-    if (!upstream.ok) {
-      res.status(502).json({
-        error: parsedJson.message || `وب‌هوک تماس با کد ${upstream.status} پاسخ خطا داد.`,
-      });
-      return;
-    }
-
-    const calleeReply =
-      parsedJson.calleeReply || parsedJson.reply || parsedJson.transcript || (rawText && !rawText.startsWith('{') ? rawText.slice(0, 600) : '');
-    const callStatus = parsedJson.callStatus || parsedJson.status || 'dispatched';
-
-    res.json({
-      ok: true,
-      callStatus,
-      calleeReply,
-      message: parsedJson.message || 'درخواست تماس نیابتی به پل VoIP ارسال شد.',
-    });
-  } catch (err) {
-    res.status(502).json({
-      error: err instanceof Error ? `خطا در ارتباط با پل تماس VoIP: ${err.message}` : 'خطا در ارتباط با وب‌هوک تماس.',
-    });
-  }
 });
 
 app.all('/api/*', (_req, res) => {
