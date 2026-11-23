@@ -77,9 +77,15 @@ public class IncomingSmsReceiver extends BroadcastReceiver {
         boolean isMale = "male".equals(prefs.getString("default_voice_gender", "female"));
         String voiceName = prefs.getString("default_voice_name", isMale ? "Charon" : "Kore");
         String spoken = SmsAnnouncementPolicy.buildSpokenAnnouncement(context, senderName, body, "پیامک جدید");
-        String notifLabel = SmsAnnouncementPolicy.isNumericOrShortcodeSender(senderName)
-                ? "پیامک جدید"
-                : ("پیامک جدید: " + senderName);
+        String riskWarning = detectSmsRisk(body);
+        if (!riskWarning.isEmpty()) {
+            spoken = riskWarning + ". " + spoken;
+        }
+        String notifLabel = !riskWarning.isEmpty()
+                ? "⚠️ هشدار امنیتی پیامک"
+                : (SmsAnnouncementPolicy.isNumericOrShortcodeSender(senderName)
+                    ? "پیامک جدید"
+                    : ("پیامک جدید: " + senderName));
 
         CallAnnouncerService.announce(
                 context.getApplicationContext(),
@@ -91,6 +97,30 @@ public class IncomingSmsReceiver extends BroadcastReceiver {
                 false
         );
     }
+
+
+    // On-device checks only: message text and links are never uploaded to a third party.
+    private String detectSmsRisk(String body) {
+        if (body == null || body.trim().isEmpty()) return "";
+        String text = body.toLowerCase();
+        boolean hasLink = text.matches("(?s).*(https?://|www\\\\.).*");
+        if (!hasLink) return "";
+        boolean shortLink = text.matches("(?s).*(bit\\\\.ly|tinyurl\\\\.com|t\\\\.co|is\\\\.gd|cutt\\\\.ly|rb\\\\.gy|ow\\\\.ly|goo\\\\.gl)/.*");
+        boolean punycode = text.contains("xn--");
+        boolean rawIp = text.matches("(?s).*https?://(?:[0-9]{1,3}\\\\.){3}[0-9]{1,3}.*");
+        boolean urgent = text.matches("(?s).*(مسدود|قطع می\\\\شود|جایزه|برنده شدید|فوری|تایید حساب|تأیید حساب|کد فعال\\\\سازی|پرداخت ناموفق|حساب شما).*");
+        if (punycode || rawIp || (shortLink && urgent)) {
+            return "هشدار امنیتی: این پیامک دارای لینک مشکوک است؛ روی لینک آن نزنید";
+        }
+        if (shortLink) {
+            return "احتیاط امنیتی: لینک کوتاه‌شده در پیامک دریافت شده؛ پیش از باز کردن، فرستنده را بررسی کنید";
+        }
+        if (urgent) {
+            return "احتیاط امنیتی: پیامک دارای لینک و متن فوری یا مالی است؛ پیش از باز کردن لینک، صحت آن را بررسی کنید";
+        }
+        return "";
+    }
+
 
     private String lookupContactName(Context context, String phoneNumber) {
         if (phoneNumber == null || phoneNumber.trim().isEmpty()) return null;
