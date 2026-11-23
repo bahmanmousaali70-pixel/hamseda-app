@@ -47,12 +47,13 @@ const DESKTOP_NAV_ITEMS: {id: AppTab; label: string; subtitle: string; icon: Rea
   {id: 'sync', label: 'تنظیمات', subtitle: 'همگام‌سازی ابری، زمان‌بندی و نصب', icon: Settings},
 ];
 
-const MOBILE_PRIMARY_TABS: {id: Exclude<AppTab, 'gratitude' | 'voice' | 'sync'>; label: string; icon: React.FC<{className?: string}>}[] = [
+const MOBILE_PRIMARY_TABS: {id: Exclude<AppTab, 'gratitude' | 'voice'>; label: string; icon: React.FC<{className?: string}>}[] = [
   {id: 'today', label: 'امروز', icon: Sun},
   {id: 'assistant', label: 'دستیار', icon: Mic},
   {id: 'night', label: 'رسانه', icon: Music2},
   {id: 'caller', label: 'تماس و پیامک', icon: PhoneCall},
   {id: 'freecall', label: 'تماس اینترنتی', icon: PhoneCall},
+  {id: 'sync', label: 'تنظیمات', icon: Settings},
 ];
 
 const MORE_DRAWER_TABS: {id: AppTab; label: string; subtitle: string; icon: React.FC<{className?: string}>}[] = [
