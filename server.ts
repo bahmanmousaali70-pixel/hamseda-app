@@ -2104,7 +2104,8 @@ app.post('/api/radio-stations', async (req, res) => {
     console.error('Radio stations lookup error:', err);
     res.json({
       category,
-      stations: category === 'iran' || category === 'persian_music' ? CURATED_IRAN_STATIONS : CURATED_WORLD_CHILL_STATIONS,
+      stations: category === 'custom' ? [] : category === 'iran' || category === 'persian_music' ? CURATED_IRAN_STATIONS : CURATED_WORLD_CHILL_STATIONS,
+      notice: category === 'custom' ? `جستجوی ایستگاه «${rawQuery}» موقتاً ناموفق بود؛ نتیجه نامرتبط نمایش داده نشد.` : undefined,
     });
   }
 });
