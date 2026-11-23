@@ -1925,7 +1925,7 @@ function rankMusicTrack(track: ServerMusicTrack, rawQuery: string): number {
     return 100 + titleMatches * 2;
   }
   const stopWords = new Set([
-    'آهنگ','آهنگهای','آهنگ‌های','موزیک','موسیقی','خواننده','ترانه','لطفا','لطفاً','برای','پخش','کن','بده','برام',
+    'آهنگ','اهنگ','آهنگهای','آهنگ‌های','اهنگهای','موزیک','موسیقی','خواننده','ترانه','لطفا','لطفاً','برای','پخش','کن','بده','برام',
     'میخوام','میخواهم','میخوام','و','از','با','در','به','یک','آلبوم','آلبومهای','the','a','an','please','music','song','songs','track','tracks'
   ]);
   const terms = [...new Set(normalizeMusicMatchText(rawQuery).split(' ').filter((word) => word.length > 1 && !stopWords.has(word)))];
