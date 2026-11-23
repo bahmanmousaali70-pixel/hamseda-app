@@ -1,6 +1,7 @@
 const SERVER_URL_KEY = 'rmz_cloud_api_base_v1';
 const DEFAULT_API_BASE = 'https://hamseda-app-518643423697.europe-west2.run.app';
 const LEGACY_API_BASES = new Set([
+  'https://hamseda-app.ai.studio',
   'https://roozhaye-manozari-7.ai.studio',
   'https://hamseda-voice-suite.ai.studio',
   'https://ais-pre-5dqrp6vmbjkluesjlbth6l-737153117526.europe-west2.run.app',
