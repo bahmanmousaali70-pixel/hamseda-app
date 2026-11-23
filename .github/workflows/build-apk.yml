@@ -57,15 +57,15 @@ jobs:
       - name: Provision offline Persian neural TTS assets
         run: |
           mkdir -p android/app/libs android/app/src/main/assets/offline_tts/gyro
-          curl --http1.1 --location --fail --retry 5 --retry-all-errors --retry-delay 3 --connect-timeout 30 --max-time 900 "https://huggingface.co/csukuangfj/sherpa-onnx-libs/resolve/main/android/aar/sherpa-onnx-1.10.41.aar" -o android/app/libs/sherpa-onnx.aar
-          curl --http1.1 --location --fail --retry 5 --retry-all-errors --retry-delay 3 --connect-timeout 30 --max-time 900 "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-fa_IR-gyro-medium.tar.bz2" -o /tmp/gyro.tar.bz2
+          curl --http1.1 --location --fail --continue-at - --retry 12 --retry-all-errors --retry-delay 3 --connect-timeout 30 --max-time 900 "https://huggingface.co/csukuangfj/sherpa-onnx-libs/resolve/main/android/aar/sherpa-onnx-1.10.41.aar" -o android/app/libs/sherpa-onnx.aar
+          curl --http1.1 --location --fail --continue-at - --retry 12 --retry-all-errors --retry-delay 3 --connect-timeout 30 --max-time 900 "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-fa_IR-gyro-medium.tar.bz2" -o /tmp/gyro.tar.bz2
           mkdir -p /tmp/gyro && tar -xjf /tmp/gyro.tar.bz2 -C /tmp/gyro
           MODEL="$(find /tmp/gyro -name 'fa_IR-gyro-medium.onnx' -type f | head -n 1)"
           TOKENS="$(find /tmp/gyro -name 'tokens.txt' -type f | head -n 1)"
           test -n "$MODEL" && test -n "$TOKENS"
           cp "$MODEL" android/app/src/main/assets/offline_tts/gyro/model.onnx
           cp "$TOKENS" android/app/src/main/assets/offline_tts/gyro/tokens.txt
-          curl --http1.1 --location --fail --retry 5 --retry-all-errors --retry-delay 3 --connect-timeout 30 --max-time 900 "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/espeak-ng-data.tar.bz2" -o /tmp/espeak-ng-data.tar.bz2
+          curl --http1.1 --location --fail --continue-at - --retry 12 --retry-all-errors --retry-delay 3 --connect-timeout 30 --max-time 900 "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/espeak-ng-data.tar.bz2" -o /tmp/espeak-ng-data.tar.bz2
           tar -xjf /tmp/espeak-ng-data.tar.bz2 -C android/app/src/main/assets/offline_tts/
           test -s android/app/src/main/assets/offline_tts/gyro/model.onnx
           test -s android/app/src/main/assets/offline_tts/gyro/tokens.txt
@@ -75,7 +75,7 @@ jobs:
         run: |
           mkdir -p android/app/src/main/assets/wake
           MODEL_NAME="vosk-model-small-fa-0.42"
-          curl --http1.1 --location --fail --retry 5 --retry-all-errors --retry-delay 3 --connect-timeout 30 --max-time 900 "https://alphacephei.com/vosk/models/${MODEL_NAME}.zip" -o "/tmp/${MODEL_NAME}.zip"
+          curl --http1.1 --location --fail --continue-at - --retry 12 --retry-all-errors --retry-delay 3 --connect-timeout 30 --max-time 900 "https://alphacephei.com/vosk/models/${MODEL_NAME}.zip" -o "/tmp/${MODEL_NAME}.zip"
           unzip -t "/tmp/${MODEL_NAME}.zip"
           unzip -Z1 "/tmp/${MODEL_NAME}.zip" > /tmp/vosk-model-files.txt
           grep -q "^${MODEL_NAME}/am/" /tmp/vosk-model-files.txt
