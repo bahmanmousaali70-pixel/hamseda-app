@@ -443,7 +443,6 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
             type: 'awaiting_call_confirmation',
             targetName: result.targetName || result.targetPhone || 'مخاطب نامشخص',
             targetPhone: result.targetPhone,
-            callScript: result.callScript || '',
           });
         } else if (result.action === 'ask_sms_body') {
           if (result.targetPhone) {
@@ -601,8 +600,6 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
       assistantName,
       autoSpeakReplies,
       callers,
-      callProfile.callbackPhone,
-      callProfile.homeAddress,
       deviceOwner,
       isOnline,
       morningMessage,
