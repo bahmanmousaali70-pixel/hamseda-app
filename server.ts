@@ -1962,7 +1962,7 @@ async function fetchPlayableMusicPlaylist(moodOrGenre: string, _ai: GoogleGenAI 
     const key = track.streamUrl.split('?')[0].toLowerCase();
     if (seenStreams.has(key)) continue;
     seenStreams.add(key);
-    candidates.push(track);
+    candidates.push({...track, externalUrl: undefined});
   }
   const ranked = candidates
     .map((track) => ({track, score: rankMusicTrack(track, rawQuery)}))
