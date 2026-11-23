@@ -663,10 +663,10 @@ export function parseOfflineAssistantCommand(
   if (norm.includes('رادیو') && (/(بذار|بگذار|پخش|باز|گوش|روشن|فعال|بیار|اجرا)/.test(norm) || /رادیو\s+\S+/.test(norm))) {
     let query = commandRaw
       .replace(/^(لطفا|لطفاً)?\s*(برو|برو و|برو به|لطفاً برو)\s*/,'')
-      .replace(/\s*(?:\s+آهنگ)?\s*(?:رو|را)?\s*(?:روشن کن|فعال کن|پخش کن|بذار|بگذار|باز کن|گوش بده|بیار|اجرا کن|پخش)$/,'')
+      .replace(/\s*(?:\s+(?:آهنگ|اهنگ))?\s*(?:رو|را)?\s*(?:روشن کن|فعال کن|پخش کن|بذار|بگذار|باز کن|گوش بده|بیار|اجرا کن|پخش)$/,'')
       .replace(/\s*(?:رو|را)$/,'')
       .trim();
-    if (/رادیو\s*(?:نما\s*آهنگ|نما)$/.test(normalizeAssistantText(query))) query = 'رادیو نواهنگ';
+    if (/رادیو\s*(?:نما\s*(?:آهنگ|اهنگ)|نما)$/.test(normalizeAssistantText(query))) query = 'رادیو نواهنگ';
     if (!query || /^(رادیو|رادیوها)$/.test(normalizeAssistantText(query))) query = 'iran';
     else if (/(جهان|خارجی|بین المللی)/.test(norm)) query = 'world';
     else if (/(ارام|لایت|پیانو)/.test(norm)) query = 'chill';
