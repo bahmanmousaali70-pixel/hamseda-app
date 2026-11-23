@@ -5,6 +5,10 @@ import path from 'path';
 import {defineConfig} from 'vite';
 import {VitePWA} from 'vite-plugin-pwa';
 
+// CI sets VITE_APP_VERSION (see .github/workflows/build-apk.yml). For local builds fall back
+// to the same default UpdateCenter uses, so index.html never keeps a literal placeholder.
+process.env.VITE_APP_VERSION ||= '0.0.0';
+
 export default defineConfig(() => {
   return {
     plugins: [
