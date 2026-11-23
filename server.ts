@@ -1783,8 +1783,8 @@ async function searchIranianMusicWeb(query: string): Promise<{tracks: ServerMusi
 
 const RADIO_JAVAN_ARTIST_ALIASES: Array<{fa: string; queries: string[]; match: string[]}> = [
   {fa: 'رضا صادقی', queries: ['Reza Sadeghi'], match: ['reza sadeghi', 'رضا صادقی']},
-  {fa: 'شجریان', queries: ['Mohammad Reza Shajarian', 'Shajarian'], match: ['mohammad reza shajarian', 'reza shajarian', 'shajarian', 'شجریان']},
   {fa: 'همایون شجریان', queries: ['Homayoun Shajarian'], match: ['homayoun shajarian', 'همایون شجریان']},
+  {fa: 'شجریان', queries: ['Mohammad Reza Shajarian', 'Shajarian'], match: ['mohammad reza shajarian', 'reza shajarian', 'shajarian', 'شجریان']},
   {fa: 'سیاوش قمیشی', queries: ['Siavash Ghomayshi', 'Siavash Ghomeishi'], match: ['siavash ghomayshi', 'siavash ghomeishi', 'سیاوش قمیشی']},
   {fa: 'ابی', queries: ['Ebi'], match: ['ebi', 'ابی']},
   {fa: 'داریوش', queries: ['Dariush'], match: ['dariush', 'داریوش']},
@@ -2157,8 +2157,7 @@ app.post('/api/night-discover', async (req, res) => {
     try {
       const discovery = await fetchPlayableMusicPlaylist(moodOrGenre || 'پیانو و موسیقی آرامش‌بخش ایرانی', ai ?? betaAi);
       const tracks = discovery.tracks;
-      const links = tracks.filter((t) => t.externalUrl).slice(0, 6)
-        .map((t) => ({title: `${t.title} — ${t.artist}`, url: t.externalUrl!}));
+      const links: {title: string; url: string}[] = [];
 
       const summaryList = tracks
         .slice(0, 5)
