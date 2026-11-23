@@ -43,7 +43,6 @@ const DESKTOP_NAV_ITEMS: {id: AppTab; label: string; subtitle: string; icon: Rea
   {id: 'gratitude', label: 'شکرگذاری', subtitle: 'دفتر قدردانی و یادداشت مهر', icon: HeartHandshake},
   {id: 'voice', label: 'کتابخانه صوتی', subtitle: 'صداهای آفلاین، کلون صدا و دانلود', icon: AudioLines},
   {id: 'caller', label: 'تماس و پیامک', subtitle: 'اعلام نام تماس‌گیرنده و پیامک', icon: PhoneCall},
-  {id: 'freecall', label: 'تماس اینترنتی', subtitle: 'تماس رایگان هم‌صدا با هم‌صدا', icon: PhoneCall},
   {id: 'sync', label: 'تنظیمات', subtitle: 'همگام‌سازی ابری، زمان‌بندی و نصب', icon: Settings},
 ];
 
@@ -52,7 +51,6 @@ const MOBILE_PRIMARY_TABS: {id: Exclude<AppTab, 'gratitude' | 'voice'>; label: s
   {id: 'assistant', label: 'دستیار', icon: Mic},
   {id: 'night', label: 'رسانه', icon: Music2},
   {id: 'caller', label: 'تماس و پیامک', icon: PhoneCall},
-  {id: 'freecall', label: 'تماس نت', icon: PhoneCall},
   {id: 'sync', label: 'تنظیمات', icon: Settings},
 ];
 
