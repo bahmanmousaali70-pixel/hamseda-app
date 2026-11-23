@@ -18,6 +18,7 @@ import {
   Radio,
   RefreshCw,
   Share2,
+  ShieldCheck,
   Smartphone,
   Sun,
   Trash2,
