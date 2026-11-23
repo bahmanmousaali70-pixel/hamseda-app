@@ -37,7 +37,7 @@ interface TopBarProps {
 
 const DESKTOP_NAV_ITEMS: {id: AppTab; label: string; subtitle: string; icon: React.FC<{className?: string}>}[] = [
   {id: 'today', label: 'امروزِ ما', subtitle: 'اهداف، لیست خرید، مخارج و عادت‌ها', icon: Sun},
-  {id: 'family', label: 'زندگی و خانواده', subtitle: '۱۲ ابزار کاربردی خانواده', icon: Users},
+  {id: 'family', label: 'سلامت خانواده', subtitle: 'پرونده سلامت و مراقبت‌های ضروری', icon: Users},
   {id: 'assistant', label: 'دستیار صوتی', subtitle: 'گفت‌وگو و فرمان‌های صوتی', icon: Mic},
   {id: 'night', label: 'رسانه و پخش', subtitle: 'موسیقی، رادیو، پادکست، فیلم و پیام‌ساز', icon: Music2},
   {id: 'gratitude', label: 'شکرگذاری', subtitle: 'دفتر قدردانی و یادداشت مهر', icon: HeartHandshake},
@@ -55,7 +55,7 @@ const MOBILE_PRIMARY_TABS: {id: Exclude<AppTab, 'gratitude' | 'voice'>; label: s
 ];
 
 const MORE_DRAWER_TABS: {id: AppTab; label: string; subtitle: string; icon: React.FC<{className?: string}>}[] = [
-  {id: 'family', label: 'زندگی و خانواده', subtitle: '۱۲ ابزار سلامت، مالی، خرید و رشد', icon: Users},
+  {id: 'family', label: 'سلامت خانواده', subtitle: 'پرونده سلامت و یادداشت‌های مراقبتی', icon: Users},
   {id: 'gratitude', label: 'شکرگذاری و انرژی', subtitle: 'ثبت شکرگذاری روزانه و پیام انرژی‌بخش', icon: HeartHandshake},
   {id: 'voice', label: 'کتابخانه صوتی', subtitle: 'صداهای ذخیره‌شده، حذف نویز و کلون صدا', icon: AudioLines},
   {id: 'sync', label: 'تنظیمات و نصب', subtitle: 'همگام‌سازی ابری، زمان‌بند و انتقال نسخه', icon: Settings},
@@ -228,7 +228,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#FAF9F6]/95 dark:bg-[#0B1412]/95 backdrop-blur-xl border-t border-[#DFDBD0] dark:border-emerald-950/90 shadow-[0_-10px_30px_rgba(0,0,0,0.08)] pb-safe"
         aria-label="ناوبری پایین"
       >
-        <div className="grid grid-cols-7 items-center h-[68px] px-0.5">
+        <div className="grid grid-cols-6 items-center h-[68px] px-0.5">
           {MOBILE_PRIMARY_TABS.map((item) => {
             const Icon = item.icon;
             const active = activeTab === item.id && !showMoreSheet;
@@ -300,7 +300,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             <div className="w-10 h-1.5 rounded-full bg-slate-300 dark:bg-emerald-900 mx-auto" />
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-base font-extrabold text-slate-900 dark:text-white">همه بخش‌ها و ابزارها</h3>
+                <h3 className="text-base font-extrabold text-slate-900 dark:text-white">بخش‌های هم‌صدا</h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   دسترسی سریع به دسته‌بندی‌های هم‌صدا
                 </p>
