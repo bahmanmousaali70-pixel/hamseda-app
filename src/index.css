@@ -75,3 +75,29 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+
+/* Refined Hamseda premium shell */
+.app-shell {
+  min-height: 100dvh;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(176, 136, 59, .075), transparent 32rem),
+    radial-gradient(ellipse at 88% 12%, rgba(11, 107, 83, .07), transparent 36rem),
+    var(--luxury-bg);
+}
+.dark .app-shell {
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(212, 175, 55, .055), transparent 34rem),
+    radial-gradient(ellipse at 88% 10%, rgba(16, 185, 129, .075), transparent 38rem),
+    var(--luxury-bg);
+}
+.luxury-card {
+  border-radius: 1.5rem;
+  box-shadow: 0 2px 5px rgba(15, 23, 20, .025), 0 18px 42px -28px rgba(11, 67, 52, .18);
+}
+.dark .luxury-card {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .24), 0 20px 48px -30px rgba(0, 0, 0, .72);
+}
+button, a, input, textarea, select {
+  -webkit-tap-highlight-color: transparent;
+}
