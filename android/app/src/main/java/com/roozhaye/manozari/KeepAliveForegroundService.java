@@ -88,7 +88,6 @@ public class KeepAliveForegroundService extends Service {
         }
 
         ScheduleAlarmHelper.rescheduleAll(this);
-        SecurityAlertHelper.flushPendingAlertsAsync(this);
         return START_STICKY;
     }
 
