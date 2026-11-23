@@ -2057,12 +2057,14 @@ export default function App() {
         assistantName={settings.assistantName?.trim() || 'هم‌صدا'}
         theme={settings.theme}
         masterSpeakerEnabled={localVoiceControls.masterSpeakerEnabled}
-        onToggleTheme={() => {
-          const themes: AppSettings['theme'][] = ['obsidian-gold', 'royal-navy', 'midnight-purple', 'graphite', 'ivory-champagne', 'arctic-silver'];
-          const current = themes.indexOf(settings.theme);
-          const next = themes[(current + 1 + themes.length) % themes.length];
-          handleUpdateSettings({theme: next});
-          showToast(`پوسته ${({ 'obsidian-gold': 'Obsidian Gold', 'royal-navy': 'Royal Navy', 'midnight-purple': 'Midnight Purple', graphite: 'Graphite', 'ivory-champagne': 'Ivory Champagne', 'arctic-silver': 'Arctic Silver' } as Record<string, string>)[next]} فعال شد.`);
+        onSelectTheme={(theme) => {
+          handleUpdateSettings({theme});
+          const labels: Record<AppSettings['theme'], string> = {
+            light: 'روشن', dark: 'تیره', 'obsidian-gold': 'مشکی و طلایی',
+            'royal-navy': 'سرمه‌ای سلطنتی', 'midnight-purple': 'بنفش نیمه‌شب',
+            graphite: 'گرافیتی', 'ivory-champagne': 'عاجی شامپاینی', 'arctic-silver': 'نقره‌ای یخی',
+          };
+          showToast(`پوسته ${labels[theme]} فعال شد.`);
         }}
         onToggleMasterSpeaker={handleToggleMasterSpeaker}
         onRefreshApp={handleRefreshApp}
