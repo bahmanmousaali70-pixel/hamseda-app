@@ -106,7 +106,7 @@ export const DailyEnglishPanel: React.FC<DailyEnglishPanelProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {visiblePhrases.map((item) => {
           const isLearned = learnedIds.includes(item.id);
-          const speakPayload = `${item.english}. به فارسی یعنی: ${item.persian}`;
+          const speakPayload = `${item.english}. تلفظ فارسی: ${item.phonetic}. معنی فارسی: ${item.persian}`;
           return (
             <div
               key={item.id}
@@ -138,7 +138,7 @@ export const DailyEnglishPanel: React.FC<DailyEnglishPanelProps> = ({
                   className="flex-1 min-h-[40px] px-3 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
                 >
                   <Volume2 className="w-3.5 h-3.5" />
-                  <span>پخش دوزبانه</span>
+                  <span>پخش سه‌مرحله‌ای</span>
                 </button>
                 <button
                   type="button"
