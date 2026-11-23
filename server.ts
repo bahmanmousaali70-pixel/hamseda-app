@@ -1777,9 +1777,38 @@ async function searchIranianMusicWeb(query: string): Promise<{tracks: ServerMusi
   };
 }
 
+function normalizeMusicMatchText(value: string): string {
+  return value.toLowerCase()
+    .replace(/[يى]/g, 'ی').replace(/ك/g, 'ک')
+    .replace(/[\u064B-\u065F\u0670]/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function rankMusicTrack(track: ServerMusicTrack, rawQuery: string, fallbackTerms: string): number {
+  const haystack = normalizeMusicMatchText([track.title, track.artist, track.album || '', track.tags || ''].join(' '));
+  const query = normalizeMusicMatchText(rawQuery);
+  const terms = normalizeMusicMatchText(fallbackTerms).split(' ').filter((word) =>
+    word.length > 1 && !['آهنگ','موزیک','موسیقی','خواننده','ترانه','لطفا','برای','پخش','کن','بده','برام','میخوام','میخواهم','please','music','song','songs','track','tracks'].includes(word)
+  );
+  if (!haystack || !terms.length) return 0;
+  let score = query && haystack.includes(query) ? 12 : 0;
+  let matched = 0;
+  for (const term of [...new Set(terms)]) {
+    if (haystack.includes(term)) {
+      matched += 1;
+      score += term.length >= 5 ? 2.5 : 1.5;
+    }
+  }
+  const coverage = matched / new Set(terms).size;
+  if (coverage < (terms.length >= 3 ? 0.5 : 1)) return 0;
+  return score + coverage * 3;
+}
+
 async function fetchPlayableMusicPlaylist(moodOrGenre: string, _ai: GoogleGenAI | null): Promise<{tracks: ServerMusicTrack[]; links: {title: string; url: string}[]}> {
   const rawQuery = moodOrGenre.trim().slice(0, 180);
   if (!rawQuery) return {tracks: [], links: []};
+  const fallback = buildFallbackMusicQueries(rawQuery);
+  const matchTerms = [rawQuery, fallback.audiusQuery, fallback.archiveQuery].join(' ');
   const [iranian, audiusResults, archiveResults] = await Promise.all([
     searchIranianMusicWeb(rawQuery),
     Promise.allSettled(musicQueryVariants(rawQuery).slice(0, 3).map(async (query) => {
@@ -1791,7 +1820,7 @@ async function fetchPlayableMusicPlaylist(moodOrGenre: string, _ai: GoogleGenAI 
       const payload = await response.json();
       return Array.isArray(payload?.data) ? payload.data : [];
     })),
-    Promise.allSettled([buildFallbackMusicQueries(rawQuery).archiveQuery, ...musicQueryVariants(rawQuery).slice(0, 2)].map((query) => fetchArchiveFullTracks(query))),
+    Promise.allSettled([fallback.archiveQuery, ...musicQueryVariants(rawQuery).slice(0, 2)].map((query) => fetchArchiveFullTracks(query))),
   ]);
   const tracks: ServerMusicTrack[] = [...iranian.tracks];
   const seen = new Set(tracks.map((track) => track.id));
@@ -1821,8 +1850,14 @@ async function fetchPlayableMusicPlaylist(moodOrGenre: string, _ai: GoogleGenAI 
       tracks.push(track);
     }
   }
-  return {tracks: tracks.slice(0, 50), links: iranian.links};
-}app.post('/api/radio-stations', async (req, res) => {
+  const ranked = tracks
+    .map((track) => ({track, score: rankMusicTrack(track, rawQuery, matchTerms)}))
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .map((entry) => entry.track);
+  return {tracks: ranked.slice(0, 35), links: iranian.links};
+}
+app.post('/api/radio-stations', async (req, res) => {
   const category = typeof req.body?.category === 'string' ? req.body.category : 'iran';
   const rawQuery = typeof req.body?.query === 'string' ? req.body.query.trim() : '';
 
