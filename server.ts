@@ -3292,7 +3292,6 @@ ${compactContacts.length > 0 ? `مخاطبین دفترچه تلفن برای ت
       targetName?: string;
       targetPhone?: string;
       smsBody?: string;
-      includeAddressAndPhone?: boolean;
       tab?: string;
       todaySection?: string;
       query?: string;
