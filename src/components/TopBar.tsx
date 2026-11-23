@@ -401,13 +401,13 @@ export const TopBar: React.FC<TopBarProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  onToggleTheme();
                   setShowMoreSheet(false);
+                  setShowThemeMenu(true);
                 }}
-                className="min-h-[48px] px-2.5 rounded-xl border border-[#E6E2D8] dark:border-emerald-900/70 bg-white dark:bg-[#12201D] text-xs font-bold text-slate-800 dark:text-amber-300 flex items-center justify-center gap-1.5 cursor-pointer"
+                className="min-h-[48px] px-2.5 rounded-xl border border-[#E6E2D8] dark:border-amber-800/50 bg-white dark:bg-[#171512] text-xs font-bold text-slate-800 dark:text-amber-200 flex items-center justify-center gap-1.5 cursor-pointer"
               >
-                {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-                <span>{theme === 'dark' ? 'حالت روز' : 'حالت شب'}</span>
+                <Moon className="w-4 h-4" />
+                <span>انتخاب پوسته</span>
               </button>
 
               <button
