@@ -2051,7 +2051,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F7F6F2] dark:bg-[#070D0C] text-slate-900 dark:text-slate-100">
+    <div className="app-shell min-h-screen flex flex-col text-slate-900 dark:text-slate-100">
       <TopBar
         activeTab={activeTab}
         deviceOwner={deviceOwner}
@@ -2069,7 +2069,7 @@ export default function App() {
         onOpenDriveMode={() => setDriveModeOpen(true)}
       />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-20 lg:pb-8">
+      <main className="relative flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-24 lg:pb-10">
         {activeTab === 'family' && <FamilyLifeSuite />}
 
         {activeTab === 'today' && (
