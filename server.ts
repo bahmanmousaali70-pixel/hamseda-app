@@ -1815,7 +1815,6 @@ async function fetchPlayableMusicPlaylist(moodOrGenre: string, _ai: GoogleGenAI 
   const rawQuery = moodOrGenre.trim().slice(0, 180);
   if (!rawQuery) return {tracks: [], links: []};
   const fallback = buildFallbackMusicQueries(rawQuery);
-  const matchTerms = fallback.audiusQuery;
   const [iranian, audiusResults, archiveResults] = await Promise.all([
     searchIranianMusicWeb(rawQuery),
     Promise.allSettled(musicQueryVariants(rawQuery).slice(0, 3).map(async (query) => {
