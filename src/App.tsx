@@ -184,7 +184,7 @@ const STORAGE_KEYS = {
 };
 
 const DEFAULT_SETTINGS: AppSettings = {
-  theme: 'light',
+  theme: 'ivory-champagne',
   defaultVoice: 'Kore',
   speechRate: 1,
   myName: 'من',
@@ -476,11 +476,9 @@ export default function App() {
 
   useEffect(() => {
     const root = document.documentElement;
-    if (settings.theme === 'dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
+    root.dataset.theme = settings.theme;
+    const darkThemes = ['dark', 'obsidian-gold', 'royal-navy', 'midnight-purple', 'graphite'];
+    root.classList.toggle('dark', darkThemes.includes(settings.theme));
     localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(settings));
     syncAnnounceTogglesToNative({
       announceCalls:
@@ -2059,9 +2057,13 @@ export default function App() {
         assistantName={settings.assistantName?.trim() || 'هم‌صدا'}
         theme={settings.theme}
         masterSpeakerEnabled={localVoiceControls.masterSpeakerEnabled}
-        onToggleTheme={() =>
-          handleUpdateSettings({theme: settings.theme === 'dark' ? 'light' : 'dark'})
-        }
+        onToggleTheme={() => {
+          const themes: AppSettings['theme'][] = ['obsidian-gold', 'royal-navy', 'midnight-purple', 'graphite', 'ivory-champagne', 'arctic-silver'];
+          const current = themes.indexOf(settings.theme);
+          const next = themes[(current + 1 + themes.length) % themes.length];
+          handleUpdateSettings({theme: next});
+          showToast(`پوسته ${({ 'obsidian-gold': 'Obsidian Gold', 'royal-navy': 'Royal Navy', 'midnight-purple': 'Midnight Purple', graphite: 'Graphite', 'ivory-champagne': 'Ivory Champagne', 'arctic-silver': 'Arctic Silver' } as Record<string, string>)[next]} فعال شد.`);
+        }}
         onToggleMasterSpeaker={handleToggleMasterSpeaker}
         onRefreshApp={handleRefreshApp}
         onSelectTab={setActiveTab}
