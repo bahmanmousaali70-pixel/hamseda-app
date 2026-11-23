@@ -1794,21 +1794,27 @@ function rankMusicTrack(track: ServerMusicTrack, rawQuery: string): number {
     'میخوام','میخواهم','میخوام','و','از','با','در','به','یک','the','a','an','please','music','song','songs','track','tracks'
   ]);
   const terms = [...new Set(normalizeMusicMatchText(rawQuery).split(' ').filter((word) => word.length > 1 && !stopWords.has(word)))];
-  if (terms.length === 0) return 0;
-  let titleMatches = 0;
-  let metadataMatches = 0;
-  for (const term of terms) {
+  const queryAliases = /آریان|arian/i.test(rawQuery) ? ['arian', 'band'] : /شجریان|shajarian/i.test(rawQuery) ? ['shajarian'] : [];
+  const matchSets = [terms, queryAliases].filter((set) => set.length > 0);
+  if (matchSets.length === 0) return 0;
+  let bestScore = 0;
+  for (const matchTerms of matchSets) {
+    let titleMatches = 0;
+    let metadataMatches = 0;
+    for (const term of matchTerms) {
     if (titleArtist.includes(term)) titleMatches += 1;
     else if (metadata.includes(term)) metadataMatches += 1;
   }
-  const matched = titleMatches + metadataMatches;
-  const coverage = matched / terms.length;
-  // Artist/title searches must match every word for short queries; longer descriptions need at least 75% coverage.
-  const requiredCoverage = terms.length <= 2 ? 1 : 0.75;
-  if (coverage < requiredCoverage) return 0;
-  // A lone artist/name must occur in the title or artist, never just in generic tags.
-  if (terms.length === 1 && titleMatches === 0) return 0;
-  return titleMatches * 5 + metadataMatches * 1.5 + coverage * 4;
+    const matched = titleMatches + metadataMatches;
+    const coverage = matched / matchTerms.length;
+    // Artist/title searches must match every word for short queries; longer descriptions need at least 75% coverage.
+    const requiredCoverage = matchTerms.length <= 2 ? 1 : 0.75;
+    if (coverage < requiredCoverage) continue;
+    // A lone artist/name must occur in the title or artist, never just in generic tags.
+    if (matchTerms.length === 1 && titleMatches === 0) continue;
+    bestScore = Math.max(bestScore, titleMatches * 5 + metadataMatches * 1.5 + coverage * 4);
+  }
+  return bestScore;
 }
 
 async function fetchPlayableMusicPlaylist(moodOrGenre: string, _ai: GoogleGenAI | null): Promise<{tracks: ServerMusicTrack[]; links: {title: string; url: string}[]}> {
