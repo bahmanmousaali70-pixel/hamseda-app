@@ -28,7 +28,7 @@ interface TopBarProps {
   assistantName: string;
   theme: AppSettings['theme'];
   masterSpeakerEnabled: boolean;
-  onToggleTheme: () => void;
+  onSelectTheme: (theme: AppSettings['theme']) => void;
   onToggleMasterSpeaker: () => void;
   onRefreshApp: () => void;
   onSelectTab: (tab: AppTab) => void;
