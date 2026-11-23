@@ -56,6 +56,19 @@ export function apiUrl(path: string): string {
   return `${base}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
+export function wsUrl(path: string): string {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const base = getCloudApiBaseUrl();
+  if (base) {
+    return `${base.replace(/^http(s?):\/\//i, 'ws$1://')}${normalizedPath}`;
+  }
+  if (typeof window !== 'undefined' && window.location?.host) {
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${proto}//${window.location.host}${normalizedPath}`;
+  }
+  return normalizedPath;
+}
+
 export async function safeReadJsonResponse<T = Record<string, unknown>>(
   res: Response
 ): Promise<{data: T | null; isHtml: boolean}> {
