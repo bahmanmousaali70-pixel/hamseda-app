@@ -1695,6 +1695,7 @@ function musicQueryVariants(raw: string): string[] {
   if (/(شاد|رقص|انرژی|پارتی)/.test(q)) variants.push('آهنگ شاد ایرانی', 'Persian upbeat dance songs');
   if (/(آرامش|آرام|ریلکس|ملایم)/.test(q)) variants.push('موسیقی آرام ایرانی', 'Persian relaxing music');
   if (/(عاشقانه|رمانتیک|عشق)/.test(q)) variants.push('آهنگ عاشقانه ایرانی', 'Persian romantic songs');
+  if (/(محبوب|پربازدید|ترند|پرطرفدار)/.test(q)) variants.push('آهنگ های محبوب ایرانی', 'Persian popular songs');
   return [...new Set(variants.filter((v) => v.length >= 2))].slice(0, 7);
 }
 
@@ -1920,7 +1921,7 @@ function rankMusicTrack(track: ServerMusicTrack, rawQuery: string): number {
   const metadata = normalizeMusicMatchText([track.album || '', track.tags || ''].join(' '));
   if (!titleArtist && !metadata) return 0;
   const artistAlias = findMusicArtistAlias(rawQuery);
-  const moodQuery = /(غمگین|غم|دلتنگ|حزین|شاد|رقص|انرژی|پارتی|آرامش|آرام|ریلکس|ملایم|عاشقانه|رمانتیک)/.test(rawQuery);
+  const moodQuery = /(غمگین|غم|دلتنگ|حزین|شاد|رقص|انرژی|پارتی|آرامش|آرام|ریلکس|ملایم|عاشقانه|رمانتیک|محبوب|پربازدید|ترند|پرطرفدار)/.test(rawQuery);
   if (artistAlias) {
     const artistMatch = artistAlias.match.some((name) => name.length > 2 && titleArtist.includes(name));
     if (!artistMatch) return 0;
