@@ -97,16 +97,6 @@
             </intent-filter>
         </activity>
 
-        <activity
-            android:name=".PowerGuardActivity"
-            android:exported="false"
-            android:excludeFromRecents="true"
-            android:launchMode="singleTop"
-            android:showWhenLocked="true"
-            android:turnScreenOn="true"
-            android:screenOrientation="portrait"
-            android:theme="@style/AppTheme.NoActionBar" />
-
         <service
             android:name=".KeepAliveForegroundService"
             android:enabled="true"
