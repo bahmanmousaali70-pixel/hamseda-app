@@ -13,12 +13,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * User-enabled accessibility bridge for safe, explicit UI actions and
- * optional Anti-Theft Power-Off Menu interception.
+ * explicit camera shutter interaction.
  */
 public class HamsedaAccessibilityService extends AccessibilityService {
     private static volatile HamsedaAccessibilityService instance;
     private static final AtomicBoolean CAMERA_SHUTTER_ARMED = new AtomicBoolean(false);
-    private static volatile long lastPowerGuardTriggeredAtMs = 0L;
 
     @Override
     public void onServiceConnected() {
@@ -45,30 +44,6 @@ public class HamsedaAccessibilityService extends AccessibilityService {
                 && type != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
                 && type != AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
             return;
-        }
-
-        // 1. Optional Anti-Theft Power-Off Menu Guard
-        // Never interrupt while owner is inside Hamseda (when enabled) or while PowerGuardActivity is already visible
-        if (!PowerGuardActivity.isShowing()
-                && (!SecurityAlertHelper.isOwnerInAppBypassEnabled(this) || !MainActivity.isInForeground())
-                && SecurityAlertHelper.isEnabledAndConfigured(this)
-                && !SecurityAlertHelper.isInUnlockGraceWindow(this)) {
-            CharSequence pkgCs = event.getPackageName();
-            String pkg = pkgCs != null ? pkgCs.toString().toLowerCase(Locale.ROOT) : "";
-            String myPkg = getPackageName().toLowerCase(Locale.ROOT);
-            if (!myPkg.equals(pkg)
-                    && !"com.android.settings".equals(pkg)
-                    && !pkg.contains("inputmethod")
-                    && !pkg.contains("keyboard")
-                    && isSystemPowerMenuVisible(pkg, myPkg)) {
-                long now = System.currentTimeMillis();
-                if (now - lastPowerGuardTriggeredAtMs > 3500L) {
-                    lastPowerGuardTriggeredAtMs = now;
-                    performGlobalAction(GLOBAL_ACTION_BACK);
-                    PowerGuardActivity.launch(this, "power_menu_intercept", false);
-                    return;
-                }
-            }
         }
 
         // 2. Explicit Camera Shutter Trigger
