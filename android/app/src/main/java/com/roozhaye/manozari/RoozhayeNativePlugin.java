@@ -90,7 +90,6 @@ public class RoozhayeNativePlugin extends Plugin {
         new Thread(() -> {
             try {
                 OfflinePersianTts.ensureDefaultInstalled(appCtx);
-                SecurityAlertHelper.flushPendingAlertsAsync(appCtx);
             } catch (Exception ignored) {
             }
         }, "HamsedaOfflineWarmup").start();
