@@ -138,7 +138,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             <button
               type="button"
               onClick={onToggleTheme}
-              aria-label={isDarkTheme ? 'تغییر به حالت روشن' : 'تغییر به حالت شب'}
+              aria-label={`تغییر پوسته فعلی ${theme}`}
               title={theme === 'dark' ? 'حالت روز لوکس' : 'حالت شب سینمایی'}
               className="min-h-[40px] w-[40px] rounded-xl border border-[#DFDBD0] dark:border-emerald-900/70 bg-white/80 dark:bg-[#111E1B] text-slate-700 dark:text-amber-300 flex items-center justify-center transition-colors cursor-pointer shrink-0"
             >
