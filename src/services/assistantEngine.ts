@@ -685,7 +685,7 @@ export function parseOfflineAssistantCommand(
       .trim();
     return {
       action: 'play_music',
-      query: query || 'موسیقی ایرانی',
+      query: query || 'آهنگ محبوب ایرانی',
       replyText: 'آهنگ‌های مرتبط را از منابع موسیقی ایرانی پیدا می‌کنم و پخش را شروع می‌کنم.',
     };
   }
