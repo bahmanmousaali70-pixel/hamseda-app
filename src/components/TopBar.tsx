@@ -1,4 +1,5 @@
 import React, {useState} from 'react';
+import type {AppSettings} from '../types/app';
 import {
   AudioLines,
   Car,
@@ -25,7 +26,7 @@ interface TopBarProps {
   deviceOwner: DeviceOwner;
   selfName: string;
   assistantName: string;
-  theme: 'light' | 'dark';
+  theme: AppSettings['theme'];
   masterSpeakerEnabled: boolean;
   onToggleTheme: () => void;
   onToggleMasterSpeaker: () => void;
@@ -58,7 +59,6 @@ const MORE_DRAWER_TABS: {id: AppTab; label: string; subtitle: string; icon: Reac
   {id: 'family', label: 'سلامت خانواده', subtitle: 'پرونده سلامت و یادداشت‌های مراقبتی', icon: Users},
   {id: 'gratitude', label: 'شکرگذاری و انرژی', subtitle: 'ثبت شکرگذاری روزانه و پیام انرژی‌بخش', icon: HeartHandshake},
   {id: 'voice', label: 'کتابخانه صوتی', subtitle: 'صداهای ذخیره‌شده، حذف نویز و کلون صدا', icon: AudioLines},
-  {id: 'sync', label: 'تنظیمات و نصب', subtitle: 'همگام‌سازی ابری، زمان‌بند و انتقال نسخه', icon: Settings},
 ];
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -79,6 +79,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   const [showIOSGuide, setShowIOSGuide] = useState(false);
   const [showMoreSheet, setShowMoreSheet] = useState(false);
 
+  const isDarkTheme = ['dark', 'obsidian-gold', 'royal-navy', 'midnight-purple', 'graphite'].includes(theme);
   const isDrawerTabActive = activeTab === 'gratitude' || activeTab === 'voice' || activeTab === 'sync' || activeTab === 'family';
   const drawerActiveShortLabel =
     activeTab === 'gratitude' ? 'شکر' : activeTab === 'voice' ? 'صوت' : activeTab === 'sync' ? 'تنظیم' : activeTab === 'family' ? 'خانواده' : 'بخش‌ها';
@@ -137,7 +138,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             <button
               type="button"
               onClick={onToggleTheme}
-              aria-label={theme === 'dark' ? 'تغییر به حالت روشن' : 'تغییر به حالت شب'}
+              aria-label={isDarkTheme ? 'تغییر به حالت روشن' : 'تغییر به حالت شب'}
               title={theme === 'dark' ? 'حالت روز لوکس' : 'حالت شب سینمایی'}
               className="min-h-[40px] w-[40px] rounded-xl border border-[#DFDBD0] dark:border-emerald-900/70 bg-white/80 dark:bg-[#111E1B] text-slate-700 dark:text-amber-300 flex items-center justify-center transition-colors cursor-pointer shrink-0"
             >
