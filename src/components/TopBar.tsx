@@ -52,7 +52,7 @@ const MOBILE_PRIMARY_TABS: {id: Exclude<AppTab, 'gratitude' | 'voice'>; label: s
   {id: 'assistant', label: 'دستیار', icon: Mic},
   {id: 'night', label: 'رسانه', icon: Music2},
   {id: 'caller', label: 'تماس و پیامک', icon: PhoneCall},
-  {id: 'freecall', label: 'تماس اینترنتی', icon: PhoneCall},
+  {id: 'freecall', label: 'تماس نت', icon: PhoneCall},
   {id: 'sync', label: 'تنظیمات', icon: Settings},
 ];
 
@@ -230,7 +230,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#FAF9F6]/95 dark:bg-[#0B1412]/95 backdrop-blur-xl border-t border-[#DFDBD0] dark:border-emerald-950/90 shadow-[0_-10px_30px_rgba(0,0,0,0.08)] pb-safe"
         aria-label="ناوبری پایین"
       >
-        <div className="grid grid-cols-5 items-center h-[68px] px-1.5">
+        <div className="grid grid-cols-7 items-center h-[68px] px-0.5">
           {MOBILE_PRIMARY_TABS.map((item) => {
             const Icon = item.icon;
             const active = activeTab === item.id && !showMoreSheet;
@@ -258,7 +258,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                 >
                   <Icon className="w-5 h-5" />
                 </span>
-                <span className="text-[11px] leading-none whitespace-nowrap">{item.label}</span>
+                <span className="text-[9px] leading-none whitespace-nowrap">{item.label}</span>
               </button>
             );
           })}
