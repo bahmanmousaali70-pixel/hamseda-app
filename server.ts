@@ -1812,7 +1812,9 @@ function findMusicArtistAlias(rawQuery: string): {queries: string[]; match: stri
 
 async function searchRadioJavanTracks(rawQuery: string): Promise<ServerMusicTrack[]> {
   const artistAlias = findMusicArtistAlias(rawQuery);
-  const queries = [...new Set([...(artistAlias?.queries ?? []), ...musicQueryVariants(rawQuery)])].slice(0, 4);
+  const isAlbumQuery = /آلبوم|اهنگ آلبوم|album/i.test(rawQuery);
+  const artistQueries = artistAlias ? (isAlbumQuery ? artistAlias.queries.map((query) => `${query} album`) : artistAlias.queries) : [];
+  const queries = [...new Set([...artistQueries, ...musicQueryVariants(rawQuery)])].slice(0, 4);
   const headers = {
     Accept: 'application/json, text/plain, */*',
     'Accept-Language': 'fa-IR,fa;q=0.9,en-US;q=0.8',
@@ -1828,15 +1830,17 @@ async function searchRadioJavanTracks(rawQuery: string): Promise<ServerMusicTrac
     });
     if (!response.ok) return;
     const payload = await response.json() as {mp3s?: Array<{id?: string | number}>; albums?: Array<{id?: string | number}>};
-    for (const item of payload.mp3s ?? []) {
-      if (item?.id !== undefined && item?.id !== null) songIds.add(String(item.id));
-      if (songIds.size >= 24) break;
+    if (!isAlbumQuery) {
+      for (const item of payload.mp3s ?? []) {
+        if (item?.id !== undefined && item?.id !== null) songIds.add(String(item.id));
+        if (songIds.size >= 24) break;
+      }
     }
     for (const album of payload.albums ?? []) {
       if (album?.id !== undefined && album?.id !== null) albumIds.add(String(album.id));
     }
   });
-  const artistTasks = (artistAlias?.queries ?? []).slice(0, 2).map(async (query) => {
+  const artistTasks = (isAlbumQuery ? [] : artistAlias?.queries ?? []).slice(0, 2).map(async (query) => {
     const response = await fetch(`https://rj-deskcloud.com/api2/artist?query=${encodeURIComponent(query)}`, {
       headers,
       signal: AbortSignal.timeout(6500),
