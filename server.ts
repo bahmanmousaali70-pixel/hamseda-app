@@ -1786,29 +1786,35 @@ function normalizeMusicMatchText(value: string): string {
 
 function rankMusicTrack(track: ServerMusicTrack, rawQuery: string, fallbackTerms: string): number {
   const haystack = normalizeMusicMatchText([track.title, track.artist, track.album || '', track.tags || ''].join(' '));
-  const query = normalizeMusicMatchText(rawQuery);
-  const terms = normalizeMusicMatchText(fallbackTerms).split(' ').filter((word) =>
-    word.length > 1 && !['آهنگ','موزیک','موسیقی','خواننده','ترانه','لطفا','برای','پخش','کن','بده','برام','میخوام','میخواهم','please','music','song','songs','track','tracks'].includes(word)
-  );
-  if (!haystack || !terms.length) return 0;
-  let score = query && haystack.includes(query) ? 12 : 0;
-  let matched = 0;
-  for (const term of [...new Set(terms)]) {
-    if (haystack.includes(term)) {
-      matched += 1;
-      score += term.length >= 5 ? 2.5 : 1.5;
+  if (!haystack) return 0;
+  const stopWords = new Set(['آهنگ','موزیک','موسیقی','خواننده','ترانه','لطفا','برای','پخش','کن','بده','برام','میخوام','میخواهم','please','music','song','songs','track','tracks']);
+  const candidates = [rawQuery, fallbackTerms].map((query) =>
+    normalizeMusicMatchText(query).split(' ').filter((word) => word.length > 1 && !stopWords.has(word))
+  ).filter((terms) => terms.length > 0);
+  let best = 0;
+  for (const terms of candidates) {
+    const unique = [...new Set(terms)];
+    let matched = 0;
+    let score = haystack.includes(normalizeMusicMatchText(unique.join(' '))) ? 8 : 0;
+    for (const term of unique) {
+      if (haystack.includes(term)) {
+        matched += 1;
+        score += term.length >= 5 ? 2.5 : 1.5;
+      }
+    }
+    const coverage = matched / unique.length;
+    if (coverage >= (unique.length >= 3 ? 0.5 : 1)) {
+      best = Math.max(best, score + coverage * 3);
     }
   }
-  const coverage = matched / new Set(terms).size;
-  if (coverage < (terms.length >= 3 ? 0.5 : 1)) return 0;
-  return score + coverage * 3;
+  return best;
 }
 
 async function fetchPlayableMusicPlaylist(moodOrGenre: string, _ai: GoogleGenAI | null): Promise<{tracks: ServerMusicTrack[]; links: {title: string; url: string}[]}> {
   const rawQuery = moodOrGenre.trim().slice(0, 180);
   if (!rawQuery) return {tracks: [], links: []};
   const fallback = buildFallbackMusicQueries(rawQuery);
-  const matchTerms = [rawQuery, fallback.audiusQuery, fallback.archiveQuery].join(' ');
+  const matchTerms = fallback.audiusQuery;
   const [iranian, audiusResults, archiveResults] = await Promise.all([
     searchIranianMusicWeb(rawQuery),
     Promise.allSettled(musicQueryVariants(rawQuery).slice(0, 3).map(async (query) => {
