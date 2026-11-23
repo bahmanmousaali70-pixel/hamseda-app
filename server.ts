@@ -1820,16 +1820,20 @@ async function searchRadioJavanTracks(rawQuery: string): Promise<ServerMusicTrac
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36',
   };
   const songIds = new Set<string>();
+  const albumIds = new Set<string>();
   const searchTasks = queries.map(async (query) => {
     const response = await fetch(`https://rj-deskcloud.com/api2/search?query=${encodeURIComponent(query)}`, {
       headers,
       signal: AbortSignal.timeout(6500),
     });
     if (!response.ok) return;
-    const payload = await response.json() as {mp3s?: Array<{id?: string | number}>};
+    const payload = await response.json() as {mp3s?: Array<{id?: string | number}>; albums?: Array<{id?: string | number}>};
     for (const item of payload.mp3s ?? []) {
       if (item?.id !== undefined && item?.id !== null) songIds.add(String(item.id));
       if (songIds.size >= 24) break;
+    }
+    for (const album of payload.albums ?? []) {
+      if (album?.id !== undefined && album?.id !== null) albumIds.add(String(album.id));
     }
   });
   const artistTasks = (artistAlias?.queries ?? []).slice(0, 2).map(async (query) => {
@@ -1838,14 +1842,29 @@ async function searchRadioJavanTracks(rawQuery: string): Promise<ServerMusicTrac
       signal: AbortSignal.timeout(6500),
     });
     if (!response.ok) return;
-    const payload = await response.json() as {mp3s?: Array<{id?: string | number}>};
+    const payload = await response.json() as {mp3s?: Array<{id?: string | number}>; albums?: Array<{id?: string | number}>};
     for (const item of payload.mp3s ?? []) {
       if (item?.id !== undefined && item?.id !== null) songIds.add(String(item.id));
       if (songIds.size >= 24) break;
     }
+    for (const album of payload.albums ?? []) {
+      if (album?.id !== undefined && album?.id !== null) albumIds.add(String(album.id));
+    }
   });
   await Promise.allSettled([...searchTasks, ...artistTasks]);
-  const ids = [...songIds].slice(0, 24);
+  const albumTasks = [...albumIds].slice(0, 8).map(async (albumId) => {
+    const response = await fetch(`https://rj-deskcloud.com/api2/mp3?id=${encodeURIComponent(albumId)}`, {
+      headers,
+      signal: AbortSignal.timeout(6500),
+    });
+    if (!response.ok) return;
+    const album = await response.json() as {album_tracks?: Array<{id?: string | number}>};
+    for (const track of album.album_tracks ?? []) {
+      if (track?.id !== undefined && track?.id !== null) songIds.add(String(track.id));
+    }
+  });
+  await Promise.allSettled(albumTasks);
+  const ids = [...songIds].slice(0, 35);
   const details = await Promise.allSettled(ids.map(async (id): Promise<ServerMusicTrack | null> => {
     const response = await fetch(`https://rj-deskcloud.com/api2/mp3?id=${encodeURIComponent(id)}`, {
       headers,
@@ -1897,6 +1916,7 @@ function rankMusicTrack(track: ServerMusicTrack, rawQuery: string): number {
   const metadata = normalizeMusicMatchText([track.album || '', track.tags || ''].join(' '));
   if (!titleArtist && !metadata) return 0;
   const artistAlias = findMusicArtistAlias(rawQuery);
+  const moodQuery = /(غمگین|غم|دلتنگ|حزین|شاد|رقص|انرژی|پارتی|آرامش|آرام|ریلکس|ملایم|عاشقانه|رمانتیک)/.test(rawQuery);
   if (artistAlias) {
     const artistMatch = artistAlias.match.some((name) => name.length > 2 && titleArtist.includes(name));
     if (!artistMatch) return 0;
@@ -1918,8 +1938,8 @@ function rankMusicTrack(track: ServerMusicTrack, rawQuery: string): number {
   }
   const coverage = (titleMatches + metadataMatches) / terms.length;
   if (coverage < (terms.length <= 2 ? 1 : 0.8)) return 0;
-  const moodQuery = /(غمگین|غم|دلتنگ|حزین|شاد|رقص|انرژی|پارتی|آرامش|آرام|ریلکس|ملایم|عاشقانه|رمانتیک)/.test(rawQuery);
-  if (terms.length === 1 && titleMatches === 0 && !(moodQuery && metadataMatches > 0)) return 0;
+  if (terms.length === 1 && titleMatches === 0 && !(moodQuery && (metadataMatches > 0 || track.source === 'radiojavan'))) return 0;
+  if (moodQuery && titleMatches + metadataMatches === 0 && track.source === 'radiojavan') return 12;
   return titleMatches * 6 + metadataMatches * 2 + coverage * 5;
 }
 
