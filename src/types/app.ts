@@ -1,4 +1,4 @@
-export type AppTab = 'today' | 'assistant' | 'gratitude' | 'night' | 'voice' | 'caller' | 'freecall' | 'sync' | 'family';
+export type AppTab = 'today' | 'assistant' | 'gratitude' | 'night' | 'voice' | 'caller' | 'sync' | 'family';
 
 export type OwnerRole = 'man' | 'zari' | 'both';
 
