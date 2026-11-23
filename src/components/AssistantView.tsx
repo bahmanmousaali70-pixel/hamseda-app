@@ -71,11 +71,6 @@ import {
   getPartnerNameForDevice,
   getSelfName,
 } from '../utils/deviceIdentity';
-import {
-  loadPersonalCallProfile,
-  savePersonalCallProfile,
-  type PersonalCallProfile,
-} from '../utils/personalProfile';
 
 interface ChatMessage {
   id: string;
@@ -276,18 +271,6 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
   });
   const [isRecordingAudio, setIsRecordingAudio] = useState(false);
   const [pendingIntent, setPendingIntent] = useState<PendingAssistantIntent | null>(null);
-  const [callProfile, setCallProfile] = useState<PersonalCallProfile>(() => loadPersonalCallProfile());
-  const [showProfileCard, setShowProfileCard] = useState(false);
-  const [addressDraft, setAddressDraft] = useState(() => loadPersonalCallProfile().homeAddress);
-  const [callbackPhoneDraft, setCallbackPhoneDraft] = useState(() => loadPersonalCallProfile().callbackPhone);
-  const [voipWebhookDraft, setVoipWebhookDraft] = useState(() => loadPersonalCallProfile().voipWebhookUrl);
-  const [activeProxyCall, setActiveProxyCall] = useState<{
-    targetName: string;
-    targetPhone: string;
-    script: string;
-  } | null>(null);
-  const [calleeReplyDraft, setCalleeReplyDraft] = useState('');
-  const [voipCalling, setVoipCalling] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
     {
       id: 'welcome-msg',
@@ -304,18 +287,6 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
   // Prevent the wake-loop cleanup from cancelling a manually started recording.
   const manualListenRef = useRef(false);
   const lastExternalQueryNonceRef = useRef<number>(0);
-
-  useEffect(() => {
-    const syncProfile = () => {
-      const next = loadPersonalCallProfile();
-      setCallProfile(next);
-      setAddressDraft(next.homeAddress);
-      setCallbackPhoneDraft(next.callbackPhone);
-      setVoipWebhookDraft(next.voipWebhookUrl);
-    };
-    window.addEventListener('hamseda:profile-updated', syncProfile);
-    return () => window.removeEventListener('hamseda:profile-updated', syncProfile);
-  }, []);
 
   // Sync draft when settings.assistantName updates
   useEffect(() => {
@@ -422,8 +393,6 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
           callers,
           morningMessage,
           pendingIntent,
-          homeAddress: callProfile.homeAddress,
-          callbackPhone: callProfile.callbackPhone,
           conversationHistory: messages.slice(-12).map((message) => ({
             role: message.sender,
             text: message.text,
@@ -466,17 +435,11 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
           finalReply = `پیامک برای ${result.targetName} به شماره ${result.targetPhone} با متن «${result.smsBody}» آماده است. اگر نام، شماره و متن درست است بگو تأیید؛ برای انصراف بگو لغو کن.`;
         }
         if (result.action === 'make_call' && pendingIntent?.type !== 'awaiting_call_confirmation') {
-          finalReply = result.callScript
-            ? `تماس با ${result.targetName} (${result.targetPhone}) با پیام آماده «${result.callScript}» تنظیم شد. اگر درست است بگو تأیید؛ برای انصراف بگو لغو کن.`
-            : `با ${result.targetName} به شماره ${result.targetPhone} تماس بگیرم؟ اگر درست است بگو تأیید؛ برای انصراف بگو لغو کن.`;
+          finalReply = `با ${result.targetName} به شماره ${result.targetPhone} تماس بگیرم؟ اگر درست است بگو تأیید؛ برای انصراف بگو لغو کن.`;
         }
 
         // Execute Android Hardware/OS Action if applicable
         if (NATIVE_DEVICE_ACTIONS.has(result.action) && !(result.action === 'send_sms' && pendingIntent?.type !== 'awaiting_sms_confirmation') && !(result.action === 'make_call' && pendingIntent?.type !== 'awaiting_call_confirmation')) {
-          const confirmedCallScript =
-            result.action === 'make_call'
-              ? (result.callScript || pendingIntent?.callScript || '').trim()
-              : '';
           const shouldSkipAutoDownloadIfSearch =
             result.action === 'download_url' && !result.downloadUrl?.trim();
 
@@ -488,7 +451,6 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
               action: result.action,
               phone: result.targetPhone,
               smsBody: result.smsBody,
-              callScript: confirmedCallScript || undefined,
               confirmed:
                 (result.action === 'send_sms' && pendingIntent?.type === 'awaiting_sms_confirmation') ||
                 (result.action === 'make_call' && pendingIntent?.type === 'awaiting_call_confirmation'),
@@ -507,13 +469,6 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
               setIsRecordingAudio(false);
             }
 
-            if (result.action === 'make_call' && confirmedCallScript) {
-              setActiveProxyCall({
-                targetName: result.targetName || result.targetPhone || 'مخاطب',
-                targetPhone: result.targetPhone || '',
-                script: confirmedCallScript,
-              });
-            }
 
             if (!nativeRes.ok) {
               finalReply = nativeRes.message || finalReply;
@@ -620,74 +575,6 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
       syncedContacts,
     ]
   );
-
-  const handleSaveCallProfile = (e: React.FormEvent) => {
-    e.preventDefault();
-    const updated = savePersonalCallProfile({
-      homeAddress: addressDraft.trim(),
-      callbackPhone: callbackPhoneDraft.trim(),
-      voipWebhookUrl: voipWebhookDraft.trim(),
-    });
-    setCallProfile(updated);
-    setShowProfileCard(false);
-    onStatusToast('نشانی تحویل، شماره بازگشت و تنظیمات پل تماس ذخیره شد.');
-  };
-
-  const handleDispatchVoipCall = async () => {
-    if (!pendingIntent || pendingIntent.type !== 'awaiting_call_confirmation' || !pendingIntent.targetPhone) {
-      return;
-    }
-    const scriptToSay = (pendingIntent.callScript || '').trim();
-    if (!scriptToSay) {
-      onStatusToast('لطفاً ابتدا متن پیام یا سفارش را در کادر بنویسید.');
-      return;
-    }
-    if (!callProfile.voipWebhookUrl.trim()) {
-      onStatusToast('ابتدا در بخش «نشانی و تلفن سفارش» یا «تنظیم و نصب»، آدرس وب‌هوک VoIP را وارد کنید.');
-      setShowProfileCard(true);
-      return;
-    }
-    setVoipCalling(true);
-    try {
-      const res = await fetch(apiUrl('/api/voip-proxy-call'), {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          webhookUrl: callProfile.voipWebhookUrl.trim(),
-          targetName: pendingIntent.targetName || '',
-          targetPhone: pendingIntent.targetPhone,
-          script: scriptToSay,
-          homeAddress: callProfile.homeAddress,
-          callbackPhone: callProfile.callbackPhone,
-          ownerName: selfName,
-        }),
-      });
-      const parsed = await safeReadJsonResponse<{
-        ok?: boolean;
-        callStatus?: string;
-        calleeReply?: string;
-        message?: string;
-        error?: string;
-      }>(res);
-      if (!res.ok || !parsed.data?.ok) {
-        onStatusToast(parsed.data?.error || 'خطا در برقراری تماس از طریق پل VoIP');
-        return;
-      }
-      const replySummary = parsed.data.calleeReply
-        ? `تماس VoIP با ${pendingIntent.targetName} انجام شد. پاسخ طرف مقابل: «${parsed.data.calleeReply}»`
-        : `${parsed.data.message || 'تماس VoIP ارسال شد'} (وضعیت: ${parsed.data.callStatus || 'ارسال‌شده'})`;
-      appendMessage('assistant', replySummary, {action: 'make_call'});
-      if (autoSpeakReplies) {
-        onStopSpeech();
-        onSpeakText(replySummary, `پاسخ تماس ${pendingIntent.targetName || ''}`, 'custom');
-      }
-      setPendingIntent(null);
-    } catch {
-      onStatusToast('برقراری ارتباط با سرویس VoIP ناموفق بود.');
-    } finally {
-      setVoipCalling(false);
-    }
-  };
 
   useEffect(() => {
     if (
@@ -1074,98 +961,9 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
               </span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => setShowProfileCard((prev) => !prev)}
-              className={`min-h-[44px] px-3.5 py-2.5 rounded-xl border text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer ${
-                callProfile.homeAddress || callProfile.callbackPhone
-                  ? 'border-emerald-600/50 bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200'
-                  : 'border-slate-200 dark:border-emerald-950 text-slate-700 dark:text-slate-300'
-              }`}
-            >
-              <MapPin className="w-4 h-4" />
-              <span>
-                {callProfile.homeAddress
-                  ? 'نشانی و تلفن سفارش (ثبت‌شده)'
-                  : 'ثبت نشانی و تلفن برای تماس/سفارش'}
-              </span>
-            </button>
           </div>
         </div>
 
-        {showProfileCard && (
-          <form
-            onSubmit={handleSaveCallProfile}
-            className="mt-4 rounded-xl border border-slate-200 dark:border-emerald-900/70 bg-slate-50/80 dark:bg-[#0D1614] p-4 space-y-3"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
-                نشانی و تلفن ثابت برای تماس نیابتی و سفارش خودکار
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowProfileCard(false)}
-                className="text-xs text-slate-500 hover:text-slate-800 dark:text-slate-400 cursor-pointer"
-              >
-                بستن
-              </button>
-            </div>
-            <p className="text-xs leading-6 text-slate-600 dark:text-slate-300">
-              یک‌بار نشانی و شماره تماس را ذخیره کنید؛ هر وقت بگویید «به پیتزافروشی زنگ بزن سفارش بده با آدرسم»، هم‌صدا خودکار متن سفارش را به همراه آدرس و تلفن آماده می‌کند.
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="md:col-span-2">
-                <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1">
-                  نشانی کامل (برای سفارش و ارسال پیک)
-                </label>
-                <input
-                  type="text"
-                  value={addressDraft}
-                  onChange={(e) => setAddressDraft(e.target.value)}
-                  placeholder="مثلاً: تهران، خیابان ... پلاک ... واحد ..."
-                  className="w-full min-h-[44px] px-3 rounded-xl border border-slate-200 dark:border-emerald-900 bg-white dark:bg-[#121E1C] text-xs text-slate-900 dark:text-white"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1">
-                  شماره تماس هماهنگی
-                </label>
-                <input
-                  type="tel"
-                  dir="ltr"
-                  value={callbackPhoneDraft}
-                  onChange={(e) => setCallbackPhoneDraft(e.target.value)}
-                  placeholder="0912..."
-                  className="w-full min-h-[44px] px-3 rounded-xl border border-slate-200 dark:border-emerald-900 bg-white dark:bg-[#121E1C] text-xs font-mono-num text-slate-900 dark:text-white"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1">
-                نشانی وب‌هوک VoIP / SIP ابری (اختیاری — برای مکالمه کاملاً خودکار و دریافت پاسخ طرف مقابل)
-              </label>
-              <input
-                type="url"
-                dir="ltr"
-                value={voipWebhookDraft}
-                onChange={(e) => setVoipWebhookDraft(e.target.value)}
-                placeholder="https://your-voip-bridge.example.com/call"
-                className="w-full min-h-[44px] px-3 rounded-xl border border-slate-200 dark:border-emerald-900 bg-white dark:bg-[#121E1C] text-xs font-mono-num text-slate-900 dark:text-white"
-              />
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                اندروید در تماس مخابراتی سیم‌کارت به هیچ برنامه‌ای اجازه صحبت خودکار پشت خط را نمی‌دهد؛ با اسپیکر گوشی یا وب‌هوک VoIP پیام منتقل می‌شود.
-              </span>
-              <button
-                type="submit"
-                className="min-h-[44px] px-5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold cursor-pointer"
-              >
-                ذخیره نشانی و تلفن
-              </button>
-            </div>
-          </form>
-        )}
 
         {wakeLoopEnabled && wakeStatus.state === 'error' && wakeStatus.error && (
           <div className="mt-3 rounded-xl border border-rose-300 dark:border-rose-800/70 bg-rose-50 dark:bg-rose-950/30 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-rose-900 dark:text-rose-100">
@@ -1277,49 +1075,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
                   <strong>بررسی نهایی تماس تلفنی</strong>
                   <div>مخاطب: <b>{pendingIntent.targetName}</b></div>
                   <div className="break-words">شماره: <b dir="ltr">{pendingIntent.targetPhone || 'نامشخص'}</b></div>
-                  <div className="pt-1 space-y-1.5">
-                    <label className="block text-xs font-semibold">
-                      متن پیام یا سفارش برای گفتن حین تماس (اختیاری):
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={pendingIntent.callScript ?? ''}
-                      onChange={(e) =>
-                        setPendingIntent((prev) =>
-                          prev ? {...prev, callScript: e.target.value} : prev
-                        )
-                      }
-                      placeholder="مثلاً: سلام، یک پیتزا مخصوص می‌خواستیم با نشانی و شماره هماهنگی..."
-                      className="w-full px-3 py-2 rounded-xl border border-amber-300 dark:border-amber-800 bg-white dark:bg-[#0D1614] text-xs leading-6 text-slate-900 dark:text-white"
-                    />
-                    {(callProfile.homeAddress || callProfile.callbackPhone) && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const extra = [
-                            callProfile.homeAddress ? `نشانی ارسال: ${callProfile.homeAddress}.` : '',
-                            callProfile.callbackPhone ? `شماره تماس: ${callProfile.callbackPhone}.` : '',
-                          ]
-                            .filter(Boolean)
-                            .join(' ');
-                          setPendingIntent((prev) => {
-                            if (!prev) return prev;
-                            const curr = (prev.callScript || '').trim();
-                            return {
-                              ...prev,
-                              callScript: curr ? `${curr} ${extra}` : extra,
-                            };
-                          });
-                        }}
-                        className="min-h-[36px] px-3 rounded-lg border border-amber-400 dark:border-amber-700 bg-white/80 dark:bg-[#121E1C] text-[11px] font-semibold text-amber-950 dark:text-amber-200 cursor-pointer"
-                      >
-                        افزودن نشانی و تلفن ذخیره‌شده به متن پیام
-                      </button>
-                    )}
-                  </div>
-                  <div className="text-xs font-semibold">
-                    فقط اگر نام، شماره و متن درست است، تأیید تماس را بزنید.
-                  </div>
+                  <div className="text-xs font-semibold">با تأیید شما، شماره‌گیر گوشی باز می‌شود.</div>
                 </>
               ) : pendingIntent.type === 'awaiting_sms_confirmation' ? (
                 <>
@@ -1355,16 +1111,6 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
                   >
                     تأیید و برقراری تماس
                   </button>
-                  {callProfile.voipWebhookUrl.trim() && (pendingIntent.callScript || '').trim() && (
-                    <button
-                      type="button"
-                      disabled={voipCalling}
-                      onClick={handleDispatchVoipCall}
-                      className="min-h-[44px] px-4 rounded-xl bg-slate-900 dark:bg-emerald-900 hover:bg-slate-800 text-white text-xs font-semibold cursor-pointer disabled:opacity-60"
-                    >
-                      {voipCalling ? 'در حال ارسال به پل VoIP...' : 'تماس خودکار با پل VoIP ابری'}
-                    </button>
-                  )}
                 </>
               )}
               {pendingIntent.type === 'awaiting_sms_confirmation' && (
@@ -1400,73 +1146,6 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
         </section>
       )}
 
-      {/* Active Proxy Call Assistant Bar (Speaker Readout + Callee Reply Logger) */}
-      {activeProxyCall && (
-        <section className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/35 border border-emerald-300 dark:border-emerald-800 p-4 sm:p-5 space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div className="text-sm font-bold text-emerald-950 dark:text-emerald-100">
-              دستیار مکالمه فعال با {activeProxyCall.targetName}{' '}
-              {activeProxyCall.targetPhone ? <span dir="ltr" className="text-xs font-mono-num opacity-80">({activeProxyCall.targetPhone})</span> : null}
-            </div>
-            <button
-              type="button"
-              onClick={() => setActiveProxyCall(null)}
-              className="self-start sm:self-auto text-xs font-semibold text-emerald-800 dark:text-emerald-300 hover:underline cursor-pointer"
-            >
-              بستن پنل مکالمه
-            </button>
-          </div>
-          <p className="text-xs leading-6 text-emerald-900/90 dark:text-emerald-200/90 bg-white/80 dark:bg-[#0D1614] rounded-xl p-3 border border-emerald-200/70 dark:border-emerald-900">
-            {activeProxyCall.script}
-          </p>
-          <p className="text-[11px] leading-5 text-slate-600 dark:text-slate-300">
-            روی نسخه اندروید، حین تماس یک نوار شناور بالای صفحه شماره‌گیر باز می‌شود که به‌صورت خودکار (با شمارش معکوس ۹ ثانیه‌ای یا لمس فوری «الان بگو روی اسپیکر») بلندگو را روشن کرده و متن بالا را برای طرف مقابل می‌خواند. همچنین می‌توانید از دکمه زیر هم مستقیم متن را بخوانید.
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                onStopSpeech();
-                onSpeakText(activeProxyCall.script, `پیام تماس ${activeProxyCall.targetName}`, 'custom');
-              }}
-              className="min-h-[44px] px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold inline-flex items-center gap-2 cursor-pointer"
-            >
-              <Volume2 className="w-4 h-4" />
-              <span>خواندن متن با صدای بلند روی اسپیکر</span>
-            </button>
-          </div>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const txt = calleeReplyDraft.trim();
-              if (!txt) return;
-              const summary = `ثبت پاسخ از تماس ${activeProxyCall.targetName}: «${txt}»`;
-              appendMessage('assistant', summary, {action: 'make_call'});
-              setCalleeReplyDraft('');
-              if (autoSpeakReplies) {
-                onStopSpeech();
-                onSpeakText(summary, `خلاصه تماس ${activeProxyCall.targetName}`, 'custom');
-              }
-            }}
-            className="flex flex-col sm:flex-row gap-2 pt-1"
-          >
-            <input
-              type="text"
-              value={calleeReplyDraft}
-              onChange={(e) => setCalleeReplyDraft(e.target.value)}
-              placeholder="پاسخ یا زمان تحویل اعلام‌شده توسط طرف مقابل را بنویسید..."
-              className="flex-1 min-h-[44px] px-3 rounded-xl border border-emerald-200 dark:border-emerald-900 bg-white dark:bg-[#0D1614] text-xs text-slate-900 dark:text-white"
-            />
-            <button
-              type="submit"
-              disabled={!calleeReplyDraft.trim()}
-              className="min-h-[44px] px-4 rounded-xl bg-slate-900 dark:bg-emerald-800 disabled:opacity-50 text-white text-xs font-semibold cursor-pointer shrink-0"
-            >
-              ثبت پاسخ در گفت‌وگو
-            </button>
-          </form>
-        </section>
-      )}
 
       {/* Main Split: Conversation + Quick Commands */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
