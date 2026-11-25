@@ -199,6 +199,9 @@ public class RoozhayeNativePlugin extends Plugin {
             return;
         }
         List<String> smsPerms = new ArrayList<>();
+        if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED) {
+            smsPerms.add(Manifest.permission.READ_CALL_LOG);
+        }
         if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECEIVE_SMS) != PackageManager.PERMISSION_GRANTED) {
             smsPerms.add(Manifest.permission.RECEIVE_SMS);
         }
@@ -219,8 +222,8 @@ public class RoozhayeNativePlugin extends Plugin {
 
     private List<String> collectMissingRuntimePermissions(Context ctx) {
         List<String> needed = new ArrayList<>();
-        // RECEIVE_SMS / SEND_SMS are Play-restricted.
-        // Never request them unless the user has actively selected Hamseda as Assistant.
+        // SMS and Call Log permissions are Play-restricted.
+        // Request them only while the user has actively selected Hamseda as Assistant.
         boolean assistantRoleHeld = isAssistantRoleHeld(ctx);
         List<String> basePerms = new ArrayList<>();
         basePerms.add(Manifest.permission.READ_PHONE_STATE);
@@ -230,6 +233,7 @@ public class RoozhayeNativePlugin extends Plugin {
         if (assistantRoleHeld) {
             basePerms.add(Manifest.permission.RECEIVE_SMS);
             basePerms.add(Manifest.permission.SEND_SMS);
+            basePerms.add(Manifest.permission.READ_CALL_LOG);
         }
         for (String perm : basePerms) {
             if (ContextCompat.checkSelfPermission(ctx, perm) != PackageManager.PERMISSION_GRANTED) {
@@ -2227,8 +2231,10 @@ public class RoozhayeNativePlugin extends Plugin {
         obj.put("assistantRoleAvailable", assistantRoleAvailable);
         obj.put("assistantRoleHeld", assistantRoleHeld);
         obj.put("phoneState", ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED);
-        // Call history is not currently a Hamseda feature; do not request READ_CALL_LOG.
-        obj.put("callLog", false);
+        // READ_CALL_LOG is used only to receive the incoming caller number in PHONE_STATE broadcasts.
+        // No call-history provider query or call-log browsing is implemented.
+        obj.put("callLog", assistantRoleHeld
+                && ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED);
         obj.put("contacts", ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED);
         obj.put("sms", assistantRoleHeld
                 && ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED);
