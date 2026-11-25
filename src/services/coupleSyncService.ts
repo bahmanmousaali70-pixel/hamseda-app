@@ -1489,9 +1489,12 @@ export async function deleteUserCloudData(user: User, activeSpaceId?: string | n
     const membersSnapshot = isOwner
       ? await getDocs(collection(db, 'spaces', spaceId, 'members'))
       : null;
+    const ownMembership = isOwner
+      ? null
+      : await getDoc(doc(db, 'spaces', spaceId, 'members', uid));
     const memberUids = isOwner
       ? Array.from(new Set([uid, ...(membersSnapshot?.docs ?? []).map((member) => member.id)]))
-      : [uid];
+      : ownMembership?.exists() ? [uid] : [];
 
     for (const memberUid of memberUids) {
       for (const collectionName of ACCOUNT_DATA_COLLECTIONS) {
@@ -1514,7 +1517,9 @@ export async function deleteUserCloudData(user: User, activeSpaceId?: string | n
           updatedAt: serverTimestamp(),
         });
       }
-      await deleteDoc(doc(db, 'spaces', spaceId, 'members', uid));
+      if (ownMembership?.exists()) {
+        await deleteDoc(doc(db, 'spaces', spaceId, 'members', uid));
+      }
     }
   }
 
