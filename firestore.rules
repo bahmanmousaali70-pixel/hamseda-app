@@ -389,7 +389,10 @@ service cloud.firestore {
 
       match /members/{memberUid} {
         allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(memberUid) && isSpaceMember(spaceId);
-        allow list: if isVerifiedUser() && isSpaceMember(spaceId) && resource.data.uid is string;
+        allow list: if isVerifiedUser()
+          && isSpaceMember(spaceId)
+          && (get(/databases/$(database)/documents/spaces/$(spaceId)).data.ownerUid == request.auth.uid
+            || resource.data.uid is string);
         allow create: if isVerifiedUser()
           && isValidId(spaceId)
           && isValidId(memberUid)
