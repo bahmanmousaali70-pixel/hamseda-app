@@ -818,6 +818,9 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
             <p className="mt-1.5 text-xs sm:text-sm leading-6 text-slate-600 dark:text-slate-300 max-w-3xl">
               پروژه بومی اندروید (Capacitor + سرویس پس‌زمینه کاتلین + گیرنده تماس ورودی + آلارم دقیق بیدارباش) و گردش‌کار گیت‌هاب (<code dir="ltr">.github/workflows/build-apk.yml</code>) داخل کدهای این برنامه آماده شده است.
             </p>
+            <p className="mt-2 text-xs leading-6 text-slate-600 dark:text-slate-300 max-w-3xl">
+              برای استفاده از قابلیت‌های حساس پیامک و گزارش تماس، اندروید باید هم‌صدا را با انتخاب صریح شما به‌عنوان دستیار پیش‌فرض ثبت کند. تا پیش از این انتخاب، مجوزهای حساس درخواست نمی‌شوند؛ اگر این نقش را از برنامه بگیرید، پردازش پیامک متوقف خواهد شد. انتخاب نقش و مجوزها همیشه در کنترل شماست.
+            </p>
           </div>
 
           <div className="shrink-0 flex flex-wrap gap-2">
