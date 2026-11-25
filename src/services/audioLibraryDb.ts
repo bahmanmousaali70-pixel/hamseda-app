@@ -7,14 +7,19 @@ const activeAudioDbConnections = new Set<IDBDatabase>();
 
 export async function clearAudioLibraryDb(): Promise<void> {
   if (typeof indexedDB === 'undefined') return;
-  activeAudioDbConnections.forEach((connection) => connection.close());
-  activeAudioDbConnections.clear();
-  await new Promise<void>((resolve) => {
-    const request = indexedDB.deleteDatabase(DB_NAME);
-    request.onsuccess = () => resolve();
-    request.onerror = () => resolve();
-    request.onblocked = () => resolve();
-  });
+  try {
+    const connection = await openAudioDb();
+    await new Promise<void>((resolve, reject) => {
+      const transaction = connection.transaction(STORE_CLIPS, 'readwrite');
+      transaction.objectStore(STORE_CLIPS).clear();
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+  } finally {
+    activeAudioDbConnections.forEach((connection) => connection.close());
+    activeAudioDbConnections.clear();
+  }
 }
 
 interface StoredAudioRecord extends AudioLibraryEntry {
