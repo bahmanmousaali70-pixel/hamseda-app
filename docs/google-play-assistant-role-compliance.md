@@ -6,7 +6,7 @@ Hamseda declares an Android `ACTION_ASSIST` entry point and offers the system As
 
 The app requests `RECEIVE_SMS`, `SEND_SMS`, and `READ_CALL_LOG` only after Android confirms that Hamseda currently holds `ROLE_ASSISTANT`. It does not request `READ_SMS`, because inbox-wide SMS access is not needed. `READ_CALL_LOG` is used only because Android documents that `ACTION_PHONE_STATE_CHANGED` exposes `EXTRA_INCOMING_NUMBER` only to receivers granted both `READ_CALL_LOG` and `READ_PHONE_STATE`; the app uses this to resolve an incoming caller against the user’s contacts and does not query the call-history provider or display call history. If the role is unavailable or the user declines it, these restricted permissions are not requested. If the Assistant role is removed, SMS and caller-number processing stop.
 
-Message broadcasts, message notification content, and caller-number extraction are stopped or reduced to a generic announcement when the Assistant role is not held.
+Incoming SMS broadcast processing and caller-number extraction are disabled when the Assistant role is not held. Hamseda does not read SMS or RCS message bodies from notification content; the notification-listener service previously used for that purpose has been removed. RCS announcement through notification access is therefore not supported.
 
 ## User control and transparency
 
@@ -32,3 +32,7 @@ The owner then revoked the Assistant role and repeated the test; the behavior af
 
 The owner also revoked all app permissions and repeated the test. The owner reports that the app behaved as expected with all permissions denied. These are owner-reported manual device test results, not automated test evidence. The exact permission-by-permission denial matrix and testing on additional supported Android versions remain outstanding.
 
+
+## Notification-content access removal
+
+The notification-listener service and its setup UI/API were removed. Hamseda does not use notification access to obtain SMS or RCS message content. Incoming SMS announcements use the SMS broadcast receiver and the gated `RECEIVE_SMS` permission only. This reduces alternate access paths but does not itself guarantee Google Play approval; restricted-permission eligibility and declarations still require review.
