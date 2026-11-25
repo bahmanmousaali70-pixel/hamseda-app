@@ -31,9 +31,9 @@ import {
 import {useBackgroundScheduler} from './hooks/useBackgroundScheduler';
 import {useOnlineStatus} from './hooks/usePWAInstall';
 import {apiUrl, getCloudApiBaseUrl, safeReadJsonResponse} from './services/apiConfig';
-import {clearAudioLibraryDb} from './services/audioLibraryDb';
 import {
   buildCallerRingtoneWav,
+  clearAudioLibraryDb,
   getAudioClipBuffer,
   hashTextKey,
   listAudioClips,
