@@ -2210,8 +2210,6 @@ public class RoozhayeNativePlugin extends Plugin {
         obj.put("sendSms", assistantRoleHeld
                 && ContextCompat.checkSelfPermission(ctx, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED);
         obj.put("camera", ContextCompat.checkSelfPermission(ctx, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED);
-        obj.put("location", ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                || ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED);
 
         boolean dndOk = true;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
