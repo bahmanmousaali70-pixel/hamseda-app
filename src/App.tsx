@@ -71,13 +71,16 @@ import {
   pushVaultNoteToCloud,
   subscribeToCoupleSpace,
   uploadLocalBundleToSpace,
+  deleteUserCloudData,
   type CoupleSpaceInfo,
 } from './services/coupleSyncService';
 import {buildDailyBriefingText, fetchQuickWeatherBrief} from './services/dailyBriefing';
 import {
   auth,
   checkRedirectSignIn,
+  deleteCurrentCloudAuthUser,
   onAuthStateChanged,
+  reauthenticateCloudUser,
   signInWithGoogleSmart,
   signOutFirebase,
 } from './services/firebaseClient';
@@ -1187,6 +1190,37 @@ export default function App() {
     try {
       await signOutFirebase();
       showToast('از حساب همگام‌سازی خارج شدید. داده‌های محلی همچنان در گوشی باقی هستند.');
+    } finally {
+      setCloudBusy(false);
+    }
+  };
+
+  const handleDeleteCloudAccount = async () => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      showToast('ابتدا وارد حساب همگام‌سازی شوید.');
+      return;
+    }
+    const confirmed = window.confirm(
+      'حذف حساب و داده‌های ابری برگشت‌پذیر نیست. اگر مالک فضای مشترک باشید، همه اطلاعات آن فضا برای شما و همراهتان حذف می‌شود. اگر عضو همراه باشید، فقط اطلاعات ثبت‌شده توسط حساب شما و عضویت شما حذف می‌شود. آیا مطمئن هستید؟'
+    );
+    if (!confirmed) return;
+
+    setCloudBusy(true);
+    try {
+      const verifiedUser = await reauthenticateCloudUser();
+      await deleteUserCloudData(verifiedUser, spaceInfo?.spaceId);
+      await deleteCurrentCloudAuthUser();
+
+      Object.keys(localStorage).forEach((key) => {
+        if (key.startsWith('rmz_') || key.startsWith('hamseda_')) {
+          localStorage.removeItem(key);
+        }
+      });
+      showToast('حساب ابری و داده‌های وابسته حذف شد.');
+      window.location.reload();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'حذف حساب کامل نشد. دوباره تلاش کنید.');
     } finally {
       setCloudBusy(false);
     }
@@ -2353,6 +2387,7 @@ export default function App() {
             onDownloadScheduleAlarm={handleDownloadScheduleAlarm}
             onCloudSignIn={handleCloudSignIn}
             onCloudSignOut={handleCloudSignOut}
+            onDeleteAccount={handleDeleteCloudAccount}
             onInvitePartner={handleInvitePartner}
             onJoinSpaceByCode={handleJoinSpaceByCode}
             onPushLocalToCloud={handlePushLocalToCloud}
