@@ -122,6 +122,7 @@ interface SyncSettingsViewProps {
   onDownloadScheduleAlarm: (schedule: ScheduledAnnouncement) => Promise<void>;
   onCloudSignIn: () => Promise<void>;
   onCloudSignOut: () => Promise<void>;
+  onDeleteAccount: () => Promise<void>;
   onInvitePartner: (email: string) => Promise<void>;
   onJoinSpaceByCode: (spaceCode: string) => Promise<void>;
   onPushLocalToCloud: () => Promise<void>;
@@ -187,6 +188,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
   onDownloadScheduleAlarm,
   onCloudSignIn,
   onCloudSignOut,
+  onDeleteAccount,
   onInvitePartner,
   onJoinSpaceByCode,
   onPushLocalToCloud,
@@ -703,6 +705,15 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
                   <LogOut className="w-4 h-4" />
                   <span>خروج</span>
                 </button>
+                <button
+                  type="button"
+                  disabled={cloudBusy}
+                  onClick={onDeleteAccount}
+                  className="min-h-[44px] px-3.5 py-2 rounded-xl border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/30 text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>حذف حساب و داده‌های ابری</span>
+                </button>
               </div>
             ) : (
               <button
@@ -716,6 +727,11 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
               </button>
             )}
           </div>
+        </div>
+
+        <div className="flex flex-wrap gap-4 pt-3 border-t border-slate-100 dark:border-emerald-950/60 text-xs">
+          <a href="https://hamseda-app.ai.studio/privacy-policy.html" target="_blank" rel="noreferrer" className="text-emerald-700 dark:text-emerald-300 underline underline-offset-4">سیاست حریم خصوصی</a>
+          <a href="https://hamseda-app.ai.studio/delete-account.html" target="_blank" rel="noreferrer" className="text-emerald-700 dark:text-emerald-300 underline underline-offset-4">راهنمای حذف حساب</a>
         </div>
 
         {cloudUserEmail && spaceInfo && (
