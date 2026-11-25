@@ -6,3 +6,10 @@ coverage/
 *.log
 .env*
 !.env.example
+# Android release signing material — never commit private keys or secret bundles
+*.jks
+*.keystore
+*.p12
+*.pfx
+*upload-key*.base64
+*github-actions-secrets*.txt
