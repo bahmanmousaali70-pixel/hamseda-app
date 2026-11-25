@@ -28,7 +28,11 @@ service cloud.firestore {
 
     function isSpaceMember(spaceId) {
       return isVerifiedUser()
-        && exists(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.auth.uid));
+        && (
+          exists(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.auth.uid))
+          || (exists(/databases/$(database)/documents/spaces/$(spaceId))
+            && get(/databases/$(database)/documents/spaces/$(spaceId)).data.ownerUid == request.auth.uid)
+        );
     }
 
     function isValidUserProfile(data, userId) {
