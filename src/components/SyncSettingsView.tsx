@@ -33,6 +33,7 @@ import type {CoupleSpaceInfo} from '../services/coupleSyncService';
 import {
   checkConnectivityNative,
   isNativeAndroid,
+  openAssistantSettingsNative,
   openBatteryAndAutostartSettingsNative,
   openExternalUrlNative,
   pickJsonFileNative,
@@ -826,6 +827,19 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
           <div className="shrink-0 flex flex-wrap gap-2">
             {nativeCaps.isNative ? (
               <>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const result = await openAssistantSettingsNative();
+                    onStatusToast(result.ok
+                      ? 'تنظیمات دستیار گوشی باز شد؛ در بخش دستیار دیجیتال، هم‌صدا را انتخاب کن.'
+                      : (result.message || 'تنظیمات دستیار باز نشد؛ از دکمه درخواست دستیار استفاده کن.'));
+                  }}
+                  className="min-h-[44px] px-4 py-2.5 rounded-xl border border-emerald-700 text-emerald-800 dark:text-emerald-300 dark:border-emerald-700 text-xs sm:text-sm font-semibold flex items-center gap-2 cursor-pointer"
+                >
+                  <Smartphone className="w-4 h-4" />
+                  <span>رفتن مستقیم به تنظیمات دستیار</span>
+                </button>
                 <button
                   type="button"
                   onClick={onRequestNativePermissions}
