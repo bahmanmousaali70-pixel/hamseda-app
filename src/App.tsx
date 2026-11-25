@@ -1212,13 +1212,20 @@ export default function App() {
       const verifiedUser = await reauthenticateCloudUser();
       await deleteUserCloudData(verifiedUser, spaceInfo?.spaceId);
       await deleteCurrentCloudAuthUser();
-      await clearAudioLibraryDb();
-
-      Object.keys(localStorage).forEach((key) => {
-        if (key.startsWith('rmz_') || key.startsWith('hamseda_')) {
-          localStorage.removeItem(key);
-        }
-      });
+      try {
+        await clearAudioLibraryDb();
+      } catch (cleanupError) {
+        console.warn('Audio cache cleanup after account deletion failed:', cleanupError);
+      }
+      try {
+        Object.keys(localStorage).forEach((key) => {
+          if (key.startsWith('rmz_') || key.startsWith('hamseda_')) {
+            localStorage.removeItem(key);
+          }
+        });
+      } catch (cleanupError) {
+        console.warn('Local storage cleanup after account deletion failed:', cleanupError);
+      }
       showToast('حساب ابری و داده‌های وابسته حذف شد.');
       window.location.reload();
     } catch (err) {
