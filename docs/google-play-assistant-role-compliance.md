@@ -28,5 +28,7 @@ The app owner reports successful manual tests on a Xiaomi device running Android
 - An incoming SMS test message was read aloud.
 - An incoming call was detected and the full saved contact name was announced.
 
-The owner then installed the newer test build, revoked the Assistant role, and repeated the test. The owner reports that the behavior after revocation was as expected. This is owner-reported manual device testing, not automated test evidence. The exact permission-by-permission denial matrix and testing on additional supported Android versions remain outstanding.
+The owner then revoked the Assistant role and repeated the test; the behavior after revocation was reported as expected.
+
+The owner also revoked all app permissions and repeated the test. The owner reports that the app behaved as expected with all permissions denied. These are owner-reported manual device test results, not automated test evidence. The exact permission-by-permission denial matrix and testing on additional supported Android versions remain outstanding.
 
