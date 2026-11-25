@@ -829,7 +829,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
                   className="min-h-[44px] px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs sm:text-sm font-semibold flex items-center gap-2 cursor-pointer"
                 >
                   <ShieldCheck className="w-4 h-4" />
-                  <span>مجوز تماس، باتری و Autostart</span>
+                  <span>تنظیم دستیار پیش‌فرض و مجوزها</span>
                 </button>
                 <button
                   type="button"
@@ -890,6 +890,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
         {nativeCaps.isNative && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 pt-2">
             {[
+              {label: 'دستیار پیش‌فرض اندروید', ok: nativeCaps.assistantRoleHeld},
               {label: 'تشخیص تماس ورودی', ok: nativeCaps.phoneState},
               {label: 'شماره تماس‌گیرنده', ok: nativeCaps.callLog},
               {label: 'خواندن پیامک (SMS)', ok: nativeCaps.sms},
