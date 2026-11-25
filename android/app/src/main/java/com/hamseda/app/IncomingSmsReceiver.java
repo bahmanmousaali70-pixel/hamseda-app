@@ -36,6 +36,8 @@ public class IncomingSmsReceiver extends BroadcastReceiver {
         if (intent == null || !Telephony.Sms.Intents.SMS_RECEIVED_ACTION.equals(intent.getAction())) {
             return;
         }
+        // Stop processing SMS immediately if the user removes Hamseda as Assistant.
+        if (!RoozhayeNativePlugin.isAssistantRoleHeld(context)) return;
 
         SharedPreferences prefs = context.getSharedPreferences("rmz_native_prefs", Context.MODE_PRIVATE);
         if (!prefs.getBoolean("announce_sms_enabled", true)) {
