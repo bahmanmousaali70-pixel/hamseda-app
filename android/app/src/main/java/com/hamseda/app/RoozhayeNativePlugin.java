@@ -6,7 +6,6 @@ import android.app.AlarmManager;
 import android.app.DownloadManager;
 import android.app.NotificationManager;
 import android.app.role.RoleManager;
-import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
@@ -1411,37 +1410,6 @@ public class RoozhayeNativePlugin extends Plugin {
         return recordedFile.getAbsolutePath();
     }
 
-    @PluginMethod
-    public void openNotificationListenerSettings(PluginCall call) {
-        Context ctx = getContext();
-        boolean launched = false;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            try {
-                Intent detailIntent = new Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS);
-                detailIntent.putExtra(
-                        Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME,
-                        new ComponentName(ctx, NotificationSmsListenerService.class).flattenToString()
-                );
-                detailIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                ctx.startActivity(detailIntent);
-                launched = true;
-            } catch (Exception ignored) {
-            }
-        }
-        if (!launched) {
-            try {
-                Intent intent = new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS);
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                ctx.startActivity(intent);
-                launched = true;
-            } catch (Exception ignored) {
-                launched = openAppDetailsInternal(ctx);
-            }
-        }
-        JSObject ret = new JSObject();
-        ret.put("ok", launched);
-        call.resolve(ret);
-    }
 
     @PluginMethod
     public void openAppInfoSettings(PluginCall call) {
