@@ -54,6 +54,7 @@ public class CallAnnouncerService extends Service {
     public static final String EXTRA_VOICE_NAME = "voice_name";
     public static final String EXTRA_REPEAT = "repeat_count";
     public static final String EXTRA_IS_CALL = "is_call";
+    public static final String EXTRA_FORCE_OFFLINE = "force_offline";
     private static final String DEFAULT_API_BASE = "https://hamseda-app.ai.studio";
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -136,6 +137,15 @@ public class CallAnnouncerService extends Service {
     }
 
     public static void announce(Context context, String title, String text, String voiceName, boolean isMale, int repeatCount, boolean isCall) {
+        announceInternal(context, title, text, voiceName, isMale, repeatCount, isCall, isCall);
+    }
+
+    /** Announces sensitive SMS content on-device without calling Hamseda's remote TTS endpoint. */
+    public static void announcePrivate(Context context, String title, String text, String voiceName, boolean isMale, int repeatCount) {
+        announceInternal(context, title, text, voiceName, isMale, repeatCount, false, true);
+    }
+
+    private static void announceInternal(Context context, String title, String text, String voiceName, boolean isMale, int repeatCount, boolean isCall, boolean forceOffline) {
         final Context appCtx = context.getApplicationContext();
         final String resolvedVoice = resolveVoiceName(appCtx, voiceName, isMale);
         final boolean resolvedMale = isMaleVoice(resolvedVoice, isMale);
@@ -147,6 +157,7 @@ public class CallAnnouncerService extends Service {
         intent.putExtra(EXTRA_VOICE_NAME, resolvedVoice);
         intent.putExtra(EXTRA_REPEAT, safeRepeat);
         intent.putExtra(EXTRA_IS_CALL, isCall);
+        intent.putExtra(EXTRA_FORCE_OFFLINE, forceOffline);
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -155,9 +166,8 @@ public class CallAnnouncerService extends Service {
             }
             appCtx.startService(intent);
         } catch (Exception e) {
-            // Android 12–15 (HyperOS/MIUI) may throw ForegroundServiceStartNotAllowedException from background;
-            // fall back immediately to direct worker-thread MediaPlayer + WakeLock inside app process.
-            playDirectFromBackground(appCtx, title, text, resolvedVoice, resolvedMale, safeRepeat, isCall);
+            // If Android blocks the foreground service, use the same local-only mode in the worker fallback.
+            playDirectFromBackground(appCtx, title, text, resolvedVoice, resolvedMale, safeRepeat, isCall, forceOffline);
         }
     }
 
@@ -225,7 +235,8 @@ public class CallAnnouncerService extends Service {
             String voiceName,
             boolean isMale,
             int repeatCount,
-            boolean isCall
+            boolean isCall,
+            boolean forceOffline
     ) {
         final String text = rawText != null ? rawText.trim() : "";
         if (text.isEmpty()) return;
@@ -247,7 +258,7 @@ public class CallAnnouncerService extends Service {
                 if (myGen != GLOBAL_PLAY_GEN.get()) return;
 
                 SharedPreferences prefs = appCtx.getSharedPreferences("rmz_native_prefs", Context.MODE_PRIVATE);
-                boolean preferOffline = prefs.getBoolean("prefer_offline_speech", false);
+                boolean preferOffline = forceOffline || prefs.getBoolean("prefer_offline_speech", false);
                 String offlineEngine = prefs.getString("preferred_offline_engine", "ava_gyro");
                 float speechRate = prefs.getFloat("speech_rate", 1.0f);
 
@@ -405,6 +416,7 @@ public class CallAnnouncerService extends Service {
         String extraVoice = intent != null ? intent.getStringExtra(EXTRA_VOICE_NAME) : null;
         int repeat = intent != null ? Math.max(1, Math.min(2, intent.getIntExtra(EXTRA_REPEAT, 1))) : 1;
         boolean isCall = intent != null && intent.getBooleanExtra(EXTRA_IS_CALL, false);
+        boolean forceOffline = isCall || (intent != null && intent.getBooleanExtra(EXTRA_FORCE_OFFLINE, false));
 
         Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle(title != null ? title : "هم‌صدا")
@@ -435,7 +447,7 @@ public class CallAnnouncerService extends Service {
 
         handler.postDelayed(() -> {
             if (cancelled || sessionId != activeSessionId || myGen != GLOBAL_PLAY_GEN.get()) return;
-            new Thread(() -> playOnlineOrFallback(sessionId, myGen, title, text, voiceName, isMale, repeat, isCall)).start();
+            new Thread(() -> playOnlineOrFallback(sessionId, myGen, title, text, voiceName, isMale, repeat, isCall, forceOffline)).start();
         }, isCall ? 250 : 120);
 
         // Safety stop after 55s
@@ -447,11 +459,11 @@ public class CallAnnouncerService extends Service {
         return START_NOT_STICKY;
     }
 
-    private void playOnlineOrFallback(int sessionId, long myGen, String title, String singleText, String voiceName, boolean isMale, int repeat, boolean isCall) {
+    private void playOnlineOrFallback(int sessionId, long myGen, String title, String singleText, String voiceName, boolean isMale, int repeat, boolean isCall, boolean forceOffline) {
         if (cancelled || sessionId != activeSessionId || myGen != GLOBAL_PLAY_GEN.get()) return;
 
         SharedPreferences prefs = getSharedPreferences("rmz_native_prefs", MODE_PRIVATE);
-        boolean preferOffline = prefs.getBoolean("prefer_offline_speech", false);
+        boolean preferOffline = forceOffline || prefs.getBoolean("prefer_offline_speech", false);
         String offlineEngine = prefs.getString("preferred_offline_engine", "ava_gyro");
         float speechRate = prefs.getFloat("speech_rate", 1.0f);
 
