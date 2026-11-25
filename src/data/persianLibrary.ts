@@ -357,9 +357,9 @@ export const DEFAULT_GRATITUDES: GratitudeEntry[] = [
 export const DEFAULT_CALLERS: CallerContact[] = [
   {
     id: 'c-1',
-    name: 'همراه عزیز',
-    latinAlias: 'Zari',
-    persianPhonetic: 'زَری جان',
+    name: 'همراه',
+    latinAlias: 'Partner',
+    persianPhonetic: 'همراه',
     relation: 'همراه زندگی',
     template: 'تماس عاشقانه از طرف {name}. گوشی را بردارید!',
     repeatCount: 2,
