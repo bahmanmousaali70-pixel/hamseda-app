@@ -31,6 +31,7 @@ import {
 import {useBackgroundScheduler} from './hooks/useBackgroundScheduler';
 import {useOnlineStatus} from './hooks/usePWAInstall';
 import {apiUrl, getCloudApiBaseUrl, safeReadJsonResponse} from './services/apiConfig';
+import {clearCustomVoiceDb} from './services/clearCustomVoiceDb';
 import {
   buildCallerRingtoneWav,
   clearAudioLibraryDb,
@@ -1214,8 +1215,9 @@ export default function App() {
       await deleteCurrentCloudAuthUser();
       try {
         await clearAudioLibraryDb();
+        await clearCustomVoiceDb();
       } catch (cleanupError) {
-        console.warn('Audio cache cleanup after account deletion failed:', cleanupError);
+        console.warn('Local voice cache cleanup after account deletion failed:', cleanupError);
       }
       try {
         Object.keys(localStorage).forEach((key) => {
