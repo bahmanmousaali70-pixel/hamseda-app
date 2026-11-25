@@ -8,6 +8,7 @@ import android.app.NotificationManager;
 import android.app.role.RoleManager;
 import android.content.ContentResolver;
 import android.content.ContentValues;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
