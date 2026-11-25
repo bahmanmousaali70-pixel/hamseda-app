@@ -219,7 +219,7 @@ public class RoozhayeNativePlugin extends Plugin {
 
     private List<String> collectMissingRuntimePermissions(Context ctx) {
         List<String> needed = new ArrayList<>();
-        // READ_SMS / RECEIVE_SMS / SEND_SMS / READ_CALL_LOG are Play-restricted.
+        // RECEIVE_SMS / SEND_SMS are Play-restricted.
         // Never request them unless the user has actively selected Hamseda as Assistant.
         boolean assistantRoleHeld = isAssistantRoleHeld(ctx);
         List<String> basePerms = new ArrayList<>();
@@ -751,9 +751,8 @@ public class RoozhayeNativePlugin extends Plugin {
                         call.resolve(ret);
                         return;
                     }
-                    if (getActivity() != null) {
-                        ActivityCompat.requestPermissions(getActivity(), new String[]{Manifest.permission.SEND_SMS}, PERM_REQ_CODE + 5);
-                    }
+                    // Without Assistant role (or without the direct-send permission), hand off
+                    // to the user's SMS app. Do not prompt for SEND_SMS from this fallback path.
                     Intent smsIntent = new Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + phone));
                     smsIntent.putExtra("sms_body", smsBody.trim());
                     smsIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
