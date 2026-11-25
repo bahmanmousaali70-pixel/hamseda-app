@@ -4,7 +4,7 @@ Hamseda declares an Android `ACTION_ASSIST` entry point and offers the system As
 
 ## Restricted permission gate
 
-The app requests only `RECEIVE_SMS` and `SEND_SMS` after Android confirms that Hamseda currently holds `ROLE_ASSISTANT`. It does not request `READ_SMS` or `READ_CALL_LOG`, because the current implementation does not need inbox-wide SMS access or call-history access. If the role is not available or the user declines it, the restricted SMS permissions are not requested.
+The app requests `RECEIVE_SMS`, `SEND_SMS`, and `READ_CALL_LOG` only after Android confirms that Hamseda currently holds `ROLE_ASSISTANT`. It does not request `READ_SMS`, because inbox-wide SMS access is not needed. `READ_CALL_LOG` is used only because Android documents that `ACTION_PHONE_STATE_CHANGED` exposes `EXTRA_INCOMING_NUMBER` only to receivers granted both `READ_CALL_LOG` and `READ_PHONE_STATE`; the app uses this to resolve an incoming caller against the user’s contacts and does not query the call-history provider or display call history. If the role is unavailable or the user declines it, these restricted permissions are not requested. If the Assistant role is removed, SMS and caller-number processing stop.
 
 Message broadcasts, message notification content, and caller-number extraction are stopped or reduced to a generic announcement when the Assistant role is not held.
 
