@@ -85,7 +85,6 @@ import {
   setActiveOfflineEngineNative,
   getNativeCapabilities,
   openAppInfoSettings,
-  openNotificationListenerSettings,
   openXiaomiOtherPermissions,
   precacheNativeWav,
   requestAssistantRoleNative,
@@ -1268,12 +1267,6 @@ export default function App() {
     }
   };
 
-  const handleOpenNotificationListenerSettings = async () => {
-    const ok = await openNotificationListenerSettings();
-    if (!ok) {
-      showToast('تنظیمات دسترسی اعلان‌ها فقط در نسخه اندروید (APK) در دسترس است.');
-    }
-  };
 
   const handleOpenAppInfoSettings = async () => {
     const ok = await openAppInfoSettings();
@@ -2364,7 +2357,6 @@ export default function App() {
             onJoinSpaceByCode={handleJoinSpaceByCode}
             onPushLocalToCloud={handlePushLocalToCloud}
             onRequestNativePermissions={handleRequestNativePermissions}
-            onOpenNotificationListenerSettings={handleOpenNotificationListenerSettings}
             onOpenAppInfoSettings={handleOpenAppInfoSettings}
             onOpenXiaomiOtherPermissions={handleOpenXiaomiOtherPermissions}
             onStatusToast={showToast}
