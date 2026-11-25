@@ -2,6 +2,6 @@
 <resources>
     <string name="app_name">هم‌صدا</string>
     <string name="title_activity_main">هم‌صدا</string>
-    <string name="package_name">com.roozhaye.manozari</string>
-    <string name="custom_url_scheme">com.roozhaye.manozari</string>
+    <string name="package_name">com.hamseda.app</string>
+    <string name="custom_url_scheme">com.hamseda.app</string>
 </resources>
