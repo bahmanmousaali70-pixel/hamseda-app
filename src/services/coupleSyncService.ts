@@ -1525,7 +1525,7 @@ export async function deleteUserCloudData(user: User, activeSpaceId?: string | n
 
   if (userSnapshot.exists()) await deleteDoc(userRef);
 }
-\nexport async function uploadLocalBundleToSpace(
+export async function uploadLocalBundleToSpace(
   spaceId: string,
   bundle: {
     goals: GoalItem[];
