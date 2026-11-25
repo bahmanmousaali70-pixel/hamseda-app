@@ -31,6 +31,7 @@ import {
 import {useBackgroundScheduler} from './hooks/useBackgroundScheduler';
 import {useOnlineStatus} from './hooks/usePWAInstall';
 import {apiUrl, getCloudApiBaseUrl, safeReadJsonResponse} from './services/apiConfig';
+import {clearAudioLibraryDb} from './services/audioLibraryDb';
 import {
   buildCallerRingtoneWav,
   getAudioClipBuffer,
@@ -1211,6 +1212,7 @@ export default function App() {
       const verifiedUser = await reauthenticateCloudUser();
       await deleteUserCloudData(verifiedUser, spaceInfo?.spaceId);
       await deleteCurrentCloudAuthUser();
+      await clearAudioLibraryDb();
 
       Object.keys(localStorage).forEach((key) => {
         if (key.startsWith('rmz_') || key.startsWith('hamseda_')) {
