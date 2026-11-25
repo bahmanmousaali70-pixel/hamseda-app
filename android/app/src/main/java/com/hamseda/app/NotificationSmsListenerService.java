@@ -28,6 +28,9 @@ public class NotificationSmsListenerService extends NotificationListenerService 
     @Override
     @SuppressWarnings("deprecation")
     public void onNotificationPosted(StatusBarNotification sbn) {
+        // Notification content is not a workaround for restricted SMS access.
+        // Only process messaging content while the user has selected Hamseda as Assistant.
+        if (!RoozhayeNativePlugin.isAssistantRoleHeld(this)) return;
         if (sbn == null || !SMS_PACKAGES.contains(sbn.getPackageName())) {
             return;
         }
