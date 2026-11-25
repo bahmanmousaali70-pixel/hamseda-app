@@ -12,19 +12,17 @@ Audit scope: source tree at PR #8 head `dc0bc6881d988d82d62191d3318cf16b7bf371f9
 - Incoming SMS uses the SMS broadcast receiver. Notification-content access for SMS/RCS was removed; RCS notification reading is not supported.
 - `READ_CALL_LOG` remains a restricted permission. The implementation uses it to obtain the incoming-number extra from `PHONE_STATE` and resolve a caller name; it does not query call history. Play Console declaration and approval are still required.
 
-### AccessibilityService — release blocker
+### AccessibilityService — removed from this release branch
 
-- The manifest declares `HamsedaAccessibilityService`; its metadata allows retrieval of window content and interactive windows.
-- The inspected service code checks the active window tree only while the user has explicitly armed the camera-shutter action. It does not appear to collect or upload general screen content.
-- Hamseda is not presented in this codebase as a disability-support app. Do not set `isAccessibilityTool=true` unless the app's primary purpose genuinely qualifies.
-- Before Play submission, provide a separate, prominent in-app disclosure describing exactly what window/UI data the service can inspect, why the camera-shutter action needs it, and that the service is only active for that user-initiated action. Obtain affirmative consent before sending the user to Android Accessibility Settings.
-- Complete the Play Console Accessibility API declaration and provide a demonstration video. Consider replacing this service with a narrower camera API if feasible.
+- The Android manifest declaration, service implementation, XML service metadata, native bridge methods, and voice actions for cross-app screen clicking, typing, and scrolling have been removed from this branch.
+- Camera capture still opens the Android system camera, but the user must press the shutter in that camera app; Hamseda no longer uses AccessibilityService to press it automatically.
+- The current branch therefore does not require the Accessibility API declaration or AccessibilityService disclosure for this removed functionality. Do not reintroduce the service without a new policy review.
 
 ### Privacy policy, account deletion, and Data safety — release blockers
 
-- No privacy-policy page or in-app privacy-policy link was found in the tracked repository at this audit head. A policy may exist elsewhere, but its public URL and in-app entry point must be verified.
+- Draft public pages now exist at `public/privacy-policy.html` and `public/delete-account.html`, with in-app links in Sync Settings. Both still contain the `[[SUPPORT_EMAIL]]` placeholder; replace it with a monitored privacy/support email before treating either page as final or submitting to Play.
 - The app uses Google sign-in and Firebase Authentication/Firestore in its web experience. Firestore sync stores profile/account identifiers and user-created shared-space content (for example goals, habits, schedules, contacts/caller settings, expenses, medication reminders, meals, and vault notes).
-- No account-deletion flow or complete associated-data deletion path was found in the inspected repository. Because accounts can be created, implement an in-app account deletion request and a working web resource for deletion; remove associated Firebase Auth and Firestore data, including shared-space membership/content as legally and product-appropriately defined.
+- An in-app delete-account flow now reauthenticates Google, removes the Firebase Auth account, deletes the user's Firestore profile and account-linked records, clears the user's localStorage and cached audio library, and removes shared-space membership. If the user owns a space, the entire space and shared content are deleted; if the user is a partner, only their authored records and membership are removed. The public deletion page explains the flow. The updated Firestore rules are tracked in this repository but must still be deployed to the configured named database using the manual workflow and a `FIREBASE_TOKEN` secret. Do not claim deletion is live until rules deployment and end-to-end testing with a disposable test account succeed.
 - Complete Data safety from the actual shipped binary and every included SDK/service. Disclose Firebase Authentication/Firestore, Google sign-in, any Gemini/API processing, speech recognition providers, server-side requests, and any optional email/security-alert service only where actually enabled. Do not claim that all processing is on-device: cloud sync and remote AI/service calls exist in the codebase.
 
 ### Firebase and Android application registration
@@ -35,20 +33,20 @@ Audit scope: source tree at PR #8 head `dc0bc6881d988d82d62191d3318cf16b7bf371f9
 
 ### Release packaging and signing — release blocker
 
-- The current GitHub Actions workflow runs `assembleDebug` and uploads a Debug APK only.
-- `android/app/build.gradle` defines a debug signing configuration but no release signing configuration.
-- There is no Play-ready signed AAB workflow in the inspected branch. A production release requires a protected upload keystore (prefer Play App Signing), GitHub Actions secrets for signing material, a `bundleRelease` build, and verification of the resulting AAB. Never reuse or publish the debug keystore as the Play upload key.
+- The existing workflow continues to build Debug APKs.
+- `android/app/build.gradle` now supports a separate environment-based Release signing configuration.
+- A manual `.github/workflows/release-aab.yml` workflow now builds and verifies a signed AAB from `main`, but it requires four repository secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`. A long-lived upload keystore must be generated and securely registered; never reuse or publish the debug keystore as the Play upload key. The workflow does not publish to Play.
 - The version code is currently derived from `GITHUB_RUN_NUMBER`; confirm that the Play release workflow guarantees a strictly increasing version code.
 
 ## Required work before Play submission
 
-1. Implement the AccessibilityService disclosure and affirmative consent, then prepare the Play declaration/video.
-2. Publish a complete privacy policy and link it inside the app and in Play Console. The policy must identify the developer and a privacy contact, explain data categories, purposes, recipients/processors, security, retention, and deletion.
-3. Implement and test account deletion, including associated Firebase data deletion.
+1. Replace `[[SUPPORT_EMAIL]]` on both public pages with a monitored contact address; verify the pages load on the deployed public domain.
+2. Deploy the updated Firestore rules to the configured named database using the manual workflow and `FIREBASE_TOKEN`; then test owner deletion, partner deletion, invited-but-not-joined deletion, and reauthentication failure with disposable accounts.
+3. Generate and securely back up a long-lived upload keystore; add the four release-signing secrets to GitHub Actions; run the signed AAB workflow from `main`.
 4. Complete accurate Data safety and the SMS/Call Log Permissions Declaration; describe Assistant-dependent SMS/caller announcement as core functionality and submit for review.
-5. Audit each manifest permission against a currently shipped user-facing feature; remove permissions that are not essential.
-6. Configure protected release signing and build/test a signed AAB. Keep debug and release credentials separate.
-7. Verify Firebase production settings and the final Play listing, privacy policy URL, target API, and declarations.
+5. Audit each remaining manifest permission against a currently shipped user-facing feature; remove permissions that are not essential.
+6. Verify Firebase production settings and the final Play listing, privacy policy URL, target API, and declarations.
+7. Re-audit the final release artifact and ensure the privacy policy and deletion page match the actual shipped behavior.
 
 ## Policy references
 
