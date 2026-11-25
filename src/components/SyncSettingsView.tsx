@@ -126,7 +126,6 @@ interface SyncSettingsViewProps {
   onJoinSpaceByCode: (spaceCode: string) => Promise<void>;
   onPushLocalToCloud: () => Promise<void>;
   onRequestNativePermissions: () => Promise<void>;
-  onOpenNotificationListenerSettings: () => Promise<void>;
   onOpenAppInfoSettings: () => Promise<void>;
   onOpenXiaomiOtherPermissions: () => Promise<void>;
   onStatusToast: (msg: string) => void;
@@ -192,7 +191,6 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
   onJoinSpaceByCode,
   onPushLocalToCloud,
   onRequestNativePermissions,
-  onOpenNotificationListenerSettings,
   onOpenAppInfoSettings,
   onOpenXiaomiOtherPermissions,
   onStatusToast,
@@ -850,14 +848,6 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={onOpenNotificationListenerSettings}
-                  className="min-h-[44px] px-3.5 py-2.5 rounded-xl bg-slate-900 dark:bg-emerald-800 hover:bg-slate-800 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Bell className="w-4 h-4" />
-                  <span>فعال‌سازی خواندن پیامک و RCS (اعلان‌ها)</span>
-                </button>
-                <button
-                  type="button"
                   onClick={onOpenAppInfoSettings}
                   className="min-h-[44px] px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-emerald-900 bg-white dark:bg-[#0B1312] text-slate-700 dark:text-slate-200 text-xs font-semibold cursor-pointer"
                 >
@@ -911,7 +901,6 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
               {label: 'تشخیص تماس ورودی', ok: nativeCaps.phoneState},
               {label: 'شماره تماس‌گیرنده (مجوز حساس)', ok: Boolean(nativeCaps.assistantRoleHeld && nativeCaps.callLog && nativeCaps.phoneState)},
               {label: 'خواندن پیامک (SMS)', ok: nativeCaps.sms},
-              {label: 'اعلان پیامک / RCS', ok: nativeCaps.notificationListener},
               {label: 'خواندن نام مخاطبین', ok: nativeCaps.contacts},
               {label: 'اعلان‌های اندروید', ok: nativeCaps.notifications},
               {label: 'معافیت باتری MIUI/HyperOS', ok: nativeCaps.batteryIgnored},
