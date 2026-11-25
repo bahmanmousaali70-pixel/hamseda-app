@@ -57,6 +57,7 @@ interface NativeCallerPayload {
 interface RoozhayeNativePlugin {
   getNativeCapabilities(): Promise<NativeCapabilities>;
   requestAssistantRole(): Promise<{available: boolean; held: boolean; accepted?: boolean; message?: string}>;
+  openAssistantSettings(): Promise<{ok: boolean; openedAction?: string; message?: string}>;
   requestPermissionsAndMiuiSetup(): Promise<NativeCapabilities>;
   requestSmsPermissionsOnly(): Promise<NativeCapabilities>;
   openBatteryAndAutostartSettings(): Promise<NativeCapabilities>;
@@ -272,6 +273,16 @@ export async function getNativeCapabilities(): Promise<NativeCapabilities> {
       keepAliveRunning: false,
       exactAlarm: false,
     };
+  }
+}
+
+export async function openAssistantSettingsNative(): Promise<{ok: boolean; message?: string}> {
+  if (!isNativeAndroid()) return {ok: false, message: 'این قابلیت فقط در نسخه اندروید در دسترس است.'};
+  try {
+    const result = await RoozhayeNative.openAssistantSettings();
+    return {ok: Boolean(result.ok), message: result.message};
+  } catch {
+    return {ok: false, message: 'باز کردن تنظیمات دستیار ممکن نشد.'};
   }
 }
 
