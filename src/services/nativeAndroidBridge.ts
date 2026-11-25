@@ -61,7 +61,6 @@ interface RoozhayeNativePlugin {
   requestPermissionsAndMiuiSetup(): Promise<NativeCapabilities>;
   requestSmsPermissionsOnly(): Promise<NativeCapabilities>;
   openBatteryAndAutostartSettings(): Promise<NativeCapabilities>;
-  openNotificationListenerSettings(): Promise<{ok: boolean}>;
   openAppInfoSettings(): Promise<{ok: boolean}>;
   openXiaomiOtherPermissions(): Promise<{ok: boolean}>;
   setKeepAliveService(options: {enabled: boolean}): Promise<{running: boolean}>;
@@ -322,15 +321,6 @@ export async function openBatteryAndAutostartSettingsNative(): Promise<NativeCap
   }
 }
 
-export async function openNotificationListenerSettings(): Promise<boolean> {
-  if (!isNativeAndroid()) return false;
-  try {
-    const res = await RoozhayeNative.openNotificationListenerSettings();
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
 
 export async function openAppInfoSettings(): Promise<boolean> {
   if (!isNativeAndroid()) return false;
