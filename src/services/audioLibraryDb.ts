@@ -3,9 +3,12 @@ import type {AudioLibraryEntry, VoiceName} from '../types/app';
 const DB_NAME = 'roozhaye_man_o_zari_audio_v1';
 const DB_VERSION = 1;
 const STORE_CLIPS = 'audio_clips';
+const activeAudioDbConnections = new Set<IDBDatabase>();
 
 export async function clearAudioLibraryDb(): Promise<void> {
   if (typeof indexedDB === 'undefined') return;
+  activeAudioDbConnections.forEach((connection) => connection.close());
+  activeAudioDbConnections.clear();
   await new Promise<void>((resolve) => {
     const request = indexedDB.deleteDatabase(DB_NAME);
     request.onsuccess = () => resolve();
@@ -27,7 +30,15 @@ function openAudioDb(): Promise<IDBDatabase> {
         db.createObjectStore(STORE_CLIPS, {keyPath: 'id'});
       }
     };
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      const connection = request.result;
+      activeAudioDbConnections.add(connection);
+      connection.onversionchange = () => {
+        connection.close();
+        activeAudioDbConnections.delete(connection);
+      };
+      resolve(connection);
+    };
     request.onerror = () => reject(request.error);
   });
 }
