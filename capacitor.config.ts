@@ -1,7 +1,7 @@
 import type {CapacitorConfig} from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.roozhaye.manozari',
+  appId: 'com.hamseda.app',
   appName: 'هم‌صدا',
   webDir: 'dist',
   server: {
