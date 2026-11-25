@@ -895,7 +895,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
             {[
               {label: 'دستیار پیش‌فرض اندروید', ok: nativeCaps.assistantRoleHeld},
               {label: 'تشخیص تماس ورودی', ok: nativeCaps.phoneState},
-              {label: 'شماره تماس‌گیرنده', ok: nativeCaps.callLog},
+              {label: 'شماره تماس‌گیرنده', ok: nativeCaps.phoneState},
               {label: 'خواندن پیامک (SMS)', ok: nativeCaps.sms},
               {label: 'اعلان پیامک / RCS', ok: nativeCaps.notificationListener},
               {label: 'خواندن نام مخاطبین', ok: nativeCaps.contacts},
