@@ -88,6 +88,7 @@ import {
   openNotificationListenerSettings,
   openXiaomiOtherPermissions,
   precacheNativeWav,
+  requestAssistantRoleNative,
   requestNativePermissionsAndMiuiSetup,
   saveLearnedPhoneticsNative,
   saveSmsAnnouncementPolicyNative,
@@ -370,6 +371,8 @@ export default function App() {
   // Native Android state
   const [nativeCaps, setNativeCaps] = useState<NativeCapabilities>({
     isNative: false,
+    assistantRoleAvailable: false,
+    assistantRoleHeld: false,
     phoneState: false,
     callLog: false,
     contacts: false,
@@ -1247,10 +1250,21 @@ export default function App() {
   };
 
   const handleRequestNativePermissions = async () => {
+    // Ask for the system Assistant role first. SMS and Call Log permissions are
+    // requested only after the user explicitly accepts this Android role.
+    const role = await requestAssistantRoleNative();
+    if (role?.available && !role.held) {
+      showToast(role.message || 'برای فعال‌سازی پیامک و گزارش تماس، ابتدا هم‌صدا را به‌عنوان دستیار پیش‌فرض انتخاب کنید.');
+      return;
+    }
     const updated = await requestNativePermissionsAndMiuiSetup();
     if (updated) {
       setNativeCaps(updated);
-      showToast('درخواست مجوزهای تماس، باتری بدون محدودیت و Autostart ارسال شد.');
+      if (role && !role.available) {
+        showToast('این دستگاه نقش دستیار پیش‌فرض را ارائه نمی‌کند؛ مجوزهای پیامک و گزارش تماس درخواست نشدند.');
+      } else {
+        showToast('نقش دستیار و درخواست مجوزهای مجاز انجام شد. انتخاب نقش و مجوزها در اختیار شماست.');
+      }
     }
   };
 
