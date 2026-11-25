@@ -9,6 +9,8 @@ import type {
 
 export interface NativeCapabilities {
   isNative: boolean;
+  assistantRoleAvailable: boolean;
+  assistantRoleHeld: boolean;
   phoneState: boolean;
   callLog: boolean;
   contacts: boolean;
@@ -54,6 +56,7 @@ interface NativeCallerPayload {
 
 interface RoozhayeNativePlugin {
   getNativeCapabilities(): Promise<NativeCapabilities>;
+  requestAssistantRole(): Promise<{available: boolean; held: boolean; accepted?: boolean; message?: string}>;
   requestPermissionsAndMiuiSetup(): Promise<NativeCapabilities>;
   requestSmsPermissionsOnly(): Promise<NativeCapabilities>;
   openBatteryAndAutostartSettings(): Promise<NativeCapabilities>;
@@ -233,6 +236,8 @@ export async function getNativeCapabilities(): Promise<NativeCapabilities> {
   if (!isNativeAndroid()) {
     return {
       isNative: false,
+      assistantRoleAvailable: false,
+      assistantRoleHeld: false,
       phoneState: false,
       callLog: false,
       contacts: false,
@@ -254,6 +259,8 @@ export async function getNativeCapabilities(): Promise<NativeCapabilities> {
   } catch {
     return {
       isNative: true,
+      assistantRoleAvailable: false,
+      assistantRoleHeld: false,
       phoneState: false,
       callLog: false,
       contacts: false,
@@ -265,6 +272,15 @@ export async function getNativeCapabilities(): Promise<NativeCapabilities> {
       keepAliveRunning: false,
       exactAlarm: false,
     };
+  }
+}
+
+export async function requestAssistantRoleNative(): Promise<{available: boolean; held: boolean; accepted?: boolean; message?: string} | null> {
+  if (!isNativeAndroid()) return null;
+  try {
+    return await RoozhayeNative.requestAssistantRole();
+  } catch {
+    return null;
   }
 }
 
