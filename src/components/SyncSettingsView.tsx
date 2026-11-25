@@ -819,7 +819,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
               پروژه بومی اندروید (Capacitor + سرویس پس‌زمینه کاتلین + گیرنده تماس ورودی + آلارم دقیق بیدارباش) و گردش‌کار گیت‌هاب (<code dir="ltr">.github/workflows/build-apk.yml</code>) داخل کدهای این برنامه آماده شده است.
             </p>
             <p className="mt-2 text-xs leading-6 text-slate-600 dark:text-slate-300 max-w-3xl">
-              برای استفاده از قابلیت‌های حساس پیامک و گزارش تماس، اندروید باید هم‌صدا را با انتخاب صریح شما به‌عنوان دستیار پیش‌فرض ثبت کند. تا پیش از این انتخاب، مجوزهای حساس درخواست نمی‌شوند؛ اگر این نقش را از برنامه بگیرید، پردازش پیامک متوقف خواهد شد. انتخاب نقش و مجوزها همیشه در کنترل شماست.
+              برای اعلام متن پیامک جدید و نام تماس‌گیرنده، اندروید باید هم‌صدا را با انتخاب صریح شما به‌عنوان دستیار پیش‌فرض ثبت کند. مجوزهای حساس فقط پس از این انتخاب درخواست می‌شوند. مجوز گزارش تماس فقط برای دریافت شماره تماس ورودی از اعلان سیستمی استفاده می‌شود و برنامه تاریخچه تماس‌ها را نمی‌خواند. با لغو نقش دستیار، پردازش پیامک و شماره تماس متوقف می‌شود. انتخاب نقش و مجوزها همیشه در کنترل شماست.
             </p>
           </div>
 
@@ -895,7 +895,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
             {[
               {label: 'دستیار پیش‌فرض اندروید', ok: nativeCaps.assistantRoleHeld},
               {label: 'تشخیص تماس ورودی', ok: nativeCaps.phoneState},
-              {label: 'شماره تماس‌گیرنده', ok: nativeCaps.phoneState},
+              {label: 'شماره تماس‌گیرنده (مجوز حساس)', ok: Boolean(nativeCaps.assistantRoleHeld && nativeCaps.callLog && nativeCaps.phoneState)},
               {label: 'خواندن پیامک (SMS)', ok: nativeCaps.sms},
               {label: 'اعلان پیامک / RCS', ok: nativeCaps.notificationListener},
               {label: 'خواندن نام مخاطبین', ok: nativeCaps.contacts},
