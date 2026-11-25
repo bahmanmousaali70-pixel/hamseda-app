@@ -202,9 +202,6 @@ public class RoozhayeNativePlugin extends Plugin {
         if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECEIVE_SMS) != PackageManager.PERMISSION_GRANTED) {
             smsPerms.add(Manifest.permission.RECEIVE_SMS);
         }
-        if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED) {
-            smsPerms.add(Manifest.permission.READ_SMS);
-        }
         if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
             smsPerms.add(Manifest.permission.SEND_SMS);
         }
@@ -231,9 +228,7 @@ public class RoozhayeNativePlugin extends Plugin {
         basePerms.add(Manifest.permission.CALL_PHONE);
         basePerms.add(Manifest.permission.RECORD_AUDIO);
         if (assistantRoleHeld) {
-            basePerms.add(Manifest.permission.READ_CALL_LOG);
             basePerms.add(Manifest.permission.RECEIVE_SMS);
-            basePerms.add(Manifest.permission.READ_SMS);
             basePerms.add(Manifest.permission.SEND_SMS);
         }
         for (String perm : basePerms) {
@@ -2233,11 +2228,11 @@ public class RoozhayeNativePlugin extends Plugin {
         obj.put("assistantRoleAvailable", assistantRoleAvailable);
         obj.put("assistantRoleHeld", assistantRoleHeld);
         obj.put("phoneState", ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED);
-        obj.put("callLog", assistantRoleHeld && ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED);
+        // Call history is not currently a Hamseda feature; do not request READ_CALL_LOG.
+        obj.put("callLog", false);
         obj.put("contacts", ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED);
         obj.put("sms", assistantRoleHeld
-                && ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
-                && ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED);
+                && ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED);
         obj.put("microphone", ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED);
         obj.put("callPhone", ContextCompat.checkSelfPermission(ctx, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED);
         obj.put("sendSms", assistantRoleHeld
