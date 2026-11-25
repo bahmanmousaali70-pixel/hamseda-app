@@ -1079,7 +1079,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
                     onUpdateSettings({myName: finalName});
                   }
                 }}
-                placeholder="مثلاً: علی، مهدی..."
+                placeholder="مثلاً: نام دلخواه شما..."
                 className="w-full min-h-[44px] px-3.5 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50/70 dark:bg-[#0B1312] text-sm text-slate-900 dark:text-white"
               />
             </div>
@@ -1102,7 +1102,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
                     onUpdateSettings({partnerName: finalPartner});
                   }
                 }}
-                placeholder="مثلاً: سارا، زری..."
+                placeholder="مثلاً: نام دلخواه همراه..."
                 className="w-full min-h-[44px] px-3.5 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50/70 dark:bg-[#0B1312] text-sm text-slate-900 dark:text-white"
               />
             </div>
