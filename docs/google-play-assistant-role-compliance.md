@@ -20,3 +20,12 @@ Message broadcasts, message notification content, and caller-number extraction a
 This implementation is intended to align the app's technical behavior with Android's default-handler model. It does **not** guarantee Google Play approval. The final app must still satisfy the current SMS and Call Log policy, demonstrate that these capabilities are core functionality, provide an accurate privacy policy and Data Safety declaration, submit the required Play Console declarations, and pass Google Play review.
 
 The Assistant role itself must be available on the target device and the app must meet Android's qualification requirements. Device testing is required before release.
+
+## Owner-reported device smoke test (2026-11-26)
+
+The app owner reports successful manual tests on a Xiaomi device running Android 12 after selecting Hamseda as the system's default voice assistant:
+
+- An incoming SMS test message was read aloud.
+- An incoming call was detected and the full saved contact name was announced.
+
+These are owner-reported functional smoke-test results, not automated test evidence. Role revocation, denied-permission behavior, and additional supported Android versions still require separate testing before this PR can leave Draft or the app can be considered release-ready.
