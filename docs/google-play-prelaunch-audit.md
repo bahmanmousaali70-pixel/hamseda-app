@@ -39,6 +39,11 @@ Audit scope: source tree at PR #8 head `dc0bc6881d988d82d62191d3318cf16b7bf371f9
 - A manual `.github/workflows/release-aab.yml` workflow now builds and verifies a signed AAB from `main`, but it requires four repository secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`. A long-lived upload keystore must be generated and securely registered; never reuse or publish the debug keystore as the Play upload key. The workflow does not publish to Play.
 - The version code is currently derived from `GITHUB_RUN_NUMBER`; confirm that the Play release workflow guarantees a strictly increasing version code.
 
+
+### Dependency audit
+
+- The latest CI dependency install reported 8 npm audit findings (4 moderate and 4 high). The detailed package-level report still needs triage; do not run `npm audit fix --force` blindly because it can introduce breaking upgrades. The Android build workflows have been moved to Node.js 24 to satisfy the installed Firebase packages' declared Node `>=24.12.0` engine requirement.
+
 ## Required work before Play submission
 
 1. Replace `[[SUPPORT_EMAIL]]` on both public pages with a monitored contact address; verify the pages load on the deployed public domain.
@@ -47,6 +52,7 @@ Audit scope: source tree at PR #8 head `dc0bc6881d988d82d62191d3318cf16b7bf371f9
 4. Complete accurate Data safety and the SMS/Call Log Permissions Declaration; describe Assistant-dependent SMS/caller announcement as core functionality and submit for review.
 5. Audit each remaining manifest permission against a currently shipped user-facing feature; remove permissions that are not essential.
 6. Verify Firebase production settings and the final Play listing, privacy policy URL, target API, and declarations.
+7. Review and resolve or formally assess the 8 npm audit findings (4 moderate, 4 high) before release.
 7. Re-audit the final release artifact and ensure the privacy policy and deletion page match the actual shipped behavior.
 
 ## Policy references
