@@ -1,4 +1,4 @@
-package com.roozhaye.manozari;
+package com.hamseda.app;
 
 import android.content.Intent;
 import android.graphics.Bitmap;

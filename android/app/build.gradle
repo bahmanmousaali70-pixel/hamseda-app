@@ -66,10 +66,10 @@ if (!resolvedDebugKeystore.exists()) {
 }
 
 android {
-    namespace = "com.roozhaye.manozari"
+    namespace = "com.hamseda.app"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.roozhaye.manozari"
+        applicationId "com.hamseda.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode appVersionCode

@@ -6,7 +6,7 @@ concurrency:
 
 on:
   push:
-    branches: [main, master, 'release/**', 'feature/**']
+    branches: [main, master, 'release/**', 'feature/**', 'chore/**']
   workflow_dispatch:
 
 permissions:

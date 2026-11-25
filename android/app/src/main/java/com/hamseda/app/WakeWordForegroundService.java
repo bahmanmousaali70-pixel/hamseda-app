@@ -1,4 +1,4 @@
-package com.roozhaye.manozari;
+package com.hamseda.app;
 
 import android.Manifest;
 import android.app.Notification;
@@ -46,7 +46,7 @@ public class WakeWordForegroundService extends Service {
     private static final String CHANNEL_ID = "hamseda_wake_word";
     private static final int NOTIFICATION_ID = 7012;
     private static final String PREFS = "rmz_native_prefs";
-    private static final String ACTION_START = "com.roozhaye.manozari.WAKE_START";
+    private static final String ACTION_START = "com.hamseda.app.WAKE_START";
     private static final String MODEL_NAME = "vosk-model-small-fa-0.42";
     private static final String MODEL_URL = "https://alphacephei.com/vosk/models/vosk-model-small-fa-0.42.zip";
     private static final long MAX_MODEL_BYTES = 150L * 1024L * 1024L;
