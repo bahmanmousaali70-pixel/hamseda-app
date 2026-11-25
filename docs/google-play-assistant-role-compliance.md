@@ -28,4 +28,5 @@ The app owner reports successful manual tests on a Xiaomi device running Android
 - An incoming SMS test message was read aloud.
 - An incoming call was detected and the full saved contact name was announced.
 
-These are owner-reported functional smoke-test results, not automated test evidence. Role revocation, denied-permission behavior, and additional supported Android versions still require separate testing before this PR can leave Draft or the app can be considered release-ready.
+The owner then installed the newer test build, revoked the Assistant role, and repeated the test. The owner reports that the behavior after revocation was as expected. This is owner-reported manual device testing, not automated test evidence. The exact permission-by-permission denial matrix and testing on additional supported Android versions remain outstanding.
+
