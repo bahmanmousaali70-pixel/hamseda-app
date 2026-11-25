@@ -1485,6 +1485,7 @@ export async function deleteUserCloudData(user: User, activeSpaceId?: string | n
 
   for (const [spaceId, spaceSnapshot] of spaces) {
     const spaceData = spaceSnapshot.data();
+    if (!spaceData) continue;
     const isOwner = spaceData.ownerUid === uid;
     const membersSnapshot = isOwner
       ? await getDocs(collection(db, 'spaces', spaceId, 'members'))
