@@ -11,6 +11,8 @@ import {
   updateDoc,
   where,
   writeBatch,
+  type DocumentSnapshot,
+  type Query,
   type Unsubscribe,
 } from 'firebase/firestore';
 import type {
@@ -1437,7 +1439,7 @@ const ACCOUNT_DATA_COLLECTIONS = [
   'vault', 'packing', 'events', 'chores',
 ] as const;
 
-async function deleteQueryResults(q: ReturnType<typeof query>): Promise<number> {
+async function deleteQueryResults(q: Query): Promise<number> {
   const snapshot = await getDocs(q);
   let deleted = 0;
   for (let offset = 0; offset < snapshot.docs.length; offset += 400) {
@@ -1466,7 +1468,7 @@ export async function deleteUserCloudData(user: User, activeSpaceId?: string | n
     ? userSnapshot.data().activeSpaceId as string
     : '';
 
-  const spaces = new Map<string, import('firebase/firestore').QueryDocumentSnapshot>();
+  const spaces = new Map<string, DocumentSnapshot>();
   const owned = await getDocs(query(collection(db, 'spaces'), where('ownerUid', '==', uid)));
   owned.docs.forEach((item) => spaces.set(item.id, item));
   if (email) {
@@ -1477,16 +1479,18 @@ export async function deleteUserCloudData(user: User, activeSpaceId?: string | n
   for (const candidateId of [activeSpaceId, profileSpaceId].filter((value): value is string => Boolean(value))) {
     if (!spaces.has(candidateId)) {
       const candidate = await getDoc(doc(db, 'spaces', candidateId));
-      if (candidate.exists()) spaces.set(candidate.id, candidate as import('firebase/firestore').QueryDocumentSnapshot);
+      if (candidate.exists()) spaces.set(candidate.id, candidate);
     }
   }
 
   for (const [spaceId, spaceSnapshot] of spaces) {
     const spaceData = spaceSnapshot.data();
     const isOwner = spaceData.ownerUid === uid;
-    const membersSnapshot = await getDocs(collection(db, 'spaces', spaceId, 'members'));
+    const membersSnapshot = isOwner
+      ? await getDocs(collection(db, 'spaces', spaceId, 'members'))
+      : null;
     const memberUids = isOwner
-      ? Array.from(new Set([uid, ...membersSnapshot.docs.map((member) => member.id)]))
+      ? Array.from(new Set([uid, ...(membersSnapshot?.docs ?? []).map((member) => member.id)]))
       : [uid];
 
     for (const memberUid of memberUids) {
@@ -1499,7 +1503,7 @@ export async function deleteUserCloudData(user: User, activeSpaceId?: string | n
 
     if (isOwner) {
       await deleteDoc(doc(db, 'spaces', spaceId, 'config', 'settings'));
-      for (const member of membersSnapshot.docs) {
+      for (const member of membersSnapshot?.docs ?? []) {
         await deleteDoc(member.ref);
       }
       await deleteDoc(doc(db, 'spaces', spaceId));
