@@ -129,6 +129,36 @@ public class RoozhayeNativePlugin extends Plugin {
                 && roleManager.isRoleHeld(RoleManager.ROLE_ASSISTANT);
     }
 
+    /** Opens Android's dedicated default voice-assistant settings page, with safe fallbacks. */
+    @PluginMethod
+    public void openAssistantSettings(PluginCall call) {
+        String[] actions = new String[] {
+                "android.settings.VOICE_INPUT_SETTINGS",
+                "android.settings.MANAGE_DEFAULT_APPS_SETTINGS",
+                Settings.ACTION_SETTINGS
+        };
+        for (String action : actions) {
+            try {
+                Intent intent = new Intent(action);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                if (intent.resolveActivity(getContext().getPackageManager()) != null) {
+                    getContext().startActivity(intent);
+                    JSObject result = new JSObject();
+                    result.put("ok", true);
+                    result.put("openedAction", action);
+                    call.resolve(result);
+                    return;
+                }
+            } catch (Exception ignored) {
+                // Try the next system settings entry point.
+            }
+        }
+        JSObject result = new JSObject();
+        result.put("ok", false);
+        result.put("message", "باز کردن تنظیمات دستیار این دستگاه ممکن نشد.");
+        call.resolve(result);
+    }
+
     @PluginMethod
     public void requestAssistantRole(PluginCall call) {
         JSObject result = new JSObject();
