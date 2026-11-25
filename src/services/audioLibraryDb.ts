@@ -16,6 +16,8 @@ export async function clearAudioLibraryDb(): Promise<void> {
       transaction.onerror = () => reject(transaction.error);
       transaction.onabort = () => reject(transaction.error);
     });
+  } catch (error) {
+    console.warn('Local audio cache cleanup skipped:', error);
   } finally {
     activeAudioDbConnections.forEach((connection) => connection.close());
     activeAudioDbConnections.clear();
