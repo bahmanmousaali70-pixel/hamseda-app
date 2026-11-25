@@ -5,16 +5,17 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  push:
-    branches: [main, master, 'release/**', 'feature/**']
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-apk:
     runs-on: ubuntu-latest
+    environment: hamseda-apk-release
+    permissions:
+      contents: write
     env:
       APP_VERSION: 1.0.${{ github.run_number }}
 
