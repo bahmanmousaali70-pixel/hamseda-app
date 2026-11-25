@@ -154,21 +154,35 @@ public class RoozhayeNativePlugin extends Plugin {
             call.resolve(result);
             return;
         }
-        startActivityForResult(call, roleManager.createRequestRoleIntent(RoleManager.ROLE_ASSISTANT),
-                "handleAssistantRoleResult");
+        try {
+            Intent requestIntent = roleManager.createRequestRoleIntent(RoleManager.ROLE_ASSISTANT);
+            startActivityForResult(call, requestIntent, "handleAssistantRoleResult");
+        } catch (Exception error) {
+            result.put("available", true);
+            result.put("held", isAssistantRoleHeld(getContext()));
+            result.put("requestLaunched", false);
+            result.put("errorType", error.getClass().getSimpleName());
+            result.put("message", "اندروید نتوانست پنجره انتخاب دستیار پیش‌فرض را باز کند. لطفاً از تنظیمات برنامه‌های پیش‌فرض گوشی اقدام کنید.");
+            call.resolve(result);
+        }
     }
 
     @ActivityCallback
     private void handleAssistantRoleResult(PluginCall call, ActivityResult activityResult) {
         if (call == null) return;
         boolean held = isAssistantRoleHeld(getContext());
+        int resultCode = activityResult != null ? activityResult.getResultCode() : Integer.MIN_VALUE;
         JSObject result = new JSObject();
         result.put("available", true);
         result.put("held", held);
-        result.put("accepted", held && activityResult.getResultCode() == Activity.RESULT_OK);
+        result.put("requestLaunched", true);
+        result.put("activityResultCode", resultCode);
+        result.put("accepted", held && resultCode == Activity.RESULT_OK);
         result.put("message", held
                 ? "هم‌صدا به‌عنوان دستیار پیش‌فرض انتخاب شد."
-                : "نقش دستیار پیش‌فرض انتخاب نشد؛ مجوزهای حساس درخواست نمی‌شوند.");
+                : resultCode == Activity.RESULT_CANCELED
+                    ? "پنجره انتخاب دستیار باز شد، اما انتخاب تأیید نشد. برای فعال‌شدن امکانات وابسته، هم‌صدا باید دستیار پیش‌فرض شود."
+                    : "درخواست انتخاب دستیار برگشت، اما اندروید انتخاب هم‌صدا را تأیید نکرد. کد نتیجه: " + resultCode);
         call.resolve(result);
     }
 
