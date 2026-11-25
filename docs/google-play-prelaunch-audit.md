@@ -11,6 +11,7 @@ Audit scope: source tree at PR #8 head `dc0bc6881d988d82d62191d3318cf16b7bf371f9
 - `READ_SMS` is absent from the manifest.
 - Incoming SMS uses the SMS broadcast receiver. Notification-content access for SMS/RCS was removed; RCS notification reading is not supported.
 - `READ_CALL_LOG` remains a restricted permission. The implementation uses it to obtain the incoming-number extra from `PHONE_STATE` and resolve a caller name; it does not query call history. Play Console declaration and approval are still required.
+- Incoming SMS and caller announcements now force the on-device speech path and bypass Hamseda's remote `/api/tts` endpoint. If the local neural engine fails, Android's installed system TTS fallback may apply its own provider processing.
 
 ### AccessibilityService — removed from this release branch
 
