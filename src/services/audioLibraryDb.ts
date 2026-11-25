@@ -4,6 +4,16 @@ const DB_NAME = 'roozhaye_man_o_zari_audio_v1';
 const DB_VERSION = 1;
 const STORE_CLIPS = 'audio_clips';
 
+export async function clearAudioLibraryDb(): Promise<void> {
+  if (typeof indexedDB === 'undefined') return;
+  await new Promise<void>((resolve) => {
+    const request = indexedDB.deleteDatabase(DB_NAME);
+    request.onsuccess = () => resolve();
+    request.onerror = () => resolve();
+    request.onblocked = () => resolve();
+  });
+}
+
 interface StoredAudioRecord extends AudioLibraryEntry {
   wavData: ArrayBuffer;
 }
