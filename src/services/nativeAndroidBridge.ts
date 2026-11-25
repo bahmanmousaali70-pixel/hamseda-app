@@ -27,7 +27,6 @@ export interface NativeCapabilities {
   sendSms?: boolean;
   writeSettings?: boolean;
   camera?: boolean;
-  location?: boolean;
 }
 
 interface NativeSchedulePayload {
