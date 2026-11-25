@@ -390,7 +390,10 @@ service cloud.firestore {
       allow delete: if isVerifiedUser() && isValidId(spaceId) && existing().ownerUid == request.auth.uid;
 
       match /members/{memberUid} {
-        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(memberUid) && isSpaceMember(spaceId);
+        allow get: if isVerifiedUser()
+          && isValidId(spaceId)
+          && isValidId(memberUid)
+          && (memberUid == request.auth.uid || isSpaceMember(spaceId));
         allow list: if isVerifiedUser()
           && isSpaceMember(spaceId)
           && (get(/databases/$(database)/documents/spaces/$(spaceId)).data.ownerUid == request.auth.uid
