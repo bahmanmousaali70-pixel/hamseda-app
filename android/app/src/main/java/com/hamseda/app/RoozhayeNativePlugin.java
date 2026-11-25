@@ -97,22 +97,6 @@ public class RoozhayeNativePlugin extends Plugin {
     }
 
     @PluginMethod
-    public void openAccessibilitySettings(PluginCall call) {
-        try {
-            Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            getContext().startActivity(intent);
-            JSObject ret = new JSObject();
-            ret.put("ok", true);
-            call.resolve(ret);
-        } catch (Exception e) {
-            JSObject ret = new JSObject();
-            ret.put("ok", false);
-            call.resolve(ret);
-        }
-    }
-
-    @PluginMethod
     public void getNativeCapabilities(PluginCall call) {
         call.resolve(buildCapsObject());
     }
@@ -913,7 +897,6 @@ public class RoozhayeNativePlugin extends Plugin {
                     camIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoUri);
                     camIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
                     camIntent.setClipData(android.content.ClipData.newRawUri("Hamseda photo", photoUri));
-                    if (HamsedaAccessibilityService.isConnected()) HamsedaAccessibilityService.armCameraShutter();
                     startActivityForResult(call, camIntent, "handleCameraCaptureResult");
                     return;
                 }
@@ -1021,40 +1004,12 @@ public class RoozhayeNativePlugin extends Plugin {
                     return;
                 }
                 case "close_app": {
-                    if (HamsedaAccessibilityService.performGlobalHome()) {
-                        ret.put("ok", true);
-                        ret.put("message", "از برنامه خارج شدم و به صفحه اصلی برگشتم.");
-                    } else {
-                        Intent settingsIntent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
-                        settingsIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                        ctx.startActivity(settingsIntent);
-                        ret.put("ok", false);
-                        ret.put("needsAccessibility", true);
-                        ret.put("message", "برای کنترل برنامه‌ها، سرویس دسترس‌پذیری هم‌صدا را در این صفحه فعال کن.");
-                    }
-                    call.resolve(ret);
-                    return;
-                }
-                case "accessibility_click": {
-                    String label = queryArg.trim();
-                    boolean clicked = HamsedaAccessibilityService.clickNodeByLabel(label);
-                    ret.put("ok", clicked);
-                    ret.put("message", clicked ? "روی " + label + " زدم." : "این گزینه روی صفحه پیدا نشد؛ صفحه را باز و دسترس‌پذیری را فعال کن.");
-                    call.resolve(ret);
-                    return;
-                }
-                case "accessibility_type": {
-                    boolean typed = HamsedaAccessibilityService.setTextInFocusedField(queryArg);
-                    ret.put("ok", typed);
-                    ret.put("message", typed ? "متن در کادر فعال نوشته شد." : "کادر نوشتاری فعالی پیدا نکردم.");
-                    call.resolve(ret);
-                    return;
-                }
-                case "accessibility_scroll": {
-                    boolean down = !"up".equalsIgnoreCase(queryArg);
-                    boolean scrolled = HamsedaAccessibilityService.scrollActiveWindow(down);
-                    ret.put("ok", scrolled);
-                    ret.put("message", scrolled ? (down ? "صفحه را پایین بردم." : "صفحه را بالا بردم.") : "صفحه قابل پیمایش پیدا نشد.");
+                    Activity activity = getActivity();
+                    boolean movedToBackground = activity != null && activity.moveTaskToBack(true);
+                    ret.put("ok", movedToBackground);
+                    ret.put("message", movedToBackground
+                            ? "هم‌صدا به پس‌زمینه رفت."
+                            : "خروج از برنامه در این دستگاه در دسترس نیست.");
                     call.resolve(ret);
                     return;
                 }
@@ -1959,7 +1914,6 @@ public class RoozhayeNativePlugin extends Plugin {
             }
             call.resolve(ret);
         } else {
-            HamsedaAccessibilityService.disarmCameraShutter();
             JSObject ret = new JSObject();
             ret.put("ok", false);
             ret.put("cancelled", true);
@@ -2295,7 +2249,6 @@ public class RoozhayeNativePlugin extends Plugin {
         }
         obj.put("exactAlarm", exactOk);
         obj.put("writeSettings", Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.System.canWrite(ctx));
-        obj.put("accessibility", HamsedaAccessibilityService.isConnected());
         return obj;
     }
 
