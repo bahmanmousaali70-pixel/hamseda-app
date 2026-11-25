@@ -364,7 +364,8 @@ service cloud.firestore {
         && incoming().ownerEmail == request.auth.token.email
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time;
-      allow update: if isVerifiedUser()
+      allow update: if (
+        isVerifiedUser()
         && isValidId(spaceId)
         && isValidSpace(incoming())
         && existing().ownerUid == request.auth.uid
@@ -373,18 +374,19 @@ service cloud.firestore {
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && incoming().diff(existing()).affectedKeys().hasOnly(['partnerEmail', 'title', 'updatedAt'])
-        || (isVerifiedUser()
-          && isValidId(spaceId)
-          && isValidSpace(incoming())
-          && isSpaceMember(spaceId)
-          && existing().partnerEmail == request.auth.token.email
-          && incoming().partnerEmail == ''
-          && incoming().ownerUid == existing().ownerUid
-          && incoming().ownerEmail == existing().ownerEmail
-          && incoming().createdAt == existing().createdAt
-          && incoming().title == existing().title
-          && incoming().updatedAt == request.time
-          && incoming().diff(existing()).affectedKeys().hasOnly(['partnerEmail', 'updatedAt']));
+      ) || (
+        isVerifiedUser()
+        && isValidId(spaceId)
+        && isValidSpace(incoming())
+        && existing().partnerEmail == request.auth.token.email
+        && incoming().partnerEmail == ''
+        && incoming().ownerUid == existing().ownerUid
+        && incoming().ownerEmail == existing().ownerEmail
+        && incoming().createdAt == existing().createdAt
+        && incoming().title == existing().title
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['partnerEmail', 'updatedAt'])
+      );
       allow delete: if isVerifiedUser() && isValidId(spaceId) && existing().ownerUid == request.auth.uid;
 
       match /members/{memberUid} {
