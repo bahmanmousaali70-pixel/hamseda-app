@@ -19,19 +19,26 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Set up Node.js 22
+
+      - name: Validate Google service account credential
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+        run: |
+          if [ -z "$GOOGLE_CREDENTIALS" ]; then
+            echo "::error::Add the GOOGLE_CREDENTIALS repository secret containing the service account JSON."
+            exit 1
+          fi
+
+      - name: Authenticate to Google Cloud with service account
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: modified-transport-wv0ns
+          credentials_json: ${{ secrets.GOOGLE_CREDENTIALS }}
+
+      - name: Set up Node.js 24
         uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Validate Firebase deployment credential
-        env:
-          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
-        run: |
-          if [ -z "$FIREBASE_TOKEN" ]; then
-            echo "::error::Add the FIREBASE_TOKEN repository secret before deploying rules."
-            exit 1
-          fi
+
       - name: Deploy Firestore rules to the configured named database
-        env:
-          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
         run: npx --yes firebase-tools@latest deploy --only firestore:rules --project modified-transport-wv0ns --non-interactive
