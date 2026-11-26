@@ -183,7 +183,7 @@ async function ensureMembership(
 export async function joinSpaceByCode(spaceIdRaw: string, user: User): Promise<CoupleSpaceInfo> {
   const spaceId = sanitizeId(spaceIdRaw.trim());
   const uid = sanitizeId(user.uid);
-  const displayName = clampStr(user.displayName, 100, 'همراه');
+  const displayName = clampStr(user.displayName ?? undefined, 100, 'همراه');
   const path = `spaces/${spaceId}`;
 
   try {
