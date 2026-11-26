@@ -350,14 +350,8 @@ service cloud.firestore {
     }
 
     match /spaces/{spaceId} {
-      allow get: if isVerifiedUser()
-        && isValidId(spaceId)
-        && (
-          true
-          || existing().ownerUid == request.auth.uid
-          || (('partnerEmail' in existing()) && existing().partnerEmail == request.auth.token.email)
-          || isSpaceMember(spaceId)
-        );
+      // Space IDs are high-entropy Firebase UID-derived bearer codes shared by the owner.
+      allow get: if isVerifiedUser() && isValidId(spaceId);
       allow list: if isVerifiedUser()
         && (
           resource.data.ownerUid == request.auth.uid
