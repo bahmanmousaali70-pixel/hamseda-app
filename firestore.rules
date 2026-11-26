@@ -339,7 +339,6 @@ service cloud.firestore {
         && request.auth.uid == userId
         && isValidUserProfile(incoming(), userId)
         && incoming().uid == existing().uid
-        && incoming().email == existing().email
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'activeSpaceId', 'updatedAt']);
