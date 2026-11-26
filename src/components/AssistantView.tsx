@@ -1328,7 +1328,19 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
                   key={qc.label}
                   type="button"
                   disabled={isBusy}
-                  onClick={() => executeUtterance(qc.command, true)}
+                  onClick={() => {
+                    // This safety-critical quick control must bypass AI intent inference.
+                    // Otherwise a model response can accidentally invert a direct brightness command.
+                    if (qc.label === 'نور صفحه زیاد' && isNativeAndroid()) {
+                      void executeDeviceActionNative({action: 'brightness_up'})
+                        .then((res) => onStatusToast(
+                          res.message || (res.ok ? 'روشنایی صفحه افزایش یافت.' : 'افزایش روشنایی انجام نشد.')
+                        ))
+                        .catch(() => onStatusToast('افزایش روشنایی صفحه انجام نشد.'));
+                      return;
+                    }
+                    void executeUtterance(qc.command, true);
+                  }}
                   className="min-h-[46px] px-3 py-2.5 rounded-xl border border-slate-200 dark:border-emerald-950/80 hover:border-emerald-600 dark:hover:border-emerald-700 bg-slate-50/70 dark:bg-[#0E1715] text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2 text-right transition-colors cursor-pointer"
                 >
                   <Icon className="w-4 h-4 text-emerald-700 dark:text-emerald-400 shrink-0" />
