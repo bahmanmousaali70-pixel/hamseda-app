@@ -60,7 +60,6 @@ function sanitizeId(raw: string): string {
 
 export async function ensureUserAndDiscoverSpace(user: User): Promise<CoupleSpaceInfo> {
   const uid = sanitizeId(user.uid);
-  const email = '';
   const displayName = clampStr(user.displayName, 100, 'همراه');
   const userPath = `users/${uid}`;
 
@@ -79,7 +78,6 @@ export async function ensureUserAndDiscoverSpace(user: User): Promise<CoupleSpac
     } else {
       await setDoc(userRef, {
         uid,
-        email,
         displayName,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -96,7 +94,7 @@ export async function ensureUserAndDiscoverSpace(user: User): Promise<CoupleSpac
       if (spaceSnap.exists()) {
         const sdata = spaceSnap.data();
         const role: 'owner' | 'partner' = sdata.ownerUid === uid ? 'owner' : 'partner';
-        await ensureMembership(activeSpaceId, uid, email, displayName, role);
+        await ensureMembership(activeSpaceId, uid, displayName, role);
         return {
           spaceId: activeSpaceId,
           title: sdata.title ?? 'فضای مشترک من و زری',
@@ -117,7 +115,7 @@ export async function ensureUserAndDiscoverSpace(user: User): Promise<CoupleSpac
       const docSnap = ownerSnaps.docs[0];
       const sdata = docSnap.data();
       const foundId = docSnap.id;
-      await ensureMembership(foundId, uid, email, displayName, 'owner');
+      await ensureMembership(foundId, uid, displayName, 'owner');
       await updateDoc(doc(db, 'users', uid), {
         activeSpaceId: foundId,
         updatedAt: serverTimestamp(),
@@ -138,12 +136,11 @@ export async function ensureUserAndDiscoverSpace(user: User): Promise<CoupleSpac
   try {
     await setDoc(doc(db, 'spaces', newSpaceId), {
       ownerUid: uid,
-      ownerEmail: '',
       title: 'فضای مشترک روزهای من و زری',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-    await ensureMembership(newSpaceId, uid, email, displayName, 'owner');
+    await ensureMembership(newSpaceId, uid, displayName, 'owner');
     await updateDoc(doc(db, 'users', uid), {
       activeSpaceId: newSpaceId,
       updatedAt: serverTimestamp(),
@@ -163,7 +160,6 @@ export async function ensureUserAndDiscoverSpace(user: User): Promise<CoupleSpac
 async function ensureMembership(
   spaceId: string,
   uid: string,
-  email: string,
   displayName: string,
   role: 'owner' | 'partner'
 ): Promise<void> {
@@ -174,7 +170,6 @@ async function ensureMembership(
     if (!snap.exists()) {
       await setDoc(ref, {
         uid,
-        email,
         displayName,
         role,
         joinedAt: serverTimestamp(),
@@ -188,7 +183,6 @@ async function ensureMembership(
 export async function joinSpaceByCode(spaceIdRaw: string, user: User): Promise<CoupleSpaceInfo> {
   const spaceId = sanitizeId(spaceIdRaw.trim());
   const uid = sanitizeId(user.uid);
-  const email = '';
   const displayName = clampStr(user.displayName, 100, 'همراه');
   const path = `spaces/${spaceId}`;
 
@@ -199,7 +193,7 @@ export async function joinSpaceByCode(spaceIdRaw: string, user: User): Promise<C
     }
     const sdata = snap.data();
     const role: 'owner' | 'partner' = sdata.ownerUid === uid ? 'owner' : 'partner';
-    await ensureMembership(spaceId, uid, email, displayName, role);
+    await ensureMembership(spaceId, uid, displayName, role);
     await updateDoc(doc(db, 'users', uid), {
       activeSpaceId: spaceId,
       updatedAt: serverTimestamp(),
