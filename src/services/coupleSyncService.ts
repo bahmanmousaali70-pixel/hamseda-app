@@ -49,6 +49,15 @@ function clampStr(val: string | undefined, max: number, fallback = ''): string {
   return s.length > max ? s.slice(0, max) : s;
 }
 
+function createPairingSpaceId(): string {
+  const bytes = new Uint8Array(24);
+  if (typeof crypto === 'undefined' || typeof crypto.getRandomValues !== 'function') {
+    throw new Error('این دستگاه امکان ساخت کد اتصال امن را ندارد.');
+  }
+  crypto.getRandomValues(bytes);
+  return `space_${Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+}
+
 function sanitizeId(raw: string): string {
   const cleaned = raw.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 128);
   return cleaned || `id_${Date.now()}`;
@@ -163,7 +172,7 @@ export async function ensureUserAndDiscoverSpace(user: User): Promise<CoupleSpac
   }
 
   // 5. Create fresh CoupleSpace owned by this user
-  const newSpaceId = sanitizeId(`space_${uid}`);
+  const newSpaceId = createPairingSpaceId();
   try {
     await setDoc(doc(db, 'spaces', newSpaceId), {
       ownerUid: uid,
