@@ -120,10 +120,6 @@ interface SyncSettingsViewProps {
   onDeleteSchedule: (id: string) => void;
   onTestSchedule: (schedule: ScheduledAnnouncement) => void;
   onDownloadScheduleAlarm: (schedule: ScheduledAnnouncement) => Promise<void>;
-  onCloudSignIn: () => Promise<void>;
-  onCloudSignOut: () => Promise<void>;
-  onDeleteAccount: () => Promise<void>;
-  onInvitePartner: (email: string) => Promise<void>;
   onJoinSpaceByCode: (spaceCode: string) => Promise<void>;
   onPushLocalToCloud: () => Promise<void>;
   onRequestNativePermissions: () => Promise<void>;
@@ -186,10 +182,6 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
   onDeleteSchedule,
   onTestSchedule,
   onDownloadScheduleAlarm,
-  onCloudSignIn,
-  onCloudSignOut,
-  onDeleteAccount,
-  onInvitePartner,
   onJoinSpaceByCode,
   onPushLocalToCloud,
   onRequestNativePermissions,
@@ -202,7 +194,6 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
   const {isInstallable, isInstalled, isIOS, install} = usePWAInstall();
   const [importText, setImportText] = useState('');
   const [copied, setCopied] = useState(false);
-  const [copiedSpace, setCopiedSpace] = useState(false);
   const [smsBlockedSenders, setSmsBlockedSenders] = useState(() => localStorage.getItem('rmz_sms_blocked_senders') ?? '');
   const [smsBlockedKeywords, setSmsBlockedKeywords] = useState(() => localStorage.getItem('rmz_sms_blocked_keywords') ?? 'تبریک برنده شدید\\nجایزه رایگان\\nخرید شارژ\\nوام فوری');
   const [smsImportantSenders, setSmsImportantSenders] = useState(() => localStorage.getItem('rmz_sms_important_senders') ?? '');
@@ -229,7 +220,6 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
     if (!partnerNameFocusedRef.current) setPartnerNameDraft(settings.partnerName);
   }, [settings.partnerName]);
 
-  const [partnerEmailInput, setPartnerEmailInput] = useState(spaceInfo?.partnerEmail ?? '');
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [serverUrlInput, setServerUrlInput] = useState(() => getCloudApiBaseUrl());
   const [serverCheckStatus, setServerCheckStatus] = useState<{ok: boolean; msg: string} | null>(null);
@@ -673,146 +663,50 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
         </div>
       </section>
 
-      {/* Real-time Cloud Sync between Bahman & Zari's Phones */}
+      {/* Anonymous device pairing: no Google/Gmail account */}
       <section className="rounded-2xl bg-white dark:bg-[#121E1C] border border-slate-200/80 dark:border-emerald-950/70 p-6 sm:p-8 space-y-5">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-              <Cloud className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
-              <span>همگام‌سازی لحظه‌ای ابری (Firestore) بین گوشی {selfName} و {partnerOtherName}</span>
-            </div>
-            <h1 className="mt-2 text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white">
-              همگام‌سازی خودکار دو گوشی، زمان‌بند و نسخه اندروید (APK)
-            </h1>
-            <p className="mt-1.5 text-sm leading-7 text-slate-600 dark:text-slate-300 max-w-3xl">
-              با ورود به حساب گوگل روی گوشی {selfName} و گوشی {partnerOtherName}، تمام اهداف، عادت‌ها، شکرگذاری‌ها، زمان‌بندی‌ها، مخاطبین تماس و تنظیمات به‌صورت خودکار بین هر دو دستگاه مچ می‌شوند.
-            </p>
-          </div>
-
-          <div className="shrink-0">
-            {cloudUserEmail ? (
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="min-h-[44px] px-3.5 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-xs font-semibold text-emerald-900 dark:text-emerald-200 flex items-center gap-2">
-                  <Check className="w-4 h-4 text-emerald-600" />
-                  <span dir="ltr">{cloudUserEmail}</span>
-                </div>
-                <button
-                  type="button"
-                  disabled={cloudBusy}
-                  onClick={onCloudSignOut}
-                  className="min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-200 dark:border-emerald-900 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-emerald-950/40 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
-                >
-                  <LogOut className="w-4 h-4" />
-                  <span>خروج</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={cloudBusy}
-                  onClick={onDeleteAccount}
-                  className="min-h-[44px] px-3.5 py-2 rounded-xl border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/30 text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  <span>حذف حساب و داده‌های ابری</span>
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                disabled={cloudBusy || !isOnline}
-                onClick={onCloudSignIn}
-                className="min-h-[44px] px-5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white text-sm font-semibold flex items-center gap-2 cursor-pointer"
-              >
-                <LogIn className="w-4 h-4" />
-                <span>{cloudBusy ? 'در حال اتصال...' : 'ورود با گوگل برای همگام‌سازی'}</span>
-              </button>
-            )}
-          </div>
+        <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+          <Cloud className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
+          <span>اتصال دو دستگاه بدون ورود به حساب گوگل</span>
         </div>
-
+        <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white">
+          همگام‌سازی دو گوشی با کد اتصال
+        </h2>
+        <p className="text-sm leading-7 text-slate-600 dark:text-slate-300">
+          هم‌صدا برای هر نصب یک شناسه امن و ناشناس می‌سازد. برای اتصال گوشی دوم، کد فضای مشترک را فقط با همراه مورداعتماد خود به اشتراک بگذارید؛ نیازی به Gmail یا ساخت حساب کاربری نیست.
+        </p>
+        {cloudUserEmail && spaceInfo ? (
+          <div className="rounded-xl bg-slate-50/80 dark:bg-[#0B1312] border border-slate-200 dark:border-emerald-900 p-4 space-y-3">
+            <div className="text-xs text-slate-500 dark:text-slate-400">کد اتصال این فضای مشترک</div>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <code dir="ltr" className="text-sm font-mono-num font-bold text-slate-900 dark:text-white break-all">{spaceInfo.spaceId}</code>
+              <button type="button" onClick={handleCopySpaceId} className="min-h-[40px] px-3 rounded-lg bg-emerald-700 text-white text-xs font-semibold flex items-center gap-2">
+                <Copy className="w-4 h-4" /> کپی کد اتصال
+              </button>
+            </div>
+            <div className="text-[11px] text-slate-500 dark:text-slate-400">شناسه دستگاه: <code dir="ltr">{cloudUserEmail.slice(0, 12)}…</code></div>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">در حال آماده‌سازی شناسه دستگاه و فضای مشترک…</p>
+        )}
+        <div className="rounded-xl border border-slate-200 dark:border-emerald-900 p-4 space-y-3">
+          <label className="block text-xs font-bold text-slate-800 dark:text-slate-100">اتصال این گوشی به فضای مشترک گوشی دیگر</label>
+          <div className="flex flex-wrap gap-2">
+            <input type="text" dir="ltr" value={joinCodeInput} onChange={(e) => setJoinCodeInput(e.target.value.trim())} placeholder="کد اتصال دریافتی از گوشی دیگر" className="flex-1 min-w-[180px] min-h-[44px] px-3 rounded-xl border border-slate-200 dark:border-emerald-900 bg-white dark:bg-[#121E1C] text-xs font-mono-num text-slate-900 dark:text-white" />
+            <button type="button" disabled={cloudBusy || !joinCodeInput.trim() || !cloudUserEmail} onClick={() => onJoinSpaceByCode(joinCodeInput)} className="min-h-[44px] px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white text-xs font-semibold flex items-center gap-1.5">
+              <Link2 className="w-4 h-4" /> اتصال
+            </button>
+          </div>
+          <button type="button" disabled={cloudBusy || !spaceInfo} onClick={onPushLocalToCloud} className="w-full min-h-[44px] px-4 rounded-xl border border-slate-200 dark:border-emerald-900 text-slate-700 dark:text-slate-200 text-xs font-semibold disabled:opacity-50">
+            ارسال اطلاعات این گوشی به فضای مشترک
+          </button>
+        </div>
+        <p className="text-[11px] leading-5 text-slate-500 dark:text-slate-400">
+          داده‌های فعلی روی حافظه همین گوشی حفظ می‌شوند. کد اتصال را عمومی منتشر نکنید؛ هر کسی که آن را داشته باشد می‌تواند درخواست عضویت در فضای مشترک بدهد.
+        </p>
         <div className="flex flex-wrap gap-4 pt-3 border-t border-slate-100 dark:border-emerald-950/60 text-xs">
           <a href="https://hamseda-app.ai.studio/privacy-policy.html" target="_blank" rel="noreferrer" className="text-emerald-700 dark:text-emerald-300 underline underline-offset-4">سیاست حریم خصوصی</a>
-          <a href="https://hamseda-app.ai.studio/delete-account.html" target="_blank" rel="noreferrer" className="text-emerald-700 dark:text-emerald-300 underline underline-offset-4">راهنمای حذف حساب</a>
         </div>
-
-        {cloudUserEmail && spaceInfo && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-4 border-t border-slate-100 dark:border-emerald-950/60">
-            <div className="rounded-xl bg-slate-50/80 dark:bg-[#0B1312] border border-slate-200/80 dark:border-emerald-900/70 p-4 space-y-3">
-              <div className="text-xs font-bold text-slate-900 dark:text-white">
-                ۱. دعوت گوشی {partnerOtherName} (مچ شدن خودکار با جیمیل)
-              </div>
-              <p className="text-xs text-slate-600 dark:text-slate-300 leading-5">
-                کافی است ایمیل جیمیل گوشی {partnerOtherName} را اینجا ثبت کنید (یا با همین ایمیل در هر دو گوشی وارد شوید) تا گوشی {partnerOtherName} به‌محض باز کردن برنامه خودکار به همین فضای مشترک وصل شود.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <input
-                  type="email"
-                  dir="ltr"
-                  value={partnerEmailInput}
-                  onChange={(e) => setPartnerEmailInput(e.target.value)}
-                  placeholder="partner.gmail@gmail.com"
-                  className="flex-1 min-w-[200px] min-h-[44px] px-3 rounded-xl border border-slate-200 dark:border-emerald-900 bg-white dark:bg-[#121E1C] text-xs font-mono-num text-slate-900 dark:text-white"
-                />
-                <button
-                  type="button"
-                  disabled={cloudBusy || !partnerEmailInput.trim()}
-                  onClick={() => onInvitePartner(partnerEmailInput)}
-                  className="min-h-[44px] px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white text-xs font-semibold cursor-pointer"
-                >
-                  ثبت ایمیل همراه
-                </button>
-              </div>
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
-                <span className="text-slate-500 dark:text-slate-400">
-                  کد فضای مشترک:{' '}
-                  <code dir="ltr" className="font-mono-num text-slate-800 dark:text-slate-200">
-                    {spaceInfo.spaceId}
-                  </code>
-                </span>
-                <button
-                  type="button"
-                  onClick={handleCopySpaceId}
-                  className="min-h-[36px] px-2.5 rounded-lg border border-slate-200 dark:border-emerald-900 text-xs text-slate-700 dark:text-slate-200 flex items-center gap-1 cursor-pointer"
-                >
-                  {copiedSpace ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>کپی کد فضا</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="rounded-xl bg-slate-50/80 dark:bg-[#0B1312] border border-slate-200/80 dark:border-emerald-900/70 p-4 space-y-3">
-              <div className="text-xs font-bold text-slate-900 dark:text-white">
-                ۲. اتصال با کد فضا یا ارسال داده‌های فعلی
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <input
-                  type="text"
-                  dir="ltr"
-                  value={joinCodeInput}
-                  onChange={(e) => setJoinCodeInput(e.target.value)}
-                  placeholder="کد فضای دریافت‌شده از گوشی دیگر"
-                  className="flex-1 min-w-[180px] min-h-[44px] px-3 rounded-xl border border-slate-200 dark:border-emerald-900 bg-white dark:bg-[#121E1C] text-xs font-mono-num text-slate-900 dark:text-white"
-                />
-                <button
-                  type="button"
-                  disabled={cloudBusy || !joinCodeInput.trim()}
-                  onClick={() => onJoinSpaceByCode(joinCodeInput)}
-                  className="min-h-[44px] px-4 rounded-xl border border-slate-200 dark:border-emerald-900 bg-white dark:bg-[#121E1C] hover:bg-slate-100 text-slate-800 dark:text-slate-100 text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                >
-                  <Link2 className="w-3.5 h-3.5" />
-                  <span>اتصال</span>
-                </button>
-              </div>
-              <button
-                type="button"
-                disabled={cloudBusy}
-                onClick={onPushLocalToCloud}
-                className="w-full min-h-[44px] px-4 rounded-xl bg-slate-900 dark:bg-emerald-600 hover:bg-slate-800 dark:hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold cursor-pointer"
-              >
-                همگام‌سازی و ارسال داده‌های فعلی این گوشی به ابر
-              </button>
-            </div>
-          </div>
-        )}
       </section>
 
       {/* Native Android APK Capabilities & GitHub Actions APK Build */}
