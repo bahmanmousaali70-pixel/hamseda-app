@@ -711,7 +711,7 @@ export default function App() {
           const diagnostics = await diagnoseFirebaseAuthNetwork();
           console.warn('Firebase Auth network diagnostics:', diagnostics);
           showToast(
-            `ورود ناشناس: ${errorCode} | Identity Toolkit: ${diagnostics.identityToolkit} | Secure Token: ${diagnostics.secureToken}`
+            `ورود ناشناس: ${errorCode} | WebView: ${diagnostics.identityToolkit} / ${diagnostics.secureToken} | Android: ${diagnostics.nativeIdentityToolkit} / ${diagnostics.nativeSecureToken}`
           );
           setCloudBusy(false);
         });
