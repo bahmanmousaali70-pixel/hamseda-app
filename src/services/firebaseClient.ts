@@ -1,3 +1,4 @@
+import {registerPlugin} from '@capacitor/core';
 import {initializeApp} from 'firebase/app';
 import {
   getAuth,
@@ -135,16 +136,27 @@ async function testConnection(): Promise<void> {
 testConnection();
 
 
+interface NativeAuthDiagnosticsPlugin {
+  probeAuthEndpoints(options: {apiKey: string}): Promise<{
+    identityToolkit: string;
+    secureToken: string;
+  }>;
+}
+
+const NativeAuthDiagnostics = registerPlugin<NativeAuthDiagnosticsPlugin>('NativeAuthDiagnostics');
+
 export interface FirebaseAuthNetworkDiagnostics {
   identityToolkit: string;
   secureToken: string;
+  nativeIdentityToolkit: string;
+  nativeSecureToken: string;
 }
 
-/** Tests Firebase Auth endpoints with deliberately invalid credentials; no account is created. */
+/** Compares WebView fetch with Android's native HTTPS stack; invalid test credentials cannot create an account. */
 export async function diagnoseFirebaseAuthNetwork(): Promise<FirebaseAuthNetworkDiagnostics> {
   const request = async (url: string, init: RequestInit): Promise<string> => {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 6000);
+    const timer = setTimeout(() => controller.abort(), 7000);
     try {
       const response = await fetch(url, {...init, signal: controller.signal});
       let code = `HTTP_${response.status}`;
@@ -152,19 +164,19 @@ export async function diagnoseFirebaseAuthNetwork(): Promise<FirebaseAuthNetwork
         const payload = await response.json() as {error?: {message?: string}};
         if (payload?.error?.message) code += ` ${payload.error.message}`;
       } catch {
-        // Keep the HTTP status when the response is not JSON.
+        // Preserve status if the response is not JSON.
       }
-      return code.slice(0, 100);
+      return code.slice(0, 110);
     } catch (error) {
       const message = error instanceof Error ? error.name : 'FETCH_FAILED';
-      return message === 'AbortError' ? 'TIMEOUT_6S' : `FETCH_FAILED ${message}`;
+      return message === 'AbortError' ? 'WEBVIEW_TIMEOUT' : `WEBVIEW_FETCH_FAILED ${message}`;
     } finally {
       clearTimeout(timer);
     }
   };
 
   const apiKey = encodeURIComponent(firebaseConfig.apiKey);
-  const [identityToolkit, secureToken] = await Promise.all([
+  const [webIdentity, webToken, native] = await Promise.all([
     request(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
@@ -179,9 +191,18 @@ export async function diagnoseFirebaseAuthNetwork(): Promise<FirebaseAuthNetwork
       headers: {'Content-Type': 'application/x-www-form-urlencoded'},
       body: 'grant_type=refresh_token&refresh_token=diagnostic-invalid-token',
     }),
+    NativeAuthDiagnostics.probeAuthEndpoints({apiKey: firebaseConfig.apiKey}).catch((error) => ({
+      identityToolkit: `NATIVE_PLUGIN_ERROR ${error instanceof Error ? error.message : String(error)}`.slice(0, 110),
+      secureToken: 'NATIVE_PLUGIN_ERROR',
+    })),
   ]);
 
-  return {identityToolkit, secureToken};
+  return {
+    identityToolkit: webIdentity,
+    secureToken: webToken,
+    nativeIdentityToolkit: native.identityToolkit,
+    nativeSecureToken: native.secureToken,
+  };
 }
 
 let anonymousIdentityPromise: Promise<User> | null = null;
