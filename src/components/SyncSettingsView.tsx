@@ -121,7 +121,6 @@ interface SyncSettingsViewProps {
   onTestSchedule: (schedule: ScheduledAnnouncement) => void;
   onDownloadScheduleAlarm: (schedule: ScheduledAnnouncement) => Promise<void>;
   onJoinSpaceByCode: (spaceCode: string) => Promise<void>;
-  onPushLocalToCloud: () => Promise<void>;
   onRequestNativePermissions: () => Promise<void>;
   onOpenAppInfoSettings: () => Promise<void>;
   onOpenXiaomiOtherPermissions: () => Promise<void>;
@@ -183,7 +182,6 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
   onTestSchedule,
   onDownloadScheduleAlarm,
   onJoinSpaceByCode,
-  onPushLocalToCloud,
   onRequestNativePermissions,
   onOpenAppInfoSettings,
   onOpenXiaomiOtherPermissions,
@@ -698,9 +696,6 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
               <Link2 className="w-4 h-4" /> اتصال
             </button>
           </div>
-          <button type="button" disabled={cloudBusy || !spaceInfo} onClick={onPushLocalToCloud} className="w-full min-h-[44px] px-4 rounded-xl border border-slate-200 dark:border-emerald-900 text-slate-700 dark:text-slate-200 text-xs font-semibold disabled:opacity-50">
-            ادغام امن اطلاعات محلی (بدون بازنویسی داده‌های موجود)
-          </button>
         </div>
         <p className="text-[11px] leading-5 text-slate-500 dark:text-slate-400">
           داده‌های فعلی روی حافظه همین گوشی حفظ می‌شوند. کد اتصال را عمومی منتشر نکنید؛ هر کسی که آن را داشته باشد می‌تواند درخواست عضویت در فضای مشترک بدهد.
