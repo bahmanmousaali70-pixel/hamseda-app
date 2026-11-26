@@ -10,9 +10,6 @@ import {
   setDoc,
   updateDoc,
   where,
-  writeBatch,
-  type DocumentSnapshot,
-  type Query,
   type Unsubscribe,
 } from 'firebase/firestore';
 import type {
@@ -129,8 +126,6 @@ export async function ensureUserAndDiscoverSpace(user: User): Promise<CoupleSpac
         spaceId: foundId,
         title: sdata.title ?? 'فضای مشترک من و زری',
         ownerUid: sdata.ownerUid,
-        ownerEmail: sdata.ownerEmail,
-        partnerEmail: sdata.partnerEmail ?? '',
         role: 'owner',
       };
     }
@@ -161,8 +156,6 @@ export async function ensureUserAndDiscoverSpace(user: User): Promise<CoupleSpac
     spaceId: newSpaceId,
     title: 'فضای مشترک روزهای من و زری',
     ownerUid: uid,
-    ownerEmail: email,
-    partnerEmail: '',
     role: 'owner',
   };
 }
@@ -1382,99 +1375,6 @@ export async function deleteHomeChoreFromCloud(spaceId: string, choreId: string)
 }
 
 
-const ACCOUNT_DATA_COLLECTIONS = [
-  'goals', 'habits', 'gratitudes', 'callers', 'schedules',
-  'shopping', 'expenses', 'bills', 'meds', 'meals',
-  'vault', 'packing', 'events', 'chores',
-] as const;
-
-async function deleteQueryResults(q: Query): Promise<number> {
-  const snapshot = await getDocs(q);
-  let deleted = 0;
-  for (let offset = 0; offset < snapshot.docs.length; offset += 400) {
-    const batch = writeBatch(db);
-    const page = snapshot.docs.slice(offset, offset + 400);
-    page.forEach((item) => batch.delete(item.ref));
-    await batch.commit();
-    deleted += page.length;
-  }
-  return deleted;
-}
-
-/**
- * Deletes the signed-in user's Firestore profile and account-linked space data.
- * If the user owns a shared space, all of that space's shared content is deleted.
- * If the user is a partner, only their authored records and membership are removed.
- */
-export async function deleteUserCloudData(user: User, activeSpaceId?: string | null): Promise<void> {
-  const uid = user.uid;
-  const email = (user.email ?? '').trim();
-  if (!uid || !email) throw new Error('اطلاعات حساب برای حذف کامل کافی نیست.');
-
-  const userRef = doc(db, 'users', uid);
-  const userSnapshot = await getDoc(userRef);
-  const profileSpaceId = userSnapshot.exists() && typeof userSnapshot.data().activeSpaceId === 'string'
-    ? userSnapshot.data().activeSpaceId as string
-    : '';
-
-  const spaces = new Map<string, DocumentSnapshot>();
-  const owned = await getDocs(query(collection(db, 'spaces'), where('ownerUid', '==', uid)));
-  owned.docs.forEach((item) => spaces.set(item.id, item));
-  if (email) {
-    const invited = await getDocs(query(collection(db, 'spaces'), where('partnerEmail', '==', email)));
-    invited.docs.forEach((item) => spaces.set(item.id, item));
-  }
-
-  for (const candidateId of [activeSpaceId, profileSpaceId].filter((value): value is string => Boolean(value))) {
-    if (!spaces.has(candidateId)) {
-      const candidate = await getDoc(doc(db, 'spaces', candidateId));
-      if (candidate.exists()) spaces.set(candidate.id, candidate);
-    }
-  }
-
-  for (const [spaceId, spaceSnapshot] of spaces) {
-    const spaceData = spaceSnapshot.data();
-    if (!spaceData) continue;
-    const isOwner = spaceData.ownerUid === uid;
-    const membersSnapshot = isOwner
-      ? await getDocs(collection(db, 'spaces', spaceId, 'members'))
-      : null;
-    const ownMembership = isOwner
-      ? null
-      : await getDoc(doc(db, 'spaces', spaceId, 'members', uid));
-    const memberUids = isOwner
-      ? Array.from(new Set([uid, ...(membersSnapshot?.docs ?? []).map((member) => member.id)]))
-      : ownMembership?.exists() ? [uid] : [];
-
-    for (const memberUid of memberUids) {
-      for (const collectionName of ACCOUNT_DATA_COLLECTIONS) {
-        await deleteQueryResults(
-          query(collection(db, 'spaces', spaceId, collectionName), where('authorUid', '==', memberUid))
-        );
-      }
-    }
-
-    if (isOwner) {
-      await deleteDoc(doc(db, 'spaces', spaceId, 'config', 'settings'));
-      for (const member of membersSnapshot?.docs ?? []) {
-        await deleteDoc(member.ref);
-      }
-      await deleteDoc(doc(db, 'spaces', spaceId));
-    } else {
-      if (spaceData.partnerEmail === email) {
-        await updateDoc(doc(db, 'spaces', spaceId), {
-          partnerEmail: '',
-          updatedAt: serverTimestamp(),
-        });
-      }
-      if (ownMembership?.exists()) {
-        await deleteDoc(doc(db, 'spaces', spaceId, 'members', uid));
-      }
-    }
-  }
-
-  if (userSnapshot.exists()) await deleteDoc(userRef);
-}
 export async function uploadLocalBundleToSpace(
   spaceId: string,
   bundle: {
