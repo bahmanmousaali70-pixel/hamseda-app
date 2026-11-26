@@ -1179,6 +1179,8 @@ export default function App() {
       const joined = await joinSpaceByCode(spaceCode, auth.currentUser);
       setSpaceInfo(joined);
       showToast('به فضای مشترک متصل شدید! داده‌ها به‌صورت لحظه‌ای همگام می‌شوند.');
+      // Reboot the auth listener so it subscribes to the newly selected shared space.
+      window.setTimeout(() => window.location.reload(), 500);
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'امکان اتصال با این کد وجود نداشت.');
     } finally {
