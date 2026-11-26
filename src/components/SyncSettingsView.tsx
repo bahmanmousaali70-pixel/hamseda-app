@@ -33,6 +33,7 @@ import type {CoupleSpaceInfo} from '../services/coupleSyncService';
 import {
   checkConnectivityNative,
   isNativeAndroid,
+  openAssistantSettingsNative,
   openBatteryAndAutostartSettingsNative,
   openExternalUrlNative,
   pickJsonFileNative,
@@ -121,11 +122,11 @@ interface SyncSettingsViewProps {
   onDownloadScheduleAlarm: (schedule: ScheduledAnnouncement) => Promise<void>;
   onCloudSignIn: () => Promise<void>;
   onCloudSignOut: () => Promise<void>;
+  onDeleteAccount: () => Promise<void>;
   onInvitePartner: (email: string) => Promise<void>;
   onJoinSpaceByCode: (spaceCode: string) => Promise<void>;
   onPushLocalToCloud: () => Promise<void>;
   onRequestNativePermissions: () => Promise<void>;
-  onOpenNotificationListenerSettings: () => Promise<void>;
   onOpenAppInfoSettings: () => Promise<void>;
   onOpenXiaomiOtherPermissions: () => Promise<void>;
   onStatusToast: (msg: string) => void;
@@ -187,11 +188,11 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
   onDownloadScheduleAlarm,
   onCloudSignIn,
   onCloudSignOut,
+  onDeleteAccount,
   onInvitePartner,
   onJoinSpaceByCode,
   onPushLocalToCloud,
   onRequestNativePermissions,
-  onOpenNotificationListenerSettings,
   onOpenAppInfoSettings,
   onOpenXiaomiOtherPermissions,
   onStatusToast,
@@ -704,6 +705,15 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
                   <LogOut className="w-4 h-4" />
                   <span>خروج</span>
                 </button>
+                <button
+                  type="button"
+                  disabled={cloudBusy}
+                  onClick={onDeleteAccount}
+                  className="min-h-[44px] px-3.5 py-2 rounded-xl border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/30 text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>حذف حساب و داده‌های ابری</span>
+                </button>
               </div>
             ) : (
               <button
@@ -717,6 +727,11 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
               </button>
             )}
           </div>
+        </div>
+
+        <div className="flex flex-wrap gap-4 pt-3 border-t border-slate-100 dark:border-emerald-950/60 text-xs">
+          <a href="https://hamseda-app.ai.studio/privacy-policy.html" target="_blank" rel="noreferrer" className="text-emerald-700 dark:text-emerald-300 underline underline-offset-4">سیاست حریم خصوصی</a>
+          <a href="https://hamseda-app.ai.studio/delete-account.html" target="_blank" rel="noreferrer" className="text-emerald-700 dark:text-emerald-300 underline underline-offset-4">راهنمای حذف حساب</a>
         </div>
 
         {cloudUserEmail && spaceInfo && (
@@ -818,6 +833,9 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
             <p className="mt-1.5 text-xs sm:text-sm leading-6 text-slate-600 dark:text-slate-300 max-w-3xl">
               پروژه بومی اندروید (Capacitor + سرویس پس‌زمینه کاتلین + گیرنده تماس ورودی + آلارم دقیق بیدارباش) و گردش‌کار گیت‌هاب (<code dir="ltr">.github/workflows/build-apk.yml</code>) داخل کدهای این برنامه آماده شده است.
             </p>
+            <p className="mt-2 text-xs leading-6 text-slate-600 dark:text-slate-300 max-w-3xl">
+              برای اعلام متن پیامک جدید و نام تماس‌گیرنده، اندروید باید هم‌صدا را با انتخاب صریح شما به‌عنوان دستیار پیش‌فرض ثبت کند. مجوزهای حساس فقط پس از این انتخاب درخواست می‌شوند. مجوز گزارش تماس فقط برای دریافت شماره تماس ورودی از اعلان سیستمی استفاده می‌شود و برنامه تاریخچه تماس‌ها را نمی‌خواند. با لغو نقش دستیار، پردازش پیامک و شماره تماس متوقف می‌شود. برای حفاظت از متن پیامک و اطلاعات تماس، اعلام این موارد از API گفتار ابری هم‌صدا عبور نمی‌کند و از موتور محلی استفاده می‌کند؛ اگر Android به موتور گفتار سیستمی برگردد، سیاست همان ارائه‌دهنده اعمال می‌شود. انتخاب نقش و مجوزها همیشه در کنترل شماست.
+            </p>
           </div>
 
           <div className="shrink-0 flex flex-wrap gap-2">
@@ -825,19 +843,24 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
               <>
                 <button
                   type="button"
+                  onClick={async () => {
+                    const result = await openAssistantSettingsNative();
+                    onStatusToast(result.ok
+                      ? 'تنظیمات دستیار گوشی باز شد؛ در بخش دستیار دیجیتال، هم‌صدا را انتخاب کن.'
+                      : (result.message || 'تنظیمات دستیار باز نشد؛ از دکمه درخواست دستیار استفاده کن.'));
+                  }}
+                  className="min-h-[44px] px-4 py-2.5 rounded-xl border border-emerald-700 text-emerald-800 dark:text-emerald-300 dark:border-emerald-700 text-xs sm:text-sm font-semibold flex items-center gap-2 cursor-pointer"
+                >
+                  <Smartphone className="w-4 h-4" />
+                  <span>رفتن مستقیم به تنظیمات دستیار</span>
+                </button>
+                <button
+                  type="button"
                   onClick={onRequestNativePermissions}
                   className="min-h-[44px] px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs sm:text-sm font-semibold flex items-center gap-2 cursor-pointer"
                 >
                   <ShieldCheck className="w-4 h-4" />
-                  <span>مجوز تماس، باتری و Autostart</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={onOpenNotificationListenerSettings}
-                  className="min-h-[44px] px-3.5 py-2.5 rounded-xl bg-slate-900 dark:bg-emerald-800 hover:bg-slate-800 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Bell className="w-4 h-4" />
-                  <span>فعال‌سازی خواندن پیامک و RCS (اعلان‌ها)</span>
+                  <span>تنظیم دستیار پیش‌فرض و مجوزها</span>
                 </button>
                 <button
                   type="button"
@@ -890,10 +913,10 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
         {nativeCaps.isNative && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 pt-2">
             {[
+              {label: 'دستیار پیش‌فرض اندروید', ok: nativeCaps.assistantRoleHeld},
               {label: 'تشخیص تماس ورودی', ok: nativeCaps.phoneState},
-              {label: 'شماره تماس‌گیرنده', ok: nativeCaps.callLog},
+              {label: 'شماره تماس‌گیرنده (مجوز حساس)', ok: Boolean(nativeCaps.assistantRoleHeld && nativeCaps.callLog && nativeCaps.phoneState)},
               {label: 'خواندن پیامک (SMS)', ok: nativeCaps.sms},
-              {label: 'اعلان پیامک / RCS', ok: nativeCaps.notificationListener},
               {label: 'خواندن نام مخاطبین', ok: nativeCaps.contacts},
               {label: 'اعلان‌های اندروید', ok: nativeCaps.notifications},
               {label: 'معافیت باتری MIUI/HyperOS', ok: nativeCaps.batteryIgnored},

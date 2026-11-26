@@ -28,7 +28,11 @@ service cloud.firestore {
 
     function isSpaceMember(spaceId) {
       return isVerifiedUser()
-        && exists(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.auth.uid));
+        && (
+          exists(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.auth.uid))
+          || (exists(/databases/$(database)/documents/spaces/$(spaceId))
+            && get(/databases/$(database)/documents/spaces/$(spaceId)).data.ownerUid == request.auth.uid)
+        );
     }
 
     function isValidUserProfile(data, userId) {
@@ -341,6 +345,7 @@ service cloud.firestore {
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'activeSpaceId', 'updatedAt']);
+      allow delete: if isVerifiedUser() && isValidId(userId) && request.auth.uid == userId;
     }
 
     match /spaces/{spaceId} {
@@ -363,7 +368,8 @@ service cloud.firestore {
         && incoming().ownerEmail == request.auth.token.email
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time;
-      allow update: if isVerifiedUser()
+      allow update: if (
+        isVerifiedUser()
         && isValidId(spaceId)
         && isValidSpace(incoming())
         && existing().ownerUid == request.auth.uid
@@ -371,11 +377,31 @@ service cloud.firestore {
         && incoming().ownerEmail == existing().ownerEmail
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
-        && incoming().diff(existing()).affectedKeys().hasOnly(['partnerEmail', 'title', 'updatedAt']);
+        && incoming().diff(existing()).affectedKeys().hasOnly(['partnerEmail', 'title', 'updatedAt'])
+      ) || (
+        isVerifiedUser()
+        && isValidId(spaceId)
+        && isValidSpace(incoming())
+        && existing().partnerEmail == request.auth.token.email
+        && incoming().partnerEmail == ''
+        && incoming().ownerUid == existing().ownerUid
+        && incoming().ownerEmail == existing().ownerEmail
+        && incoming().createdAt == existing().createdAt
+        && incoming().title == existing().title
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['partnerEmail', 'updatedAt'])
+      );
+      allow delete: if isVerifiedUser() && isValidId(spaceId) && existing().ownerUid == request.auth.uid;
 
       match /members/{memberUid} {
-        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(memberUid) && isSpaceMember(spaceId);
-        allow list: if isVerifiedUser() && isSpaceMember(spaceId) && resource.data.uid is string;
+        allow get: if isVerifiedUser()
+          && isValidId(spaceId)
+          && isValidId(memberUid)
+          && (memberUid == request.auth.uid || isSpaceMember(spaceId));
+        allow list: if isVerifiedUser()
+          && isSpaceMember(spaceId)
+          && (get(/databases/$(database)/documents/spaces/$(spaceId)).data.ownerUid == request.auth.uid
+            || resource.data.uid is string);
         allow create: if isVerifiedUser()
           && isValidId(spaceId)
           && isValidId(memberUid)
@@ -390,6 +416,10 @@ service cloud.firestore {
               && ('partnerEmail' in get(/databases/$(database)/documents/spaces/$(spaceId)).data)
               && get(/databases/$(database)/documents/spaces/$(spaceId)).data.partnerEmail == request.auth.token.email)
           );
+        allow delete: if isVerifiedUser()
+          && isValidId(spaceId)
+          && isValidId(memberUid)
+          && (memberUid == request.auth.uid || get(/databases/$(database)/documents/spaces/$(spaceId)).data.ownerUid == request.auth.uid);
       }
 
       match /goals/{goalId} {
@@ -517,6 +547,10 @@ service cloud.firestore {
           && isValidSpaceSettings(incoming())
           && incoming().updatedAt == request.time
           && incoming().diff(existing()).affectedKeys().hasOnly(['theme', 'defaultVoice', 'speechRate', 'myName', 'partnerName', 'assistantName', 'assistantWakeWordEnabled', 'backgroundKeepAlive', 'announceCalls', 'announceSms', 'autoOpenMorning', 'nightMovieAutoCheck', 'nightMovieTime', 'updatedByUid', 'updatedAt']);
+        allow delete: if isVerifiedUser()
+          && isValidId(spaceId)
+          && configId == 'settings'
+          && get(/databases/$(database)/documents/spaces/$(spaceId)).data.ownerUid == request.auth.uid;
       }
 
       match /shopping/{itemId} {

@@ -31,8 +31,10 @@ import {
 import {useBackgroundScheduler} from './hooks/useBackgroundScheduler';
 import {useOnlineStatus} from './hooks/usePWAInstall';
 import {apiUrl, getCloudApiBaseUrl, safeReadJsonResponse} from './services/apiConfig';
+import {clearCustomVoiceDb} from './services/clearCustomVoiceDb';
 import {
   buildCallerRingtoneWav,
+  clearAudioLibraryDb,
   getAudioClipBuffer,
   hashTextKey,
   listAudioClips,
@@ -71,13 +73,16 @@ import {
   pushVaultNoteToCloud,
   subscribeToCoupleSpace,
   uploadLocalBundleToSpace,
+  deleteUserCloudData,
   type CoupleSpaceInfo,
 } from './services/coupleSyncService';
 import {buildDailyBriefingText, fetchQuickWeatherBrief} from './services/dailyBriefing';
 import {
   auth,
   checkRedirectSignIn,
+  deleteCurrentCloudAuthUser,
   onAuthStateChanged,
+  reauthenticateCloudUser,
   signInWithGoogleSmart,
   signOutFirebase,
 } from './services/firebaseClient';
@@ -85,9 +90,9 @@ import {
   setActiveOfflineEngineNative,
   getNativeCapabilities,
   openAppInfoSettings,
-  openNotificationListenerSettings,
   openXiaomiOtherPermissions,
   precacheNativeWav,
+  requestAssistantRoleNative,
   requestNativePermissionsAndMiuiSetup,
   saveLearnedPhoneticsNative,
   saveSmsAnnouncementPolicyNative,
@@ -370,6 +375,8 @@ export default function App() {
   // Native Android state
   const [nativeCaps, setNativeCaps] = useState<NativeCapabilities>({
     isNative: false,
+    assistantRoleAvailable: false,
+    assistantRoleHeld: false,
     phoneState: false,
     callLog: false,
     contacts: false,
@@ -1190,6 +1197,46 @@ export default function App() {
     }
   };
 
+  const handleDeleteCloudAccount = async () => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      showToast('ابتدا وارد حساب همگام‌سازی شوید.');
+      return;
+    }
+    const confirmed = window.confirm(
+      'حذف حساب و داده‌های ابری برگشت‌پذیر نیست. اگر مالک فضای مشترک باشید، همه اطلاعات آن فضا برای شما و همراهتان حذف می‌شود. اگر عضو همراه باشید، فقط اطلاعات ثبت‌شده توسط حساب شما و عضویت شما حذف می‌شود. آیا مطمئن هستید؟'
+    );
+    if (!confirmed) return;
+
+    setCloudBusy(true);
+    try {
+      const verifiedUser = await reauthenticateCloudUser();
+      await deleteUserCloudData(verifiedUser, spaceInfo?.spaceId);
+      await deleteCurrentCloudAuthUser();
+      try {
+        await clearAudioLibraryDb();
+        await clearCustomVoiceDb();
+      } catch (cleanupError) {
+        console.warn('Local voice cache cleanup after account deletion failed:', cleanupError);
+      }
+      try {
+        Object.keys(localStorage).forEach((key) => {
+          if (key.startsWith('rmz_') || key.startsWith('hamseda_')) {
+            localStorage.removeItem(key);
+          }
+        });
+      } catch (cleanupError) {
+        console.warn('Local storage cleanup after account deletion failed:', cleanupError);
+      }
+      showToast('حساب ابری و داده‌های وابسته حذف شد.');
+      window.location.reload();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'حذف حساب کامل نشد. دوباره تلاش کنید.');
+    } finally {
+      setCloudBusy(false);
+    }
+  };
+
   const handleInvitePartner = async (email: string) => {
     if (!spaceInfo) return;
     setCloudBusy(true);
@@ -1247,19 +1294,24 @@ export default function App() {
   };
 
   const handleRequestNativePermissions = async () => {
+    // Ask for the system Assistant role first. SMS and Call Log permissions are
+    // requested only after the user explicitly accepts this Android role.
+    const role = await requestAssistantRoleNative();
+    if (role?.available && !role.held) {
+      showToast(role.message || 'برای فعال‌سازی پیامک و گزارش تماس، ابتدا هم‌صدا را به‌عنوان دستیار پیش‌فرض انتخاب کنید.');
+      return;
+    }
     const updated = await requestNativePermissionsAndMiuiSetup();
     if (updated) {
       setNativeCaps(updated);
-      showToast('درخواست مجوزهای تماس، باتری بدون محدودیت و Autostart ارسال شد.');
+      if (role && !role.available) {
+        showToast('این دستگاه نقش دستیار پیش‌فرض را ارائه نمی‌کند؛ مجوزهای پیامک و گزارش تماس درخواست نشدند.');
+      } else {
+        showToast('نقش دستیار و درخواست مجوزهای مجاز انجام شد. انتخاب نقش و مجوزها در اختیار شماست.');
+      }
     }
   };
 
-  const handleOpenNotificationListenerSettings = async () => {
-    const ok = await openNotificationListenerSettings();
-    if (!ok) {
-      showToast('تنظیمات دسترسی اعلان‌ها فقط در نسخه اندروید (APK) در دسترس است.');
-    }
-  };
 
   const handleOpenAppInfoSettings = async () => {
     const ok = await openAppInfoSettings();
@@ -2346,11 +2398,11 @@ export default function App() {
             onDownloadScheduleAlarm={handleDownloadScheduleAlarm}
             onCloudSignIn={handleCloudSignIn}
             onCloudSignOut={handleCloudSignOut}
+            onDeleteAccount={handleDeleteCloudAccount}
             onInvitePartner={handleInvitePartner}
             onJoinSpaceByCode={handleJoinSpaceByCode}
             onPushLocalToCloud={handlePushLocalToCloud}
             onRequestNativePermissions={handleRequestNativePermissions}
-            onOpenNotificationListenerSettings={handleOpenNotificationListenerSettings}
             onOpenAppInfoSettings={handleOpenAppInfoSettings}
             onOpenXiaomiOtherPermissions={handleOpenXiaomiOtherPermissions}
             onStatusToast={showToast}

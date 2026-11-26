@@ -61,6 +61,12 @@ public class IncomingCallReceiver extends BroadcastReceiver {
         }
 
         final Context appCtx = context.getApplicationContext();
+        // Caller-number data is handled only while the user has selected Hamseda
+        // as the Assistant handler; otherwise announce a generic incoming call.
+        if (!RoozhayeNativePlugin.isAssistantRoleHeld(appCtx)) {
+            dispatchCallAnnouncement(appCtx, prefs, null);
+            return;
+        }
         final boolean hasNumberExtra = intent.hasExtra(TelephonyManager.EXTRA_INCOMING_NUMBER);
         final String incomingNumber = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER);
 

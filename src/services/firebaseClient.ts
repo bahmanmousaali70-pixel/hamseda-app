@@ -1,11 +1,13 @@
 import {Capacitor} from '@capacitor/core';
 import {initializeApp} from 'firebase/app';
 import {
+  deleteUser,
   getAuth,
   getRedirectResult,
   GoogleAuthProvider,
   onAuthStateChanged,
   signInWithPopup,
+  reauthenticateWithPopup,
   signInWithRedirect,
   signOut,
   type User,
@@ -182,6 +184,25 @@ export async function checkRedirectSignIn(): Promise<User | null> {
     console.warn('Redirect sign-in notice:', err);
     return null;
   }
+}
+
+export async function reauthenticateCloudUser(): Promise<User> {
+  if (Capacitor.isNativePlatform()) {
+    throw new Error('برای حذف حساب ابری، لطفاً سایت هم‌صدا را در مرورگر باز کنید.');
+  }
+  const user = auth.currentUser;
+  if (!user) throw new Error('ابتدا وارد حساب همگام‌سازی شوید.');
+  if (!user.providerData.some((provider) => provider.providerId === 'google.com')) {
+    throw new Error('روش ورود این حساب برای تأیید مجدد پشتیبانی نمی‌شود.');
+  }
+  await reauthenticateWithPopup(user, googleProvider);
+  return auth.currentUser ?? user;
+}
+
+export async function deleteCurrentCloudAuthUser(): Promise<void> {
+  const user = auth.currentUser;
+  if (!user) throw new Error('حساب فعالی برای حذف وجود ندارد.');
+  await deleteUser(user);
 }
 
 export async function signOutFirebase(): Promise<void> {

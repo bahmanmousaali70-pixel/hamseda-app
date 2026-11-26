@@ -9,6 +9,8 @@ import type {
 
 export interface NativeCapabilities {
   isNative: boolean;
+  assistantRoleAvailable: boolean;
+  assistantRoleHeld: boolean;
   phoneState: boolean;
   callLog: boolean;
   contacts: boolean;
@@ -25,8 +27,6 @@ export interface NativeCapabilities {
   sendSms?: boolean;
   writeSettings?: boolean;
   camera?: boolean;
-  location?: boolean;
-  accessibility?: boolean;
 }
 
 interface NativeSchedulePayload {
@@ -54,10 +54,11 @@ interface NativeCallerPayload {
 
 interface RoozhayeNativePlugin {
   getNativeCapabilities(): Promise<NativeCapabilities>;
+  requestAssistantRole(): Promise<{available: boolean; held: boolean; accepted?: boolean; message?: string}>;
+  openAssistantSettings(): Promise<{ok: boolean; openedAction?: string; message?: string}>;
   requestPermissionsAndMiuiSetup(): Promise<NativeCapabilities>;
   requestSmsPermissionsOnly(): Promise<NativeCapabilities>;
   openBatteryAndAutostartSettings(): Promise<NativeCapabilities>;
-  openNotificationListenerSettings(): Promise<{ok: boolean}>;
   openAppInfoSettings(): Promise<{ok: boolean}>;
   openXiaomiOtherPermissions(): Promise<{ok: boolean}>;
   setKeepAliveService(options: {enabled: boolean}): Promise<{running: boolean}>;
@@ -88,7 +89,6 @@ interface RoozhayeNativePlugin {
   wasScheduleFiredNatively(options: {scheduleId: string; todayKey: string}): Promise<{fired: boolean}>;
   markScheduleFiredNatively(options: {scheduleId: string; todayKey: string}): Promise<{ok: boolean}>;
   stopNativeAudio(): Promise<{ok: boolean}>;
-  openAccessibilitySettings(): Promise<{ok: boolean}>;
   saveBackupJson(options: {
     filename: string;
     content: string;
@@ -233,6 +233,8 @@ export async function getNativeCapabilities(): Promise<NativeCapabilities> {
   if (!isNativeAndroid()) {
     return {
       isNative: false,
+      assistantRoleAvailable: false,
+      assistantRoleHeld: false,
       phoneState: false,
       callLog: false,
       contacts: false,
@@ -254,6 +256,8 @@ export async function getNativeCapabilities(): Promise<NativeCapabilities> {
   } catch {
     return {
       isNative: true,
+      assistantRoleAvailable: false,
+      assistantRoleHeld: false,
       phoneState: false,
       callLog: false,
       contacts: false,
@@ -265,6 +269,25 @@ export async function getNativeCapabilities(): Promise<NativeCapabilities> {
       keepAliveRunning: false,
       exactAlarm: false,
     };
+  }
+}
+
+export async function openAssistantSettingsNative(): Promise<{ok: boolean; message?: string}> {
+  if (!isNativeAndroid()) return {ok: false, message: 'این قابلیت فقط در نسخه اندروید در دسترس است.'};
+  try {
+    const result = await RoozhayeNative.openAssistantSettings();
+    return {ok: Boolean(result.ok), message: result.message};
+  } catch {
+    return {ok: false, message: 'باز کردن تنظیمات دستیار ممکن نشد.'};
+  }
+}
+
+export async function requestAssistantRoleNative(): Promise<{available: boolean; held: boolean; accepted?: boolean; message?: string} | null> {
+  if (!isNativeAndroid()) return null;
+  try {
+    return await RoozhayeNative.requestAssistantRole();
+  } catch {
+    return null;
   }
 }
 
@@ -295,15 +318,6 @@ export async function openBatteryAndAutostartSettingsNative(): Promise<NativeCap
   }
 }
 
-export async function openNotificationListenerSettings(): Promise<boolean> {
-  if (!isNativeAndroid()) return false;
-  try {
-    const res = await RoozhayeNative.openNotificationListenerSettings();
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
 
 export async function openAppInfoSettings(): Promise<boolean> {
   if (!isNativeAndroid()) return false;
@@ -849,12 +863,6 @@ export async function stopListeningNative(): Promise<void> {
   } catch {
     // ignore
   }
-}
-
-export async function openAccessibilitySettingsNative(): Promise<{ok: boolean}> {
-  if (!isNativeAndroid()) return {ok: false};
-  try { return await RoozhayeNative.openAccessibilitySettings(); }
-  catch { return {ok: false}; }
 }
 
 export async function executeDeviceActionNative(options: {

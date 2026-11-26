@@ -5,9 +5,10 @@ import android.app.Activity;
 import android.app.AlarmManager;
 import android.app.DownloadManager;
 import android.app.NotificationManager;
-import android.content.ComponentName;
+import android.app.role.RoleManager;
 import android.content.ContentResolver;
 import android.content.ContentValues;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -96,24 +97,107 @@ public class RoozhayeNativePlugin extends Plugin {
     }
 
     @PluginMethod
-    public void openAccessibilitySettings(PluginCall call) {
-        try {
-            Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            getContext().startActivity(intent);
-            JSObject ret = new JSObject();
-            ret.put("ok", true);
-            call.resolve(ret);
-        } catch (Exception e) {
-            JSObject ret = new JSObject();
-            ret.put("ok", false);
-            call.resolve(ret);
+    public void getNativeCapabilities(PluginCall call) {
+        call.resolve(buildCapsObject());
+    }
+
+    /**
+     * The app must be explicitly selected by the user as the Android Assistant
+     * before requesting Play-restricted SMS and Call Log permissions.
+     */
+    public static boolean isAssistantRoleHeld(Context context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || context == null) return false;
+        RoleManager roleManager = (RoleManager) context.getSystemService(Context.ROLE_SERVICE);
+        return roleManager != null
+                && roleManager.isRoleAvailable(RoleManager.ROLE_ASSISTANT)
+                && roleManager.isRoleHeld(RoleManager.ROLE_ASSISTANT);
+    }
+
+    /** Opens Android's dedicated default voice-assistant settings page, with safe fallbacks. */
+    @PluginMethod
+    public void openAssistantSettings(PluginCall call) {
+        String[] actions = new String[] {
+                "android.settings.VOICE_INPUT_SETTINGS",
+                "android.settings.MANAGE_DEFAULT_APPS_SETTINGS",
+                Settings.ACTION_SETTINGS
+        };
+        for (String action : actions) {
+            try {
+                Intent intent = new Intent(action);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                if (intent.resolveActivity(getContext().getPackageManager()) != null) {
+                    getContext().startActivity(intent);
+                    JSObject result = new JSObject();
+                    result.put("ok", true);
+                    result.put("openedAction", action);
+                    call.resolve(result);
+                    return;
+                }
+            } catch (Exception ignored) {
+                // Try the next system settings entry point.
+            }
         }
+        JSObject result = new JSObject();
+        result.put("ok", false);
+        result.put("message", "باز کردن تنظیمات دستیار این دستگاه ممکن نشد.");
+        call.resolve(result);
     }
 
     @PluginMethod
-    public void getNativeCapabilities(PluginCall call) {
-        call.resolve(buildCapsObject());
+    public void requestAssistantRole(PluginCall call) {
+        JSObject result = new JSObject();
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            result.put("available", false);
+            result.put("held", false);
+            result.put("message", "نقش دستیار پیش‌فرض به اندروید ۱۰ یا بالاتر نیاز دارد.");
+            call.resolve(result);
+            return;
+        }
+        RoleManager roleManager = (RoleManager) getContext().getSystemService(Context.ROLE_SERVICE);
+        if (roleManager == null || !roleManager.isRoleAvailable(RoleManager.ROLE_ASSISTANT)) {
+            result.put("available", false);
+            result.put("held", false);
+            result.put("message", "نقش دستیار در این نسخه اندروید یا دستگاه در دسترس نیست.");
+            call.resolve(result);
+            return;
+        }
+        if (roleManager.isRoleHeld(RoleManager.ROLE_ASSISTANT)) {
+            result.put("available", true);
+            result.put("held", true);
+            result.put("message", "هم‌صدا دستیار پیش‌فرض دستگاه است.");
+            call.resolve(result);
+            return;
+        }
+        try {
+            Intent requestIntent = roleManager.createRequestRoleIntent(RoleManager.ROLE_ASSISTANT);
+            startActivityForResult(call, requestIntent, "handleAssistantRoleResult");
+        } catch (Exception error) {
+            result.put("available", true);
+            result.put("held", isAssistantRoleHeld(getContext()));
+            result.put("requestLaunched", false);
+            result.put("errorType", error.getClass().getSimpleName());
+            result.put("message", "اندروید نتوانست پنجره انتخاب دستیار پیش‌فرض را باز کند. لطفاً از تنظیمات برنامه‌های پیش‌فرض گوشی اقدام کنید.");
+            call.resolve(result);
+        }
+    }
+
+    @ActivityCallback
+    private void handleAssistantRoleResult(PluginCall call, ActivityResult activityResult) {
+        if (call == null) return;
+        boolean held = isAssistantRoleHeld(getContext());
+        int resultCode = activityResult != null ? activityResult.getResultCode() : Integer.MIN_VALUE;
+        JSObject result = new JSObject();
+        result.put("available", true);
+        result.put("held", held);
+        result.put("requestLaunched", true);
+        result.put("activityResultCode", resultCode);
+        result.put("accepted", held && resultCode == Activity.RESULT_OK);
+        result.put("message", held
+                ? "هم‌صدا به‌عنوان دستیار پیش‌فرض انتخاب شد."
+                : resultCode == Activity.RESULT_CANCELED
+                    ? "پنجره انتخاب دستیار باز شد، اما انتخاب تأیید نشد. برای فعال‌شدن امکانات وابسته، هم‌صدا باید دستیار پیش‌فرض شود."
+                    : "درخواست انتخاب دستیار برگشت، اما اندروید انتخاب هم‌صدا را تأیید نکرد. کد نتیجه: " + resultCode);
+        call.resolve(result);
     }
 
     @PluginMethod
@@ -137,12 +221,17 @@ public class RoozhayeNativePlugin extends Plugin {
     @PluginMethod
     public void requestSmsPermissionsOnly(PluginCall call) {
         Context ctx = getContext();
+        if (!isAssistantRoleHeld(ctx)) {
+            // Do not prompt for restricted permissions before Assistant role consent.
+            call.resolve(buildCapsObject());
+            return;
+        }
         List<String> smsPerms = new ArrayList<>();
+        if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED) {
+            smsPerms.add(Manifest.permission.READ_CALL_LOG);
+        }
         if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECEIVE_SMS) != PackageManager.PERMISSION_GRANTED) {
             smsPerms.add(Manifest.permission.RECEIVE_SMS);
-        }
-        if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED) {
-            smsPerms.add(Manifest.permission.READ_SMS);
         }
         if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
             smsPerms.add(Manifest.permission.SEND_SMS);
@@ -161,16 +250,19 @@ public class RoozhayeNativePlugin extends Plugin {
 
     private List<String> collectMissingRuntimePermissions(Context ctx) {
         List<String> needed = new ArrayList<>();
-        String[] basePerms = new String[]{
-                Manifest.permission.READ_PHONE_STATE,
-                Manifest.permission.READ_CALL_LOG,
-                Manifest.permission.READ_CONTACTS,
-                Manifest.permission.RECEIVE_SMS,
-                Manifest.permission.READ_SMS,
-                Manifest.permission.SEND_SMS,
-                Manifest.permission.CALL_PHONE,
-                Manifest.permission.RECORD_AUDIO
-        };
+        // SMS and Call Log permissions are Play-restricted.
+        // Request them only while the user has actively selected Hamseda as Assistant.
+        boolean assistantRoleHeld = isAssistantRoleHeld(ctx);
+        List<String> basePerms = new ArrayList<>();
+        basePerms.add(Manifest.permission.READ_PHONE_STATE);
+        basePerms.add(Manifest.permission.READ_CONTACTS);
+        basePerms.add(Manifest.permission.CALL_PHONE);
+        basePerms.add(Manifest.permission.RECORD_AUDIO);
+        if (assistantRoleHeld) {
+            basePerms.add(Manifest.permission.RECEIVE_SMS);
+            basePerms.add(Manifest.permission.SEND_SMS);
+            basePerms.add(Manifest.permission.READ_CALL_LOG);
+        }
         for (String perm : basePerms) {
             if (ContextCompat.checkSelfPermission(ctx, perm) != PackageManager.PERMISSION_GRANTED) {
                 needed.add(perm);
@@ -677,7 +769,8 @@ public class RoozhayeNativePlugin extends Plugin {
                         call.resolve(ret);
                         return;
                     }
-                    boolean hasSmsPerm = ContextCompat.checkSelfPermission(ctx, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED;
+                    boolean hasSmsPerm = isAssistantRoleHeld(ctx)
+                            && ContextCompat.checkSelfPermission(ctx, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED;
                     if (hasSmsPerm) {
                         SmsManager smsManager = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
                                 ? ctx.getSystemService(SmsManager.class)
@@ -690,9 +783,8 @@ public class RoozhayeNativePlugin extends Plugin {
                         call.resolve(ret);
                         return;
                     }
-                    if (getActivity() != null) {
-                        ActivityCompat.requestPermissions(getActivity(), new String[]{Manifest.permission.SEND_SMS}, PERM_REQ_CODE + 5);
-                    }
+                    // Without Assistant role (or without the direct-send permission), hand off
+                    // to the user's SMS app. Do not prompt for SEND_SMS from this fallback path.
                     Intent smsIntent = new Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + phone));
                     smsIntent.putExtra("sms_body", smsBody.trim());
                     smsIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -805,7 +897,6 @@ public class RoozhayeNativePlugin extends Plugin {
                     camIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoUri);
                     camIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
                     camIntent.setClipData(android.content.ClipData.newRawUri("Hamseda photo", photoUri));
-                    if (HamsedaAccessibilityService.isConnected()) HamsedaAccessibilityService.armCameraShutter();
                     startActivityForResult(call, camIntent, "handleCameraCaptureResult");
                     return;
                 }
@@ -913,40 +1004,12 @@ public class RoozhayeNativePlugin extends Plugin {
                     return;
                 }
                 case "close_app": {
-                    if (HamsedaAccessibilityService.performGlobalHome()) {
-                        ret.put("ok", true);
-                        ret.put("message", "از برنامه خارج شدم و به صفحه اصلی برگشتم.");
-                    } else {
-                        Intent settingsIntent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
-                        settingsIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                        ctx.startActivity(settingsIntent);
-                        ret.put("ok", false);
-                        ret.put("needsAccessibility", true);
-                        ret.put("message", "برای کنترل برنامه‌ها، سرویس دسترس‌پذیری هم‌صدا را در این صفحه فعال کن.");
-                    }
-                    call.resolve(ret);
-                    return;
-                }
-                case "accessibility_click": {
-                    String label = queryArg.trim();
-                    boolean clicked = HamsedaAccessibilityService.clickNodeByLabel(label);
-                    ret.put("ok", clicked);
-                    ret.put("message", clicked ? "روی " + label + " زدم." : "این گزینه روی صفحه پیدا نشد؛ صفحه را باز و دسترس‌پذیری را فعال کن.");
-                    call.resolve(ret);
-                    return;
-                }
-                case "accessibility_type": {
-                    boolean typed = HamsedaAccessibilityService.setTextInFocusedField(queryArg);
-                    ret.put("ok", typed);
-                    ret.put("message", typed ? "متن در کادر فعال نوشته شد." : "کادر نوشتاری فعالی پیدا نکردم.");
-                    call.resolve(ret);
-                    return;
-                }
-                case "accessibility_scroll": {
-                    boolean down = !"up".equalsIgnoreCase(queryArg);
-                    boolean scrolled = HamsedaAccessibilityService.scrollActiveWindow(down);
-                    ret.put("ok", scrolled);
-                    ret.put("message", scrolled ? (down ? "صفحه را پایین بردم." : "صفحه را بالا بردم.") : "صفحه قابل پیمایش پیدا نشد.");
+                    Activity activity = getActivity();
+                    boolean movedToBackground = activity != null && activity.moveTaskToBack(true);
+                    ret.put("ok", movedToBackground);
+                    ret.put("message", movedToBackground
+                            ? "هم‌صدا به پس‌زمینه رفت."
+                            : "خروج از برنامه در این دستگاه در دسترس نیست.");
                     call.resolve(ret);
                     return;
                 }
@@ -1303,37 +1366,6 @@ public class RoozhayeNativePlugin extends Plugin {
         return recordedFile.getAbsolutePath();
     }
 
-    @PluginMethod
-    public void openNotificationListenerSettings(PluginCall call) {
-        Context ctx = getContext();
-        boolean launched = false;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            try {
-                Intent detailIntent = new Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS);
-                detailIntent.putExtra(
-                        Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME,
-                        new ComponentName(ctx, NotificationSmsListenerService.class).flattenToString()
-                );
-                detailIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                ctx.startActivity(detailIntent);
-                launched = true;
-            } catch (Exception ignored) {
-            }
-        }
-        if (!launched) {
-            try {
-                Intent intent = new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS);
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                ctx.startActivity(intent);
-                launched = true;
-            } catch (Exception ignored) {
-                launched = openAppDetailsInternal(ctx);
-            }
-        }
-        JSObject ret = new JSObject();
-        ret.put("ok", launched);
-        call.resolve(ret);
-    }
 
     @PluginMethod
     public void openAppInfoSettings(PluginCall call) {
@@ -1882,7 +1914,6 @@ public class RoozhayeNativePlugin extends Plugin {
             }
             call.resolve(ret);
         } else {
-            HamsedaAccessibilityService.disarmCameraShutter();
             JSObject ret = new JSObject();
             ret.put("ok", false);
             ret.put("cancelled", true);
@@ -2160,17 +2191,25 @@ public class RoozhayeNativePlugin extends Plugin {
         Context ctx = getContext();
         JSObject obj = new JSObject();
         obj.put("isNative", true);
+        boolean assistantRoleAvailable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                && ctx.getSystemService(Context.ROLE_SERVICE) instanceof RoleManager
+                && ((RoleManager) ctx.getSystemService(Context.ROLE_SERVICE)).isRoleAvailable(RoleManager.ROLE_ASSISTANT);
+        boolean assistantRoleHeld = isAssistantRoleHeld(ctx);
+        obj.put("assistantRoleAvailable", assistantRoleAvailable);
+        obj.put("assistantRoleHeld", assistantRoleHeld);
         obj.put("phoneState", ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED);
-        obj.put("callLog", ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED);
+        // READ_CALL_LOG is used only to receive the incoming caller number in PHONE_STATE broadcasts.
+        // No call-history provider query or call-log browsing is implemented.
+        obj.put("callLog", assistantRoleHeld
+                && ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED);
         obj.put("contacts", ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED);
-        obj.put("sms", ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
-                && ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED);
+        obj.put("sms", assistantRoleHeld
+                && ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED);
         obj.put("microphone", ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED);
         obj.put("callPhone", ContextCompat.checkSelfPermission(ctx, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED);
-        obj.put("sendSms", ContextCompat.checkSelfPermission(ctx, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED);
+        obj.put("sendSms", assistantRoleHeld
+                && ContextCompat.checkSelfPermission(ctx, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED);
         obj.put("camera", ContextCompat.checkSelfPermission(ctx, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED);
-        obj.put("location", ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                || ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED);
 
         boolean dndOk = true;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -2208,7 +2247,6 @@ public class RoozhayeNativePlugin extends Plugin {
         }
         obj.put("exactAlarm", exactOk);
         obj.put("writeSettings", Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.System.canWrite(ctx));
-        obj.put("accessibility", HamsedaAccessibilityService.isConnected());
         return obj;
     }
 

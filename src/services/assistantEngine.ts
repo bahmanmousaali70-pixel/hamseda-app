@@ -496,26 +496,6 @@ export function parseOfflineAssistantCommand(
   }
 
 
-  const typeMatch = commandRaw.match(/^(?:تایپ کن|بنویس توی کادر|تو کادر بنویس)\s+(.+)$/);
-  if (typeMatch && typeMatch[1].trim()) {
-    return {action: 'accessibility_type', query: typeMatch[1].trim(),
-      replyText: 'متن را در کادر فعال می‌نویسم.'};
-  }
-  if (/^(برو پایین|صفحه رو پایین ببر|اسکرول پایین|پایین تر برو)$/.test(norm)) {
-    return {action: 'accessibility_scroll', query: 'down', replyText: 'صفحه را پایین می‌برم.'};
-  }
-  if (/^(برو بالا|صفحه رو بالا ببر|اسکرول بالا|بالاتر برو)$/.test(norm)) {
-    return {action: 'accessibility_scroll', query: 'up', replyText: 'صفحه را بالا می‌برم.'};
-  }
-
-  // Natural UI interaction: "روی ارسال بزن", "روی جستجو کلیک کن".
-  const tapMatch = commandRaw.match(/(?:روی|روى|رو)\s+(.+?)\s+(?:بزن|کلیک کن|لمس کن|انتخاب کن)$/);
-  if (tapMatch && tapMatch[1].trim().length > 1) {
-    const label = tapMatch[1].trim();
-    return {action: 'accessibility_click', query: label,
-      replyText: `روی «${label}» می‌زنم.`};
-  }
-
   // 5. Ringer / Silent / Vibrate / Normal
   if (/(سایلنت|حالت سکوت|گوشی رو بی صدا|گوشی را بی صدا|ساکت کن گوشی)/.test(norm)) {
     return {

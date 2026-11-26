@@ -1,0 +1,37 @@
+name: Deploy Firestore security rules
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_deploy:
+        description: Deploy firestore.rules to the configured Hamseda database
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-rules:
+    if: github.ref == 'refs/heads/main' && inputs.confirm_deploy == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate Firebase deployment credential
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: |
+          if [ -z "$FIREBASE_TOKEN" ]; then
+            echo "::error::Add the FIREBASE_TOKEN repository secret before deploying rules."
+            exit 1
+          fi
+      - name: Deploy Firestore rules to the configured named database
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: npx --yes firebase-tools@latest deploy --only firestore:rules --project modified-transport-wv0ns --non-interactive

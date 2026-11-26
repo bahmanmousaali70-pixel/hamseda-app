@@ -1,0 +1,65 @@
+name: Dependency security audit
+
+on:
+  push:
+    branches: ['chore/**']
+    paths:
+      - 'package.json'
+      - 'bun.lock'
+      - '.github/workflows/dependency-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bun-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.0'
+
+      - name: Resolve and refresh the canonical Bun lockfile
+        run: bun install --lockfile-only --ignore-scripts
+
+      - name: Audit the exact Bun lockfile dependency graph
+        shell: bash
+        run: |
+          set +e
+          bun audit --json > bun-audit-report.json
+          AUDIT_EXIT=$?
+          set -e
+          echo "bun audit exit code: $AUDIT_EXIT"
+          echo "Bun version: $(bun --version)"
+          echo "Lockfile SHA256:"
+          sha256sum bun.lock
+          echo "Audit report:"
+          cat bun-audit-report.json
+
+      - name: Upload canonical lockfile and audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: hamseda-bun-security-review
+          path: |
+            bun.lock
+            bun-audit-report.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Commit refreshed canonical Bun lockfile
+        shell: bash
+        run: |
+          if ! git diff --quiet -- bun.lock; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add bun.lock
+            git commit -m "chore: refresh canonical Bun lockfile"
+            git push
+          else
+            echo "bun.lock already matches package.json and overrides."
+          fi

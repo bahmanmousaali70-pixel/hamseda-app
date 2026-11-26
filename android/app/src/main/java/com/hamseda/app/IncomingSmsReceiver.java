@@ -36,6 +36,8 @@ public class IncomingSmsReceiver extends BroadcastReceiver {
         if (intent == null || !Telephony.Sms.Intents.SMS_RECEIVED_ACTION.equals(intent.getAction())) {
             return;
         }
+        // Stop processing SMS immediately if the user removes Hamseda as Assistant.
+        if (!RoozhayeNativePlugin.isAssistantRoleHeld(context)) return;
 
         SharedPreferences prefs = context.getSharedPreferences("rmz_native_prefs", Context.MODE_PRIVATE);
         if (!prefs.getBoolean("announce_sms_enabled", true)) {
@@ -87,19 +89,18 @@ public class IncomingSmsReceiver extends BroadcastReceiver {
                     ? "پیامک جدید"
                     : ("پیامک جدید: " + senderName));
 
-        CallAnnouncerService.announce(
+        CallAnnouncerService.announcePrivate(
                 context.getApplicationContext(),
                 notifLabel,
                 spoken,
                 voiceName,
                 isMale,
-                1,
-                false
+                1
         );
     }
 
 
-    // On-device checks only: message text and links are never uploaded to a third party.
+    // Sender lookup and risk checks run on-device. SMS announcements bypass Hamseda's remote TTS endpoint.
     private String detectSmsRisk(String body) {
         if (body == null || body.trim().isEmpty()) return "";
         String text = body.toLowerCase();
