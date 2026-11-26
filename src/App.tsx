@@ -31,10 +31,8 @@ import {
 import {useBackgroundScheduler} from './hooks/useBackgroundScheduler';
 import {useOnlineStatus} from './hooks/usePWAInstall';
 import {apiUrl, getCloudApiBaseUrl, safeReadJsonResponse} from './services/apiConfig';
-import {clearCustomVoiceDb} from './services/clearCustomVoiceDb';
 import {
   buildCallerRingtoneWav,
-  clearAudioLibraryDb,
   getAudioClipBuffer,
   hashTextKey,
   listAudioClips,
@@ -54,7 +52,6 @@ import {
   deleteSpecialEventFromCloud,
   deleteVaultNoteFromCloud,
   ensureUserAndDiscoverSpace,
-  invitePartnerEmail,
   joinSpaceByCode,
   pushBillToCloud,
   pushCallerToCloud,
@@ -73,18 +70,13 @@ import {
   pushVaultNoteToCloud,
   subscribeToCoupleSpace,
   uploadLocalBundleToSpace,
-  deleteUserCloudData,
   type CoupleSpaceInfo,
 } from './services/coupleSyncService';
 import {buildDailyBriefingText, fetchQuickWeatherBrief} from './services/dailyBriefing';
 import {
   auth,
-  checkRedirectSignIn,
-  deleteCurrentCloudAuthUser,
   onAuthStateChanged,
-  reauthenticateCloudUser,
-  signInWithGoogleSmart,
-  signOutFirebase,
+  ensureAnonymousDeviceIdentity,
 } from './services/firebaseClient';
 import {
   setActiveOfflineEngineNative,
@@ -679,7 +671,6 @@ export default function App() {
 
   // Firebase Auth listener + automatic space discovery & real-time sync
   useEffect(() => {
-    checkRedirectSignIn().catch(() => {});
     let unsubSpace: (() => void) | null = null;
 
     const unsubAuth = onAuthStateChanged(auth, async (user) => {
@@ -691,10 +682,16 @@ export default function App() {
       if (!user) {
         setCloudUserEmail(null);
         setSpaceInfo(null);
+        setCloudBusy(true);
+        void ensureAnonymousDeviceIdentity().catch((err) => {
+          console.warn('Anonymous device identity setup failed:', err);
+          showToast('اتصال همگام‌سازی آماده نشد؛ اطلاعات این گوشی محلی باقی می‌ماند.');
+          setCloudBusy(false);
+        });
         return;
       }
 
-      setCloudUserEmail(user.email ?? user.uid);
+      setCloudUserEmail(user.uid);
       setCloudBusy(true);
       try {
         const discovered = await ensureUserAndDiscoverSpace(user);
@@ -1174,81 +1171,6 @@ export default function App() {
     },
     [buildScheduleText, isOnline, refreshClips, showToast]
   );
-
-  const handleCloudSignIn = async () => {
-    setCloudBusy(true);
-    try {
-      await signInWithGoogleSmart();
-      showToast('ورود انجام شد. فضای مشترک هم‌صدا همگام‌سازی می‌شود.');
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'خطا در ورود با گوگل');
-    } finally {
-      setCloudBusy(false);
-    }
-  };
-
-  const handleCloudSignOut = async () => {
-    setCloudBusy(true);
-    try {
-      await signOutFirebase();
-      showToast('از حساب همگام‌سازی خارج شدید. داده‌های محلی همچنان در گوشی باقی هستند.');
-    } finally {
-      setCloudBusy(false);
-    }
-  };
-
-  const handleDeleteCloudAccount = async () => {
-    const currentUser = auth.currentUser;
-    if (!currentUser) {
-      showToast('ابتدا وارد حساب همگام‌سازی شوید.');
-      return;
-    }
-    const confirmed = window.confirm(
-      'حذف حساب و داده‌های ابری برگشت‌پذیر نیست. اگر مالک فضای مشترک باشید، همه اطلاعات آن فضا برای شما و همراهتان حذف می‌شود. اگر عضو همراه باشید، فقط اطلاعات ثبت‌شده توسط حساب شما و عضویت شما حذف می‌شود. آیا مطمئن هستید؟'
-    );
-    if (!confirmed) return;
-
-    setCloudBusy(true);
-    try {
-      const verifiedUser = await reauthenticateCloudUser();
-      await deleteUserCloudData(verifiedUser, spaceInfo?.spaceId);
-      await deleteCurrentCloudAuthUser();
-      try {
-        await clearAudioLibraryDb();
-        await clearCustomVoiceDb();
-      } catch (cleanupError) {
-        console.warn('Local voice cache cleanup after account deletion failed:', cleanupError);
-      }
-      try {
-        Object.keys(localStorage).forEach((key) => {
-          if (key.startsWith('rmz_') || key.startsWith('hamseda_')) {
-            localStorage.removeItem(key);
-          }
-        });
-      } catch (cleanupError) {
-        console.warn('Local storage cleanup after account deletion failed:', cleanupError);
-      }
-      showToast('حساب ابری و داده‌های وابسته حذف شد.');
-      window.location.reload();
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'حذف حساب کامل نشد. دوباره تلاش کنید.');
-    } finally {
-      setCloudBusy(false);
-    }
-  };
-
-  const handleInvitePartner = async (email: string) => {
-    if (!spaceInfo) return;
-    setCloudBusy(true);
-    try {
-      await invitePartnerEmail(spaceInfo.spaceId, email);
-      showToast(`ایمیل ${email} به فضای مشترک اضافه شد. وقتی همراهتان با این جیمیل وارد شود، به‌صورت خودکار متصل می‌شوید.`);
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'خطا در ثبت ایمیل همراه');
-    } finally {
-      setCloudBusy(false);
-    }
-  };
 
   const handleJoinSpaceByCode = async (spaceCode: string) => {
     if (!auth.currentUser) return;
