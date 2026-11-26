@@ -698,8 +698,14 @@ export default function App() {
         setSpaceInfo(null);
         setCloudBusy(true);
         void ensureAnonymousDeviceIdentity().catch((err) => {
-          console.warn('Anonymous device identity setup failed:', err);
-          showToast('اتصال همگام‌سازی آماده نشد؛ اطلاعات این گوشی محلی باقی می‌ماند.');
+          const authError = err as {code?: string; message?: string};
+          const errorCode = authError?.code || 'unknown';
+          const errorMessage = authError?.message || String(err);
+          console.warn('Anonymous device identity setup failed:', {
+            code: errorCode,
+            message: errorMessage,
+          });
+          showToast(`خطای ورود ناشناس فایربیس: ${errorCode} — ${errorMessage}`);
           setCloudBusy(false);
         });
         return;
