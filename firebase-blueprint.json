@@ -149,7 +149,7 @@
       "description": "Synced app preferences, speaker voice, speech rate, names, call/SMS announcers, morning wake-up, and nightly discovery.",
       "type": "object",
       "properties": {
-        "theme": {"type": "string", "enum": ["light", "dark"]},
+        "theme": {"type": "string", "enum": ["emerald-pearl", "nordic-linen", "espresso-sand", "velvet-night", "plum-noir", "light", "dark"]},
         "defaultVoice": {"type": "string", "enum": ["Kore", "Zephyr", "Puck", "Charon", "Fenrir"]},
         "speechRate": {"type": "number"},
         "myName": {"type": "string", "minLength": 1, "maxLength": 60},
@@ -341,6 +341,48 @@
         "updatedAt": {"type": "string", "format": "date-time"}
       },
       "required": ["id", "title", "area", "intervalDays", "lastDoneDateKey", "nextDueDateKey", "owner", "clientCreatedAt", "authorUid", "updatedByUid", "createdAt", "updatedAt"]
+    },
+    "PartnerAlertRecord": {
+      "title": "PartnerAlertRecord",
+      "description": "Real-time cross-device shopping alarm and vibration ping sent between paired devices.",
+      "type": "object",
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "kind": {"type": "string", "enum": ["shopping_alert"]},
+        "mode": {"type": "string", "enum": ["alarm", "vibrate", "both"]},
+        "senderOwner": {"type": "string", "enum": ["man", "zari"]},
+        "senderName": {"type": "string", "minLength": 1, "maxLength": 60},
+        "senderUid": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "title": {"type": "string", "minLength": 1, "maxLength": 160},
+        "spokenText": {"type": "string", "minLength": 1, "maxLength": 600},
+        "clientCreatedAt": {"type": "number"},
+        "authorUid": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "updatedByUid": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "updatedAt": {"type": "string", "format": "date-time"}
+      },
+      "required": ["id", "kind", "mode", "senderOwner", "senderName", "senderUid", "title", "spokenText", "clientCreatedAt", "authorUid", "updatedByUid", "createdAt", "updatedAt"]
+    },
+    "SponsorAd": {
+      "title": "SponsorAd",
+      "description": "Admin-managed rewarded sponsor banner ad shown for 10 seconds to unlock AI coins.",
+      "type": "object",
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "title": {"type": "string", "minLength": 2, "maxLength": 120},
+        "description": {"type": "string", "minLength": 2, "maxLength": 300},
+        "imageUrl": {"type": "string", "maxLength": 1000},
+        "linkUrl": {"type": "string", "minLength": 8, "maxLength": 1000},
+        "rewardCoins": {"type": "number"},
+        "durationSeconds": {"type": "number"},
+        "active": {"type": "boolean"},
+        "impressions": {"type": "number"},
+        "clicks": {"type": "number"},
+        "createdByUid": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "updatedAt": {"type": "string", "format": "date-time"}
+      },
+      "required": ["id", "title", "description", "imageUrl", "linkUrl", "rewardCoins", "durationSeconds", "active", "impressions", "clicks", "createdByUid", "createdAt", "updatedAt"]
     }
   },
   "firestore": {
@@ -415,6 +457,14 @@
     "/spaces/{spaceId}/chores/{choreId}": {
       "schema": {"$ref": "#/entities/ChoreRecord"},
       "description": "Synced recurring home maintenance chores."
+    },
+    "/spaces/{spaceId}/alerts/{alertId}": {
+      "schema": {"$ref": "#/entities/PartnerAlertRecord"},
+      "description": "Cross-device shopping alarm and vibration alerts between paired devices."
+    },
+    "/sponsorAds/{adId}": {
+      "schema": {"$ref": "#/entities/SponsorAd"},
+      "description": "Admin-managed rewarded sponsor banner ads."
     }
   }
 }

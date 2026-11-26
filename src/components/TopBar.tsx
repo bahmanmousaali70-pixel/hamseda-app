@@ -3,6 +3,7 @@ import type {AppSettings} from '../types/app';
 import {
   AudioLines,
   Car,
+  Coins,
   Download,
   HeartHandshake,
   LayoutGrid,
@@ -18,6 +19,8 @@ import {
   Users,
   X,
 } from 'lucide-react';
+import {APP_THEMES, getThemeMeta} from '../data/themes';
+import {toPersianDigits} from '../data/persianLibrary';
 import type {AppTab, DeviceOwner} from '../types/app';
 import {usePWAInstall} from '../hooks/usePWAInstall';
 
@@ -27,8 +30,10 @@ interface TopBarProps {
   selfName: string;
   assistantName: string;
   theme: AppSettings['theme'];
+  coins: number;
   masterSpeakerEnabled: boolean;
   onSelectTheme: (theme: AppSettings['theme']) => void;
+  onOpenSponsorReward: () => void;
   onToggleMasterSpeaker: () => void;
   onRefreshApp: () => void;
   onSelectTab: (tab: AppTab) => void;
@@ -67,8 +72,10 @@ export const TopBar: React.FC<TopBarProps> = ({
   selfName,
   assistantName,
   theme,
+  coins,
   masterSpeakerEnabled,
   onSelectTheme,
+  onOpenSponsorReward,
   onToggleMasterSpeaker,
   onRefreshApp,
   onSelectTab,
@@ -80,7 +87,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   const [showMoreSheet, setShowMoreSheet] = useState(false);
   const [showThemeMenu, setShowThemeMenu] = useState(false);
 
-  const isDarkTheme = ['dark', 'obsidian-gold', 'royal-navy', 'midnight-purple', 'graphite'].includes(theme);
+  const activeThemeMeta = getThemeMeta(theme);
   const isDrawerTabActive = activeTab === 'gratitude' || activeTab === 'voice' || activeTab === 'sync' || activeTab === 'family';
   const drawerActiveShortLabel =
     activeTab === 'gratitude' ? 'شکر' : activeTab === 'voice' ? 'صوت' : activeTab === 'sync' ? 'تنظیم' : activeTab === 'family' ? 'خانواده' : 'بخش‌ها';
@@ -136,6 +143,16 @@ export const TopBar: React.FC<TopBarProps> = ({
           </nav>
 
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={onOpenSponsorReward}
+              title="موجودی سکه هوش مصنوعی · مشاهده حامی ۱۰ ثانیه‌ای برای دریافت +۳۰ سکه"
+              className="min-h-[40px] px-2.5 sm:px-3 rounded-xl border border-amber-400/45 bg-amber-50/90 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 flex items-center gap-1.5 text-xs font-extrabold cursor-pointer shrink-0 shadow-xs"
+            >
+              <Coins className="w-4 h-4 text-amber-600 dark:text-amber-300 shrink-0" />
+              <span className="font-mono-num tabular-nums">{toPersianDigits(coins)}</span>
+            </button>
+
             <div className="relative">
               <button
                 type="button"
@@ -143,35 +160,28 @@ export const TopBar: React.FC<TopBarProps> = ({
                 aria-label="انتخاب پوسته"
                 aria-expanded={showThemeMenu}
                 title="انتخاب تم و رنگ برنامه"
-                className="min-h-[40px] px-3 rounded-xl border border-[#DFDBD0] dark:border-amber-700/50 bg-white/90 dark:bg-[#171512] text-slate-800 dark:text-amber-200 flex items-center justify-center gap-2 text-xs font-bold cursor-pointer shrink-0 shadow-sm"
+                className="min-h-[40px] px-2.5 sm:px-3 rounded-xl border border-[#DFDBD0] dark:border-amber-700/50 bg-white/90 dark:bg-[#171512] text-slate-800 dark:text-amber-200 flex items-center justify-center gap-2 text-xs font-bold cursor-pointer shrink-0 shadow-sm"
               >
-                <span className="w-3 h-3 rounded-full ring-2 ring-offset-1 ring-current" style={{background: theme === 'obsidian-gold' ? '#c6a15b' : theme === 'royal-navy' ? '#82b7e8' : theme === 'midnight-purple' ? '#b69be8' : theme === 'graphite' ? '#62c7c2' : theme === 'arctic-silver' ? '#8aa6ba' : '#b28b55'}} />
+                <span className="w-3 h-3 rounded-full ring-2 ring-offset-1 ring-current" style={{background: activeThemeMeta.accentColor}} />
                 <span className="hidden sm:inline">پوسته</span>
                 <Moon className="w-4 h-4" />
               </button>
               {showThemeMenu && (
-                <div className="absolute left-0 top-[calc(100%+10px)] z-[70] w-64 rounded-2xl border border-[#DFDBD0] dark:border-amber-800/50 bg-white dark:bg-[#151411] p-2.5 shadow-2xl">
-                  <div className="px-2 pb-2 text-xs font-extrabold text-slate-700 dark:text-amber-100">انتخاب ظاهر هم‌صدا</div>
-                  {([
-                    ['obsidian-gold', 'مشکی و طلایی', '#c6a15b', 'لوکس و تیره'],
-                    ['royal-navy', 'سرمه‌ای سلطنتی', '#82b7e8', 'آبی عمیق'],
-                    ['midnight-purple', 'بنفش نیمه‌شب', '#b69be8', 'بنفش آرام'],
-                    ['graphite', 'گرافیتی', '#62c7c2', 'ذغالی مدرن'],
-                    ['ivory-champagne', 'عاجی شامپاینی', '#b28b55', 'روشن و گرم'],
-                    ['arctic-silver', 'نقره‌ای یخی', '#8aa6ba', 'روشن و خنک'],
-                  ] as const).map(([id, label, color, hint]) => (
+                <div className="absolute left-0 top-[calc(100%+10px)] z-[70] w-68 rounded-2xl border border-[#DFDBD0] dark:border-amber-800/50 bg-white dark:bg-[#151411] p-2.5 shadow-2xl">
+                  <div className="px-2 pb-2 text-xs font-extrabold text-slate-700 dark:text-amber-100">انتخاب ظاهر هم‌صدا (۵ پوسته)</div>
+                  {APP_THEMES.map((t) => (
                     <button
-                      key={id}
+                      key={t.id}
                       type="button"
-                      onClick={() => { onSelectTheme(id); setShowThemeMenu(false); }}
-                      className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-right transition-colors cursor-pointer ${theme === id ? 'bg-amber-100/80 dark:bg-amber-400/15 ring-1 ring-amber-500/50' : 'hover:bg-slate-100 dark:hover:bg-white/5'}`}
+                      onClick={() => { onSelectTheme(t.id); setShowThemeMenu(false); }}
+                      className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-right transition-colors cursor-pointer ${theme === t.id ? 'bg-amber-100/80 dark:bg-amber-400/15 ring-1 ring-amber-500/50' : 'hover:bg-slate-100 dark:hover:bg-white/5'}`}
                     >
-                      <span className="w-5 h-5 rounded-full shrink-0 border border-black/10 shadow-sm" style={{background: color}} />
+                      <span className="w-5 h-5 rounded-full shrink-0 border border-black/15 shadow-sm" style={{background: `linear-gradient(135deg, ${t.accentColor}, ${t.secondaryColor})`}} />
                       <span className="flex-1 min-w-0">
-                        <span className="block text-xs font-bold text-slate-800 dark:text-slate-100">{label}</span>
-                        <span className="block text-[10px] text-slate-500 dark:text-slate-400">{hint}</span>
+                        <span className="block text-xs font-bold text-slate-800 dark:text-slate-100">{t.label}</span>
+                        <span className="block text-[10px] text-slate-500 dark:text-slate-400">{t.hint}</span>
                       </span>
-                      {theme === id && <span className="text-[10px] font-black text-amber-700 dark:text-amber-300">فعال</span>}
+                      {theme === t.id && <span className="text-[10px] font-black text-amber-700 dark:text-amber-300">فعال</span>}
                     </button>
                   ))}
                 </div>

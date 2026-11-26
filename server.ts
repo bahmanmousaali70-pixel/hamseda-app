@@ -1598,24 +1598,24 @@ function buildFallbackMusicQueries(persianMood: string): {
 } {
   const m = persianMood.toLowerCase();
   if (m.includes('آریان') || m.includes('arian')) {
-    return {audiusQuery: 'Arian Band', archiveQuery: '"Arian" OR "Arian Band" OR "گروه آریان"', radioTag: 'persian'};
+    return {audiusQuery: 'Arian Band', archiveQuery: 'Arian Band OR Persian Pop', radioTag: 'persian'};
   }
   if (m.includes('کالکشن') || m.includes('قدیمی') || m.includes('نوستالژی') || m.includes('خاطره')) {
-    return {audiusQuery: 'Persian oldies', archiveQuery: '"Persian oldies" OR "Iranian oldies" OR "Persian pop classics"', radioTag: 'persian'};
+    return {audiusQuery: 'Persian classics', archiveQuery: 'Persian OR Iranian music', radioTag: 'persian'};
   }
   if (m.includes('شجریان') || m.includes('سنتی') || m.includes('همایون')) {
-    return {audiusQuery: 'shajarian', archiveQuery: 'shajarian OR santoor', radioTag: 'persian'};
+    return {audiusQuery: 'shajarian persian', archiveQuery: 'shajarian OR santoor OR tar OR persian', radioTag: 'persian'};
   }
   if (m.includes('پاپ') || m.includes('عاشقانه') || m.includes('ملایم')) {
-    return {audiusQuery: 'persian', archiveQuery: 'persian music', radioTag: 'persian'};
+    return {audiusQuery: 'persian pop', archiveQuery: 'persian music OR iranian', radioTag: 'persian'};
   }
   if (m.includes('پیانو') || m.includes('باران') || m.includes('بی‌کلام') || m.includes('رمانتیک')) {
-    return {audiusQuery: 'relaxing piano instrumental', archiveQuery: 'relaxing piano', radioTag: 'ambient'};
+    return {audiusQuery: 'relaxing piano ambient', archiveQuery: 'relaxing piano OR ambient instrumental', radioTag: 'ambient'};
   }
-  if (m.includes('رادیو')) {
-    return {audiusQuery: 'night chill lounge', archiveQuery: 'persian classical', radioTag: 'chillout'};
+  if (m.includes('رادیو') || m.includes('لایت') || m.includes('آرامش')) {
+    return {audiusQuery: 'chill ambient instrumental', archiveQuery: 'ambient OR persian classical', radioTag: 'chillout'};
   }
-  return {audiusQuery: 'persian chill', archiveQuery: 'persian traditional', radioTag: 'ambient'};
+  return {audiusQuery: 'persian chill', archiveQuery: 'persian OR relaxing instrumental', radioTag: 'ambient'};
 }
 
 async function fetchArchiveFullTracks(query: string): Promise<ServerMusicTrack[]> {
@@ -1642,13 +1642,13 @@ async function fetchArchiveFullTracks(query: string): Promise<ServerMusicTrack[]
         const files = (mJson.result ?? []).filter((f) => {
           const name = String(f.name || '').toLowerCase();
           const secs = parseFloat(String(f.length || '0'));
-          return (name.endsWith('.mp3') || name.endsWith('.ogg')) && (!Number.isFinite(secs) || secs === 0 || secs >= 60);
+          return (name.endsWith('.mp3') || name.endsWith('.ogg')) && (!Number.isFinite(secs) || secs === 0 || secs >= 45);
         });
         const tracksForDoc: ServerMusicTrack[] = [];
         for (const f of files.slice(0, 3)) {
           if (!f.name) continue;
           const secsRaw = parseFloat(String(f.length || '0'));
-          const durationSec = Number.isFinite(secsRaw) && secsRaw >= 60 ? Math.round(secsRaw) : undefined;
+          const durationSec = Number.isFinite(secsRaw) && secsRaw >= 45 ? Math.round(secsRaw) : undefined;
           const cleanName = f.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
           const creator = Array.isArray(doc.creator) ? doc.creator[0] : doc.creator;
           tracksForDoc.push({
@@ -1682,15 +1682,58 @@ const IRANIAN_MUSIC_SEARCH_HOSTS = [
   'beeptunes.com', 'navaak.com',
 ] as const;
 
+const PERSIAN_TO_ENGLISH_MUSIC_TOKENS: Record<string, string[]> = {
+  سنتی: ['persian', 'traditional', 'iranian', 'santoor', 'tar', 'setar'],
+  شجریان: ['shajarian', 'homayoun', 'homayun'],
+  همایون: ['homayoun', 'shajarian'],
+  پیانو: ['piano'],
+  باران: ['rain', 'ambient', 'relaxing'],
+  ملایم: ['soft', 'chill', 'calm', 'relaxing', 'ambient'],
+  آرام: ['calm', 'chill', 'ambient', 'relaxing', 'peaceful'],
+  آرامش: ['relaxing', 'calm', 'meditation', 'ambient'],
+  پاپ: ['pop', 'persian'],
+  ایرانی: ['persian', 'iranian', 'iran'],
+  بی: ['instrumental'],
+  کلام: ['instrumental'],
+  بیکلام: ['instrumental'],
+  رمانتیک: ['romantic', 'love', 'piano'],
+  عاشقانه: ['romantic', 'love', 'persian'],
+  لایت: ['light', 'lounge', 'chill', 'ambient'],
+  آریان: ['arian', 'band'],
+  قدیمی: ['classic', 'oldies', 'persian', 'nostalgia'],
+  نوستالژی: ['nostalgia', 'classic', 'oldies', 'persian'],
+  خاطره: ['nostalgia', 'classic', 'persian'],
+  شاد: ['happy', 'upbeat', 'dance', 'persian'],
+  غمگین: ['sad', 'melancholic', 'piano'],
+  ویولن: ['violin'],
+  گیتار: ['guitar', 'acoustic'],
+  تار: ['tar', 'persian'],
+  سه: ['setar'],
+  سنتور: ['santoor', 'santur'],
+  نی: ['ney', 'flute'],
+};
+
 function musicQueryVariants(raw: string): string[] {
-  const q = raw.replace(/[يى]/g, 'ی').replace(/ك/g, 'ک').replace(/\s+/g, ' ').trim();
-  const cleaned = q.replace(/^(?:لطفا\s*)?(?:آهنگ|موزیک|موسیقی)\s+/,'').trim();
+  const q = raw.replace(/[يى]/g, 'ی').replace(/ك/g, 'ک').replace(/\u200c/g, ' ').replace(/\s+/g, ' ').trim();
+  const cleaned = q.replace(/^(?:لطفا\s*)?(?:آهنگ|موزیک|موسیقی)\s+/, '').trim();
   const variants = [q, cleaned];
-  const searchStopWords = new Set(['آلبوم', 'آلبوم‌های', 'آلبومهای', 'کالکشن', 'کالکشن‌های', 'مجموعه', 'آهنگ', 'آهنگ‌های', 'ترانه', 'گروه', 'خواننده', 'سبک', 'موزیک', 'موسیقی', 'جدید', 'قدیمی', 'های', 'ترین']);
-  const artist = cleaned.split(/\s+/).filter((word) => !searchStopWords.has(word.replace(/[،,.!?؟]/g, ''))).join(' ').trim();
+  const searchStopWords = new Set(['آلبوم', 'آلبوم‌های', 'آلبومهای', 'کالکشن', 'کالکشن‌های', 'مجموعه', 'آهنگ', 'آهنگ‌های', 'ترانه', 'گروه', 'خواننده', 'سبک', 'موزیک', 'موسیقی', 'جدید', 'قدیمی', 'های', 'ترین', 'و', 'بخش', 'برام']);
+  const tokens = cleaned.split(/\s+/).map((word) => word.replace(/[،,.!?؟]/g, '')).filter(Boolean);
+  const artist = tokens.filter((word) => !searchStopWords.has(word)).join(' ').trim();
   if (artist && artist !== cleaned) variants.push(artist);
-  if (/(آریان|arian)/i.test(q)) variants.push('Arian', 'Arian Band', 'گروه آریان آلبوم', 'Arian Band albums');
-  if (/(قدیمی|نوستالژی|خاطره|کالکشن|مجموعه)/.test(q)) variants.push('آهنگ های قدیمی ایرانی آلبوم', 'Persian oldies album', 'Iranian classic albums');
+
+  const mappedEnglish: string[] = [];
+  for (const token of tokens) {
+    const expansions = PERSIAN_TO_ENGLISH_MUSIC_TOKENS[token];
+    if (expansions) {
+      mappedEnglish.push(...expansions.slice(0, 2));
+    }
+  }
+  if (mappedEnglish.length > 0) {
+    variants.push([...new Set(mappedEnglish)].slice(0, 4).join(' '));
+  }
+  if (/(آریان|arian)/i.test(q)) variants.push('Arian', 'Arian Band');
+  if (/(قدیمی|نوستالژی|خاطره|کالکشن|مجموعه)/.test(q)) variants.push('Persian oldies', 'Iranian classic');
   return [...new Set(variants.filter((v) => v.length >= 2))].slice(0, 5);
 }
 
@@ -1772,7 +1815,7 @@ async function searchIranianMusicWeb(query: string): Promise<{tracks: ServerMusi
   }
   const pageTracks = await Promise.all(found.slice(0, 18).map((item) => extractPublicMusicPage(item)));
   return {
-    tracks: pageTracks.filter((item): item is ServerMusicTrack => item !== null).slice(0, 40),
+    tracks: pageTracks.filter((item): item is ServerMusicTrack => item !== null && Boolean(item.streamUrl)).slice(0, 40),
     links: found.slice(0, 16).map((item) => ({title: item.title, url: item.url})),
   };
 }
@@ -1780,39 +1823,44 @@ async function searchIranianMusicWeb(query: string): Promise<{tracks: ServerMusi
 function normalizeMusicMatchText(value: string): string {
   return value.toLowerCase()
     .replace(/[يى]/g, 'ی').replace(/ك/g, 'ک')
+    .replace(/\u200c/g, ' ')
     .replace(/[\u064B-\u065F\u0670]/g, '')
     .replace(/[^\p{L}\p{N}]+/gu, ' ').replace(/\s+/g, ' ').trim();
 }
 
 function rankMusicTrack(track: ServerMusicTrack, rawQuery: string): number {
+  if (!track.streamUrl) return 0;
   const titleArtist = normalizeMusicMatchText([track.title, track.artist].join(' '));
   const metadata = normalizeMusicMatchText([track.album || '', track.tags || ''].join(' '));
   const haystack = `${titleArtist} ${metadata}`.trim();
   if (!haystack) return 0;
   const stopWords = new Set([
     'آهنگ','آهنگهای','آهنگ‌های','موزیک','موسیقی','خواننده','ترانه','لطفا','لطفاً','برای','پخش','کن','بده','برام',
-    'میخوام','میخواهم','میخوام','و','از','با','در','به','یک','the','a','an','please','music','song','songs','track','tracks'
+    'میخوام','میخواهم','و','از','با','در','به','یک','بخش','آرامش','the','a','an','please','music','song','songs','track','tracks'
   ]);
-  const terms = [...new Set(normalizeMusicMatchText(rawQuery).split(' ').filter((word) => word.length > 1 && !stopWords.has(word)))];
-  const queryAliases = /آریان|arian/i.test(rawQuery) ? ['arian', 'band'] : /شجریان|shajarian/i.test(rawQuery) ? ['shajarian'] : [];
-  const matchSets = [terms, queryAliases].filter((set) => set.length > 0);
-  if (matchSets.length === 0) return 0;
+  const rawTerms = normalizeMusicMatchText(rawQuery).split(' ').filter((word) => word.length > 1 && !stopWords.has(word));
+  const terms = [...new Set(rawTerms)];
+  const englishAliases = [...new Set(
+    rawTerms.flatMap((t) => PERSIAN_TO_ENGLISH_MUSIC_TOKENS[t] || [])
+  )];
+  const matchSets = [terms, englishAliases].filter((set) => set.length > 0);
+  if (matchSets.length === 0) return 1;
+
   let bestScore = 0;
   for (const matchTerms of matchSets) {
     let titleMatches = 0;
     let metadataMatches = 0;
     for (const term of matchTerms) {
-    if (titleArtist.includes(term)) titleMatches += 1;
-    else if (metadata.includes(term)) metadataMatches += 1;
-  }
+      if (titleArtist.includes(term)) titleMatches += 1;
+      else if (metadata.includes(term)) metadataMatches += 1;
+    }
     const matched = titleMatches + metadataMatches;
+    if (matched === 0) continue;
     const coverage = matched / matchTerms.length;
-    // Artist/title searches must match every word for short queries; longer descriptions need at least 75% coverage.
-    const requiredCoverage = matchTerms.length <= 2 ? 1 : 0.75;
-    if (coverage < requiredCoverage) continue;
-    // A lone artist/name must occur in the title or artist, never just in generic tags.
-    if (matchTerms.length === 1 && titleMatches === 0) continue;
-    bestScore = Math.max(bestScore, titleMatches * 5 + metadataMatches * 1.5 + coverage * 4);
+    bestScore = Math.max(
+      bestScore,
+      titleMatches * 6 + metadataMatches * 2 + coverage * 4 + (track.artworkUrl ? 0.5 : 0)
+    );
   }
   return bestScore;
 }
@@ -1821,9 +1869,10 @@ async function fetchPlayableMusicPlaylist(moodOrGenre: string, _ai: GoogleGenAI 
   const rawQuery = moodOrGenre.trim().slice(0, 180);
   if (!rawQuery) return {tracks: [], links: []};
   const fallback = buildFallbackMusicQueries(rawQuery);
+  const variants = musicQueryVariants(rawQuery);
   const [iranian, audiusResults, archiveResults] = await Promise.all([
     searchIranianMusicWeb(rawQuery),
-    Promise.allSettled(musicQueryVariants(rawQuery).slice(0, 3).map(async (query) => {
+    Promise.allSettled([...new Set([fallback.audiusQuery, ...variants.slice(0, 3)])].slice(0, 3).map(async (query) => {
       const response = await fetch(
         `https://api.audius.co/v1/tracks/search?query=${encodeURIComponent(query)}&limit=15&app_name=roozhaye`,
         {signal: AbortSignal.timeout(6500)}
@@ -1832,7 +1881,7 @@ async function fetchPlayableMusicPlaylist(moodOrGenre: string, _ai: GoogleGenAI 
       const payload = await response.json();
       return Array.isArray(payload?.data) ? payload.data : [];
     })),
-    Promise.allSettled([fallback.archiveQuery, ...musicQueryVariants(rawQuery).slice(0, 2)].map((query) => fetchArchiveFullTracks(query))),
+    Promise.allSettled([fallback.archiveQuery, ...variants.slice(0, 2)].slice(0, 2).map((query) => fetchArchiveFullTracks(query))),
   ]);
   const tracks: ServerMusicTrack[] = [...iranian.tracks];
   const seen = new Set(tracks.map((track) => track.id));
@@ -1841,15 +1890,18 @@ async function fetchPlayableMusicPlaylist(moodOrGenre: string, _ai: GoogleGenAI 
     for (const item of result.value) {
       if (!item?.id || !item?.title) continue;
       const duration = typeof item.duration === 'number' ? item.duration : 0;
-      if (duration > 0 && duration < 60) continue;
+      if (duration > 0 && duration < 45) continue;
       const id = `audius_${item.id}`;
       if (seen.has(id)) continue;
       seen.add(id);
       tracks.push({
-        id, title: String(item.title), artist: String(item.user?.name || item.user?.handle || 'Audius Artist'),
+        id,
+        title: String(item.title),
+        artist: String(item.user?.name || item.user?.handle || 'Audius Artist'),
         artworkUrl: item.artwork?.['150x150'] || item.artwork?.['480x480'] || undefined,
         streamUrl: `https://api.audius.co/v1/tracks/${encodeURIComponent(item.id)}/stream?app_name=roozhaye`,
-        durationSec: duration >= 60 ? duration : undefined, source: 'audius',
+        durationSec: duration >= 45 ? duration : undefined,
+        source: 'audius',
         externalUrl: item.permalink ? `https://audius.co${item.permalink}` : undefined,
       });
     }
@@ -1857,17 +1909,18 @@ async function fetchPlayableMusicPlaylist(moodOrGenre: string, _ai: GoogleGenAI 
   for (const result of archiveResults) {
     if (result.status !== 'fulfilled') continue;
     for (const track of result.value) {
-      if (seen.has(track.id)) continue;
+      if (!track.streamUrl || seen.has(track.id)) continue;
       seen.add(track.id);
       tracks.push(track);
     }
   }
-  const ranked = tracks
-    .map((track) => ({track, score: rankMusicTrack(track, rawQuery)}))
+  const scored = tracks.map((track) => ({track, score: rankMusicTrack(track, rawQuery)}));
+  const strictlyMatched = scored
     .filter((entry) => entry.score > 0)
     .sort((a, b) => b.score - a.score)
     .map((entry) => entry.track);
-  return {tracks: ranked.slice(0, 35), links: iranian.links};
+  const finalTracks = strictlyMatched.length > 0 ? strictlyMatched : tracks.filter((t) => Boolean(t.streamUrl));
+  return {tracks: finalTracks.slice(0, 35), links: iranian.links};
 }
 app.post('/api/radio-stations', async (req, res) => {
   const category = typeof req.body?.category === 'string' ? req.body.category : 'iran';
@@ -2020,8 +2073,13 @@ app.get('/api/audio-proxy', async (req, res) => {
     return;
   }
 
+  // Live radio and full tracks can stream continuously for hours; disable Node request/socket idle timeout.
+  req.setTimeout(0);
+  res.setTimeout(0);
+  req.socket?.setKeepAlive?.(true, 15000);
+
   const controller = new AbortController();
-  const connectTimer = setTimeout(() => controller.abort(), 12000);
+  const connectTimer = setTimeout(() => controller.abort(), 14000);
   req.on('close', () => {
     clearTimeout(connectTimer);
     controller.abort();
@@ -2080,8 +2138,19 @@ app.post('/api/night-discover', async (req, res) => {
     try {
       const discovery = await fetchPlayableMusicPlaylist(moodOrGenre || 'پیانو و موسیقی آرامش‌بخش ایرانی', ai ?? betaAi);
       const tracks = discovery.tracks;
-      const links = tracks.filter((t) => t.externalUrl).slice(0, 6)
-        .map((t) => ({title: `${t.title} — ${t.artist}`, url: t.externalUrl!}));
+      const seenLinks = new Set<string>();
+      const links: {title: string; url: string}[] = [];
+      for (const l of discovery.links) {
+        if (!l.url || seenLinks.has(l.url)) continue;
+        seenLinks.add(l.url);
+        links.push(l);
+      }
+      for (const t of tracks) {
+        if (t.externalUrl && !seenLinks.has(t.externalUrl)) {
+          seenLinks.add(t.externalUrl);
+          links.push({title: `${t.title} — ${t.artist}`, url: t.externalUrl});
+        }
+      }
 
       const summaryList = tracks
         .slice(0, 5)
@@ -3818,8 +3887,12 @@ async function startServer() {
   }
 
   const httpServer = http.createServer(app);
+  // Keep long-lived audio/radio proxy streams open without Node's 5-minute requestTimeout cutting them off.
+  httpServer.requestTimeout = 0;
+  httpServer.keepAliveTimeout = 65000;
+  httpServer.headersTimeout = 66000;
   httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`Roozhaye Man o Zari server running on http://0.0.0.0:${PORT}`);
+    console.log(`Hamseda server running on http://0.0.0.0:${PORT}`);
   });
 }
 

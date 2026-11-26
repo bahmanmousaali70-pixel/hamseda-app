@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useRef, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {
   BellRing,
   Check,
@@ -28,9 +28,11 @@ import {
   Volume2,
 } from 'lucide-react';
 import {toPersianDigits, VOICE_PERSONAS} from '../data/persianLibrary';
+import type {PersistentMediaPlayer, RadioCategory} from '../hooks/useMediaPlayer';
 import {apiUrl, safeReadJsonResponse} from '../services/apiConfig';
 import type {
   AppSettings,
+  CoinGatedFeatureKey,
   DeviceOwner,
   MusicTrack,
   NightDiscoveryResponse,
@@ -49,10 +51,12 @@ interface NightAndMessagesViewProps {
   isSpeaking: boolean;
   nightMoviesResult: NightDiscoveryResponse | null;
   nightMusicResult: NightDiscoveryResponse | null;
+  mediaPlayer: PersistentMediaPlayer;
   onSaveNightResult: (result: NightDiscoveryResponse) => void;
   onUpdateSettings: (patch: Partial<AppSettings>) => void;
   onSpeakText: (text: string, title: string, category: 'custom' | 'morning' | 'energy' | 'gratitude') => void;
   onStopSpeech: () => void;
+  onConsumeCoinsForAi?: (feature: CoinGatedFeatureKey) => Promise<boolean>;
   onStatusToast: (msg: string) => void;
   assistantMediaTrigger?: {tab: 'tracks' | 'radio' | 'podcasts' | 'stop'; query?: string; nonce: number} | null;
   messagePrefill?: {
@@ -138,16 +142,12 @@ const MUSIC_MOOD_PRESETS = [
   'موزیک لایت آرامش‌بخش',
 ];
 
-type RadioCategory = 'iran' | 'world' | 'chill' | 'persian_music' | 'custom';
-
 const RADIO_CATEGORY_PRESETS: {id: Exclude<RadioCategory, 'custom'>; label: string}[] = [
   {id: 'iran', label: 'رادیوهای ایران و فارسی'},
   {id: 'world', label: 'برترین رادیوهای جهان'},
   {id: 'chill', label: 'آرامش، پیانو و لایت'},
   {id: 'persian_music', label: 'موسیقی ایرانی و سنتی'},
 ];
-
-const RADIO_STORAGE_KEY = 'rmz_radio_stations_v1';
 
 function formatTrackClock(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return '۰۰:۰۰';
@@ -171,10 +171,12 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
   isSpeaking,
   nightMoviesResult,
   nightMusicResult,
+  mediaPlayer,
   onSaveNightResult,
   onUpdateSettings,
   onSpeakText,
   onStopSpeech,
+  onConsumeCoinsForAi,
   onStatusToast,
   assistantMediaTrigger,
   messagePrefill,
@@ -223,37 +225,7 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
   const [mediaViewMode, setMediaViewMode] = useState<'grid' | 'list'>('grid');
   const [musicMood, setMusicMood] = useState('سنتی آرام و شجریان');
   const [musicBusy, setMusicBusy] = useState(false);
-  const [radioCategory, setRadioCategory] = useState<RadioCategory>('iran');
   const [radioQuery, setRadioQuery] = useState('');
-  const [radioNotice, setRadioNotice] = useState('');
-  const [radioBusy, setRadioBusy] = useState(false);
-  const [radioStations, setRadioStations] = useState<MusicTrack[]>(() => {
-    try {
-      const raw = localStorage.getItem(RADIO_STORAGE_KEY);
-      return raw ? (JSON.parse(raw) as MusicTrack[]) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  // Music player refs & state (isolated from Radio)
-  const [currentMusicIndex, setCurrentMusicIndex] = useState<number>(-1);
-  const [isMusicPlaying, setIsMusicPlaying] = useState(false);
-  const [isMusicLoading, setIsMusicLoading] = useState(false);
-  const [musicTimeSec, setMusicTimeSec] = useState(0);
-  const [musicDurationSec, setMusicDurationSec] = useState(0);
-  const musicAudioRef = useRef<HTMLAudioElement | null>(null);
-  const usedProxyMusicRef = useRef<boolean>(false);
-
-  // Radio player refs & state (isolated from Music)
-  const [currentRadioIndex, setCurrentRadioIndex] = useState<number>(-1);
-  const [isRadioPlaying, setIsRadioPlaying] = useState(false);
-  const [isRadioLoading, setIsRadioLoading] = useState(false);
-  const radioAudioRef = useRef<HTMLAudioElement | null>(null);
-  const usedProxyRadioRef = useRef<boolean>(false);
-
-  const [sleepMinutes, setSleepMinutes] = useState<number>(30);
-  const [sleepRemainingSec, setSleepRemainingSec] = useState<number | null>(null);
   const [failedArtIds, setFailedArtIds] = useState<Record<string, boolean>>({});
 
   // Movies Discovery state
@@ -261,392 +233,42 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
   const [movieGenre, setMovieGenre] = useState('درام، معمایی یا خانوادگی خوش‌ساخت با امتیاز بالای ۷.۵');
   const [movieBusy, setMovieBusy] = useState(false);
 
-  // Pure Music tracks only (never mix any stray radio entries)
-  const tracks: MusicTrack[] = useMemo(() => {
-    const raw = Array.isArray(nightMusicResult?.tracks) ? nightMusicResult.tracks : [];
-    return raw.filter((t) => !t.isLiveStream && t.source !== 'radio');
-  }, [nightMusicResult]);
-
-  const activeMusicTrack =
-    currentMusicIndex >= 0 && currentMusicIndex < tracks.length ? tracks[currentMusicIndex] : null;
-  const activeRadioStation =
-    currentRadioIndex >= 0 && currentRadioIndex < radioStations.length ? radioStations[currentRadioIndex] : null;
-
-  const pauseMusicOnly = () => {
-    const el = musicAudioRef.current;
-    if (el) {
-      el.pause();
-    }
-    setIsMusicPlaying(false);
-    setIsMusicLoading(false);
-  };
-
-  const pauseRadioOnly = () => {
-    const el = radioAudioRef.current;
-    if (el) {
-      el.pause();
-    }
-    setIsRadioPlaying(false);
-    setIsRadioLoading(false);
-  };
-
-  const stopMusicPlayback = () => {
-    const el = musicAudioRef.current;
-    if (el) {
-      el.pause();
-      el.removeAttribute('src');
-      el.load();
-    }
-    setIsMusicPlaying(false);
-    setIsMusicLoading(false);
-    setMusicTimeSec(0);
-    setMusicDurationSec(0);
-    setSleepRemainingSec(null);
-  };
-
-  const stopRadioPlayback = () => {
-    const el = radioAudioRef.current;
-    if (el) {
-      el.pause();
-      el.removeAttribute('src');
-      el.load();
-    }
-    setIsRadioPlaying(false);
-    setIsRadioLoading(false);
-    setSleepRemainingSec(null);
-  };
-
-  useEffect(() => {
-    return () => {
-      if (musicAudioRef.current) {
-        musicAudioRef.current.pause();
-        musicAudioRef.current.removeAttribute('src');
-      }
-      if (radioAudioRef.current) {
-        radioAudioRef.current.pause();
-        radioAudioRef.current.removeAttribute('src');
-      }
-    };
-  }, []);
-
-  // Persist radio stations even when empty (after deleting all stations)
-  useEffect(() => {
-    try {
-      localStorage.setItem(RADIO_STORAGE_KEY, JSON.stringify(radioStations));
-    } catch {
-      // ignore quota issues
-    }
-  }, [radioStations]);
-
-  useEffect(() => {
-    if (sleepRemainingSec === null) return;
-    if (sleepRemainingSec <= 0) {
-      stopMusicPlayback();
-      stopRadioPlayback();
-      onStatusToast('تایمر خواب تمام شد و پخش متوقف گردید.');
-      return;
-    }
-    const t = window.setTimeout(() => {
-      setSleepRemainingSec((s) => (s !== null ? s - 1 : null));
-    }, 1000);
-    return () => window.clearTimeout(t);
-  }, [sleepRemainingSec, onStatusToast]);
-
-  const startMusicAtIndex = (index: number, list: MusicTrack[] = tracks) => {
-    if (index < 0 || index >= list.length) return;
-    const track = list[index];
-    const el = musicAudioRef.current;
-    if (!el) return;
-
-    pauseRadioOnly();
-    const alreadyProxied = track.streamUrl.startsWith('/api/audio-proxy');
-    const resolvedSrc = track.streamUrl.startsWith('/api/') ? apiUrl(track.streamUrl) : track.streamUrl;
-
-    usedProxyMusicRef.current = alreadyProxied;
-    setCurrentMusicIndex(index);
-    setMusicTimeSec(0);
-    setMusicDurationSec(track.durationSec ?? 0);
-    setIsMusicLoading(true);
-    setIsMusicPlaying(false);
-    if (sleepMinutes > 0 && sleepRemainingSec === null) {
-      setSleepRemainingSec(sleepMinutes * 60);
-    }
-
-    el.src = resolvedSrc;
-    el.load();
-    el.play()
-      .then(() => {
-        setIsMusicPlaying(true);
-        setIsMusicLoading(false);
-      })
-      .catch(() => {
-        if (!usedProxyMusicRef.current && !alreadyProxied) {
-          usedProxyMusicRef.current = true;
-          el.src = apiUrl(`/api/audio-proxy?url=${encodeURIComponent(track.streamUrl)}`);
-          el.load();
-          el.play()
-            .then(() => {
-              setIsMusicPlaying(true);
-              setIsMusicLoading(false);
-            })
-            .catch(() => {
-              setIsMusicLoading(false);
-              setIsMusicPlaying(false);
-              onStatusToast(`پخش «${track.title}» از مبدا در دسترس نبود؛ قطعه بعدی را امتحان کنید.`);
-            });
-        } else {
-          setIsMusicLoading(false);
-          setIsMusicPlaying(false);
-          onStatusToast(`پخش «${track.title}» از مبدا در دسترس نبود؛ قطعه بعدی را امتحان کنید.`);
-        }
-      });
-  };
-
-  const startRadioAtIndex = (index: number, list: MusicTrack[] = radioStations) => {
-    if (index < 0 || index >= list.length) return;
-    const station = list[index];
-    const el = radioAudioRef.current;
-    if (!el) return;
-
-    pauseMusicOnly();
-    const alreadyProxied = station.streamUrl.startsWith('/api/audio-proxy');
-    const resolvedSrc = station.streamUrl.startsWith('/api/') ? apiUrl(station.streamUrl) : station.streamUrl;
-
-    usedProxyRadioRef.current = alreadyProxied;
-    setCurrentRadioIndex(index);
-    setIsRadioLoading(true);
-    setIsRadioPlaying(false);
-    if (sleepMinutes > 0 && sleepRemainingSec === null) {
-      setSleepRemainingSec(sleepMinutes * 60);
-    }
-
-    el.src = resolvedSrc;
-    el.load();
-    el.play()
-      .then(() => {
-        setIsRadioPlaying(true);
-        setIsRadioLoading(false);
-      })
-      .catch(() => {
-        if (!usedProxyRadioRef.current && !alreadyProxied) {
-          usedProxyRadioRef.current = true;
-          el.src = apiUrl(`/api/audio-proxy?url=${encodeURIComponent(station.streamUrl)}`);
-          el.load();
-          el.play()
-            .then(() => {
-              setIsRadioPlaying(true);
-              setIsRadioLoading(false);
-            })
-            .catch(() => {
-              setIsRadioLoading(false);
-              setIsRadioPlaying(false);
-              onStatusToast(`ایستگاه «${station.title}» موقتاً در دسترس نیست؛ ایستگاه دیگری را بزنید.`);
-            });
-        } else {
-          setIsRadioLoading(false);
-          setIsRadioPlaying(false);
-          onStatusToast(`ایستگاه «${station.title}» موقتاً در دسترس نیست؛ ایستگاه دیگری را بزنید.`);
-        }
-      });
-  };
-
-  const togglePlayItem = (index: number, group: 'tracks' | 'radio') => {
-    if (group === 'radio') {
-      const el = radioAudioRef.current;
-      if (!el) return;
-      if (currentRadioIndex === index) {
-        if (isRadioPlaying) {
-          el.pause();
-          setIsRadioPlaying(false);
-        } else {
-          pauseMusicOnly();
-          el.play()
-            .then(() => setIsRadioPlaying(true))
-            .catch(() => startRadioAtIndex(index, radioStations));
-        }
-        return;
-      }
-      startRadioAtIndex(index, radioStations);
-      return;
-    }
-
-    const selectedTrack = tracks[index];
-    if (selectedTrack && !selectedTrack.streamUrl) {
-      if (selectedTrack.externalUrl) {
-        window.open(selectedTrack.externalUrl, '_blank', 'noopener,noreferrer');
-        onStatusToast('این سایت پخش مستقیم داخل هم‌صدا ارائه نمی‌کند؛ صفحه اثر در سایت منبع باز شد.');
-      } else {
-        onStatusToast('برای این نتیجه لینک پخش مستقیم در دسترس نیست.');
-      }
-      return;
-    }
-    const el = musicAudioRef.current;
-    if (!el) return;
-    if (currentMusicIndex === index) {
-      if (isMusicPlaying) {
-        el.pause();
-        setIsMusicPlaying(false);
-      } else {
-        pauseRadioOnly();
-        el.play()
-          .then(() => setIsMusicPlaying(true))
-          .catch(() => startMusicAtIndex(index, tracks));
-      }
-      return;
-    }
-    startMusicAtIndex(index, tracks);
-  };
-
-  const handlePrevMusic = () => {
-    if (tracks.length === 0) return;
-    const nextIdx = currentMusicIndex <= 0 ? tracks.length - 1 : currentMusicIndex - 1;
-    startMusicAtIndex(nextIdx, tracks);
-  };
-
-  const handleNextMusic = () => {
-    if (tracks.length === 0) return;
-    const nextIdx = currentMusicIndex + 1 >= tracks.length ? 0 : currentMusicIndex + 1;
-    startMusicAtIndex(nextIdx, tracks);
-  };
-
-  const handlePrevRadio = () => {
-    if (radioStations.length === 0) return;
-    const nextIdx = currentRadioIndex <= 0 ? radioStations.length - 1 : currentRadioIndex - 1;
-    startRadioAtIndex(nextIdx, radioStations);
-  };
-
-  const handleNextRadio = () => {
-    if (radioStations.length === 0) return;
-    const nextIdx = currentRadioIndex + 1 >= radioStations.length ? 0 : currentRadioIndex + 1;
-    startRadioAtIndex(nextIdx, radioStations);
-  };
-
-  const handleMusicError = () => {
-    const track = activeMusicTrack;
-    const el = musicAudioRef.current;
-    if (!track || !el) return;
-
-    const alreadyProxied = track.streamUrl.startsWith('/api/audio-proxy');
-    if (!usedProxyMusicRef.current && !alreadyProxied) {
-      usedProxyMusicRef.current = true;
-      el.src = apiUrl(`/api/audio-proxy?url=${encodeURIComponent(track.streamUrl)}`);
-      el.load();
-      el.play()
-        .then(() => {
-          setIsMusicPlaying(true);
-          setIsMusicLoading(false);
-        })
-        .catch(() => {
-          setIsMusicPlaying(false);
-          setIsMusicLoading(false);
-          if (tracks.length > 1) {
-            startMusicAtIndex((currentMusicIndex + 1) % tracks.length, tracks);
-          } else {
-            onStatusToast(`پخش «${track.title}» ممکن نشد؛ با قطعه دیگر امتحان کنید.`);
-          }
-        });
-      return;
-    }
-
-    setIsMusicPlaying(false);
-    setIsMusicLoading(false);
-    if (tracks.length > 1 && currentMusicIndex >= 0) {
-      onStatusToast(`«${track.title}» در حال حاضر پاسخگو نبود؛ رفتن به قطعه بعدی...`);
-      startMusicAtIndex((currentMusicIndex + 1) % tracks.length, tracks);
-    }
-  };
-
-  const handleRadioError = () => {
-    const station = activeRadioStation;
-    const el = radioAudioRef.current;
-    if (!station || !el) return;
-
-    const alreadyProxied = station.streamUrl.startsWith('/api/audio-proxy');
-    if (!usedProxyRadioRef.current && !alreadyProxied) {
-      usedProxyRadioRef.current = true;
-      el.src = apiUrl(`/api/audio-proxy?url=${encodeURIComponent(station.streamUrl)}`);
-      el.load();
-      el.play()
-        .then(() => {
-          setIsRadioPlaying(true);
-          setIsRadioLoading(false);
-        })
-        .catch(() => {
-          setIsRadioPlaying(false);
-          setIsRadioLoading(false);
-          onStatusToast(`پخش زنده «${station.title}» موقتاً برقرار نشد.`);
-        });
-      return;
-    }
-
-    setIsRadioPlaying(false);
-    setIsRadioLoading(false);
-    onStatusToast(`پخش زنده «${station.title}» موقتاً برقرار نشد.`);
-  };
-
-  const handleDeleteRadioStation = (stationId: string) => {
-    const idx = radioStations.findIndex((s) => s.id === stationId);
-    if (idx === -1) return;
-    const removedTitle = radioStations[idx].title;
-    if (currentRadioIndex === idx) {
-      stopRadioPlayback();
-      setCurrentRadioIndex(-1);
-    } else if (currentRadioIndex > idx) {
-      setCurrentRadioIndex((prev) => prev - 1);
-    }
-    setRadioStations((prev) => prev.filter((s) => s.id !== stationId));
-    onStatusToast(`رادیو «${removedTitle}» حذف شد (هر زمان با جستجو دوباره برمی‌گردد).`);
-  };
-
-  const handleFetchRadio = async (category: RadioCategory, customQueryText?: string) => {
-    if (!isOnline) {
-      onStatusToast('اتصال به ایستگاه‌های رادیویی زنده نیازمند اینترنت است.');
-      return;
-    }
-    setRadioCategory(category);
-    setRadioBusy(true);
-    setRadioNotice('');
-    try {
-      const res = await fetch(apiUrl('/api/radio-stations'), {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          category,
-          query: customQueryText ?? radioQuery.trim(),
-        }),
-      });
-      const parsed = await safeReadJsonResponse<{stations?: MusicTrack[]; notice?: string; error?: string}>(res);
-      if (parsed.isHtml || !parsed.data) {
-        throw new Error('سرور رادیو موقتاً پاسخ نامعتبر داد؛ لطفاً دوباره امتحان کنید.');
-      }
-      const data = parsed.data;
-      if (!res.ok) throw new Error(data.error || 'خطا در دریافت رادیوها');
-      const list = Array.isArray(data.stations) ? data.stations : [];
-      stopRadioPlayback();
-      setCurrentRadioIndex(-1);
-      setRadioStations(list);
-      setRadioNotice(data.notice || '');
-      if (data.notice) {
-        onStatusToast(data.notice);
-      } else if (list.length > 0) {
-        onStatusToast(`${toPersianDigits(list.length)} ایستگاه رادیویی زنده آماده پخش شد.`);
-      } else {
-        onStatusToast('ایستگاهی با این عبارت پیدا نشد؛ دسته‌بندی دیگری را امتحان کنید.');
-      }
-    } catch (err) {
-      onStatusToast(err instanceof Error ? err.message : 'خطا در دریافت لیست رادیوها.');
-    } finally {
-      setRadioBusy(false);
-    }
-  };
+  const {
+    tracks,
+    radioStations,
+    radioCategory,
+    radioNotice,
+    radioBusy,
+    currentMusicIndex,
+    currentRadioIndex,
+    isMusicPlaying,
+    isMusicLoading,
+    isRadioPlaying,
+    isRadioLoading,
+    musicTimeSec,
+    musicDurationSec,
+    sleepMinutes,
+    sleepRemainingSec,
+    activeMusicTrack,
+    activeRadioStation,
+    setSleepMinutesAndSync,
+    startMusicAtIndex,
+    startRadioAtIndex,
+    togglePlayItem,
+    stopMusicPlayback,
+    stopRadioPlayback,
+    resetMusicIndex,
+    handlePrevMusic,
+    handleNextMusic,
+    handlePrevRadio,
+    handleNextRadio,
+    handleSeekMusic,
+    handleDeleteRadioStation,
+    handleFetchRadio,
+  } = mediaPlayer;
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = Number(e.target.value);
-    const el = musicAudioRef.current;
-    if (el && Number.isFinite(val)) {
-      el.currentTime = val;
-      setMusicTimeSec(val);
-    }
+    handleSeekMusic(Number(e.target.value));
   };
 
   const handleGenerateSpecialMessage = async () => {
@@ -661,6 +283,10 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
       const tmpl = OCCASIONS.find((o) => o.id === occasion) ?? OCCASIONS[0];
       setMsgResult(tmpl.offlineTemplate(targetPerson, sender));
       onStatusToast('در حالت آفلاین هستید؛ متن آماده اختصاصی ساخته شد.');
+      return;
+    }
+
+    if (onConsumeCoinsForAi && !(await onConsumeCoinsForAi('ai_special_message'))) {
       return;
     }
 
@@ -713,6 +339,11 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
       return;
     }
 
+    const feature: CoinGatedFeatureKey = mode === 'music' ? 'ai_music_discover' : 'ai_movies_discover';
+    if (onConsumeCoinsForAi && !(await onConsumeCoinsForAi(feature))) {
+      return;
+    }
+
     const queryText = mode === 'music' ? (customMoodOverride ?? musicMood) : movieGenre;
     if (mode === 'music') setMusicBusy(true);
     else setMovieBusy(true);
@@ -736,12 +367,16 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
       onSaveNightResult(data);
       if (mode === 'music') {
         const list = Array.isArray(data.tracks)
-          ? data.tracks.filter((t) => !t.isLiveStream && t.source !== 'radio')
+          ? data.tracks.filter((t) => !t.isLiveStream && t.source !== 'radio' && Boolean(t.streamUrl))
           : [];
         if (list.length > 0) {
           onStatusToast(`${toPersianDigits(list.length)} قطعه موسیقی پیدا شد — روی هر کدام بزنید تا پخش شود.`);
           stopMusicPlayback();
-          setCurrentMusicIndex(-1);
+          resetMusicIndex();
+        } else if ((data.links?.length ?? 0) > 0) {
+          onStatusToast(`${toPersianDigits(data.links.length)} صفحه دانلود و پخش موسیقی پیدا شد.`);
+          stopMusicPlayback();
+          resetMusicIndex();
         } else {
           onStatusToast('قطعه‌ای پیدا نشد؛ عبارت ساده‌تری مثل «پیانو» یا «شجریان» را امتحان کنید.');
         }
@@ -798,104 +433,8 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
   const currentTabIsPlaying = mediaTab === 'radio' ? isRadioPlaying : isMusicPlaying;
   const currentTabIsLoading = mediaTab === 'radio' ? isRadioLoading : isMusicLoading;
 
-  // Sync MediaSession metadata & lockscreen/notification transport controls for Music & Live Radio
-  useEffect(() => {
-    if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
-    const ms = navigator.mediaSession;
-    const activeItem = isRadioPlaying
-      ? activeRadioStation
-      : isMusicPlaying
-        ? activeMusicTrack
-        : currentTabActiveItem;
-    if (!activeItem) {
-      try {
-        ms.playbackState = 'none';
-      } catch {
-        // ignore
-      }
-      return;
-    }
-    const mode = activeItem === activeRadioStation && (isRadioPlaying || mediaTab === 'radio') ? 'radio' : 'tracks';
-    try {
-      if (typeof MediaMetadata !== 'undefined') {
-        ms.metadata = new MediaMetadata({
-          title: activeItem.title,
-          artist: activeItem.artist || (mode === 'radio' ? 'رادیو زنده هم‌صدا' : 'موزیک شبانه هم‌صدا'),
-          album: mode === 'radio' ? 'رادیوهای ایران و جهان' : 'پلی‌لیست هم‌صدا',
-          artwork: activeItem.artworkUrl ? [{src: activeItem.artworkUrl, sizes: '256x256', type: 'image/png'}] : undefined,
-        });
-      }
-      ms.playbackState = (mode === 'radio' ? isRadioPlaying : isMusicPlaying) ? 'playing' : 'paused';
-      ms.setActionHandler('play', () => {
-        if (mode === 'radio') {
-          if (currentRadioIndex >= 0 && !isRadioPlaying) togglePlayItem(currentRadioIndex, 'radio');
-        } else if (currentMusicIndex >= 0 && !isMusicPlaying) {
-          togglePlayItem(currentMusicIndex, 'tracks');
-        }
-      });
-      ms.setActionHandler('pause', () => {
-        if (mode === 'radio') pauseRadioOnly();
-        else pauseMusicOnly();
-      });
-      ms.setActionHandler('stop', () => {
-        if (mode === 'radio') stopRadioPlayback();
-        else stopMusicPlayback();
-      });
-      ms.setActionHandler('previoustrack', () => {
-        if (mode === 'radio') handlePrevRadio();
-        else handlePrevMusic();
-      });
-      ms.setActionHandler('nexttrack', () => {
-        if (mode === 'radio') handleNextRadio();
-        else handleNextMusic();
-      });
-    } catch {
-      // MediaSession not supported in this WebView/browser
-    }
-  });
-
   return (
     <div className="space-y-8">
-      {/* Isolated HTMLAudioElement #1: Music Only */}
-      <audio
-        ref={musicAudioRef}
-        preload="none"
-        onTimeUpdate={() => {
-          if (musicAudioRef.current) setMusicTimeSec(musicAudioRef.current.currentTime || 0);
-        }}
-        onLoadedMetadata={() => {
-          if (musicAudioRef.current && Number.isFinite(musicAudioRef.current.duration) && musicAudioRef.current.duration > 0) {
-            setMusicDurationSec(musicAudioRef.current.duration);
-          }
-          setIsMusicLoading(false);
-        }}
-        onCanPlay={() => setIsMusicLoading(false)}
-        onEnded={() => {
-          if (tracks.length > 1) {
-            handleNextMusic();
-          } else {
-            setIsMusicPlaying(false);
-            setMusicTimeSec(0);
-          }
-        }}
-        onError={handleMusicError}
-      />
-
-      {/* Isolated HTMLAudioElement #2: Live Radio Only */}
-      <audio
-        ref={radioAudioRef}
-        preload="none"
-        onCanPlay={() => setIsRadioLoading(false)}
-        onPlaying={() => {
-          setIsRadioLoading(false);
-          setIsRadioPlaying(true);
-        }}
-        onEnded={() => {
-          setIsRadioPlaying(false);
-        }}
-        onError={handleRadioError}
-      />
-
       {/* Top-Level Luxury Media Category Header */}
       <section className="luxury-card p-5 sm:p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1218,20 +757,14 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
                 <Clock className="w-3.5 h-3.5 text-slate-400" />
                 <select
                   value={sleepMinutes}
-                  onChange={(e) => {
-                    const val = Number(e.target.value);
-                    setSleepMinutes(val);
-                    if (isAnyAudioPlaying) {
-                      setSleepRemainingSec(val > 0 ? val * 60 : null);
-                    }
-                  }}
+                  onChange={(e) => setSleepMinutesAndSync(Number(e.target.value))}
                   aria-label="تایمر خواب"
                   className="min-h-[36px] px-2 py-1 rounded-lg border border-[#DFDBD0] dark:border-emerald-900 bg-[#FAF9F6] dark:bg-[#0B1312] text-xs"
                 >
+                  <option value={0}>پیوسته (بدون توقف)</option>
                   <option value={15}>۱۵ دقیقه</option>
                   <option value={30}>۳۰ دقیقه</option>
                   <option value={45}>۴۵ دقیقه</option>
-                  <option value={0}>پیوسته</option>
                 </select>
                 {sleepClock && (
                   <span className="font-mono-num text-emerald-700 dark:text-emerald-400 font-semibold">

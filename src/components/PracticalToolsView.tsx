@@ -1,11 +1,13 @@
 import React, {useMemo, useState} from 'react';
 import {
+  BellRing,
   Check,
   Copy,
   ListChecks,
   Plus,
   Search,
   ShoppingBag,
+  Smartphone,
   Trash2,
   Volume2,
   Wallet,
@@ -17,6 +19,7 @@ import type {
   ExpenseEntry,
   ExpenseSplitMode,
   OwnerRole,
+  PartnerAlertMode,
   ShoppingCategory,
   ShoppingItem,
 } from '../types/app';
@@ -56,6 +59,14 @@ interface ShoppingChecklistPanelProps {
   onClearChecked: () => void;
   onSpeakText: (text: string, title: string, category: 'morning' | 'energy' | 'custom') => void;
   onStatusToast?: (msg: string) => void;
+  isSpacePaired?: boolean;
+  partnerName?: string;
+  autoAlertOnAdd?: boolean;
+  onToggleAutoAlertOnAdd?: (enabled: boolean) => void;
+  onSendPartnerAlert?: (mode: PartnerAlertMode) => void;
+  onTestLocalAlert?: (mode: PartnerAlertMode) => void;
+  notifPermission?: NotificationPermission;
+  onRequestNotificationPermission?: () => void;
 }
 
 export const ShoppingChecklistPanel: React.FC<ShoppingChecklistPanelProps> = ({
@@ -66,6 +77,14 @@ export const ShoppingChecklistPanel: React.FC<ShoppingChecklistPanelProps> = ({
   onClearChecked,
   onSpeakText,
   onStatusToast,
+  isSpacePaired = false,
+  partnerName = 'همراه',
+  autoAlertOnAdd = false,
+  onToggleAutoAlertOnAdd,
+  onSendPartnerAlert,
+  onTestLocalAlert,
+  notifPermission,
+  onRequestNotificationPermission,
 }) => {
   const [title, setTitle] = useState('');
   const [note, setNote] = useState('');
@@ -206,6 +225,88 @@ export const ShoppingChecklistPanel: React.FC<ShoppingChecklistPanelProps> = ({
           <span>افزودن</span>
         </button>
       </form>
+
+      {onSendPartnerAlert && (
+        <div className="rounded-2xl luxury-surface-subtle p-4 sm:p-5 space-y-4 border border-[#DFDBD0] dark:border-emerald-900/60">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <div className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <BellRing className="w-4 h-4 text-amber-600 dark:text-amber-300 shrink-0" />
+                <span>هشدار فوری به گوشی {partnerName} (آلارم صوتی و ویبره)</span>
+              </div>
+              <p className="mt-1 text-xs text-slate-600 dark:text-slate-300 leading-6">
+                {isSpacePaired
+                  ? `دو گوشی به هم متصل هستند. با زدن دکمه‌های زیر، گوشی ${partnerName} ویبره متوالی می‌رود و لیست خرید با صدای فارسی اعلام می‌شود (در APK اندروید اگر صدا زیر ۵۰٪ باشد خودکار تا ۵۰٪ بالا می‌آید).`
+                  : 'برای ارسال به گوشی دوم، ابتدا در تب «همگام‌سازی و ابزارها» دو گوشی را با یک کد مچ کنید.'}
+              </p>
+            </div>
+            {notifPermission === 'default' && onRequestNotificationPermission && (
+              <button
+                type="button"
+                onClick={onRequestNotificationPermission}
+                className="min-h-[40px] px-3.5 rounded-xl border border-amber-400/70 bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 text-xs font-semibold cursor-pointer shrink-0 whitespace-nowrap"
+              >
+                فعال‌سازی مجوز اعلان
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <button
+              type="button"
+              onClick={() => onSendPartnerAlert('alarm')}
+              disabled={!isSpacePaired}
+              className="min-h-[46px] px-4 rounded-xl bg-white dark:bg-[#0B1412] border border-[#DFDBD0] dark:border-emerald-800 text-slate-900 dark:text-slate-100 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 disabled:opacity-45 text-xs sm:text-sm font-bold flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Volume2 className="w-4 h-4 text-emerald-700 dark:text-emerald-400 shrink-0" />
+              <span>آلارم صوتی</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onSendPartnerAlert('vibrate')}
+              disabled={!isSpacePaired}
+              className="min-h-[46px] px-4 rounded-xl bg-white dark:bg-[#0B1412] border border-[#DFDBD0] dark:border-emerald-800 text-slate-900 dark:text-slate-100 hover:bg-amber-50 dark:hover:bg-emerald-950/50 disabled:opacity-45 text-xs sm:text-sm font-bold flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Smartphone className="w-4 h-4 text-amber-600 dark:text-amber-300 shrink-0" />
+              <span>فقط ویبره</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onSendPartnerAlert('both')}
+              disabled={!isSpacePaired}
+              className="min-h-[46px] px-4 rounded-xl bg-emerald-800 hover:bg-emerald-900 disabled:opacity-45 text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+            >
+              <BellRing className="w-4 h-4 text-amber-300 shrink-0" />
+              <span>آلارم و ویبره باهم</span>
+            </button>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-[#DFDBD0]/80 dark:border-emerald-950/60">
+            {onToggleAutoAlertOnAdd && (
+              <label className="inline-flex items-center gap-2.5 text-xs font-medium text-slate-700 dark:text-slate-200 cursor-pointer select-none min-h-[36px]">
+                <input
+                  type="checkbox"
+                  checked={autoAlertOnAdd}
+                  onChange={(e) => onToggleAutoAlertOnAdd(e.target.checked)}
+                  className="w-4 h-4 accent-emerald-700 rounded cursor-pointer"
+                />
+                <span>ارسال خودکار آلارم و ویبره هنگام افزودن کالای جدید</span>
+              </label>
+            )}
+            {onTestLocalAlert && (
+              <button
+                type="button"
+                onClick={() => onTestLocalAlert('both')}
+                className="min-h-[38px] px-3.5 rounded-xl border border-[#DFDBD0] dark:border-emerald-900 bg-white/80 dark:bg-[#0B1412] text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-emerald-950/40 text-xs font-semibold cursor-pointer whitespace-nowrap self-start sm:self-auto"
+              >
+                تست آلارم و ویبره روی همین گوشی
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-1 p-1 luxury-surface-subtle rounded-xl">

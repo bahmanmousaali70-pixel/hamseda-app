@@ -28,7 +28,7 @@ import {
   speakOfflineBilingual,
   unlockAudioPlayback,
 } from '../services/speechEngine';
-import type {AudioLibraryEntry, VoiceName} from '../types/app';
+import type {AudioLibraryEntry, CoinGatedFeatureKey, VoiceName} from '../types/app';
 import {OfflineEngineLab} from './OfflineEngineLab';
 
 interface VoiceLibraryViewProps {
@@ -45,6 +45,7 @@ interface VoiceLibraryViewProps {
   onRefreshClips: () => Promise<void>;
   onStopSpeech: () => void;
   onUpdateRate: (rate: number) => void;
+  onConsumeCoinsForAi?: (feature: CoinGatedFeatureKey) => Promise<boolean>;
   onStatusToast: (msg: string) => void;
 }
 
@@ -80,6 +81,7 @@ export const VoiceLibraryView: React.FC<VoiceLibraryViewProps> = ({
   onRefreshClips,
   onStopSpeech,
   onUpdateRate,
+  onConsumeCoinsForAi,
   onStatusToast,
 }) => {
   const [customTitle, setCustomTitle] = useState('');
@@ -112,6 +114,9 @@ export const VoiceLibraryView: React.FC<VoiceLibraryViewProps> = ({
   const handleBuildPack = async () => {
     if (!isOnline) {
       onStatusToast('برای ساخت فایل‌های جدید کتابخانه صوتی روان، اتصال اینترنت لازم است؛ پس از ساخت، همیشه آفلاین پخش می‌شوند.');
+      return;
+    }
+    if (onConsumeCoinsForAi && !(await onConsumeCoinsForAi('ai_studio_voice'))) {
       return;
     }
     const targets = PERSIAN_VOICE_PACK_ITEMS.filter(
@@ -198,6 +203,10 @@ export const VoiceLibraryView: React.FC<VoiceLibraryViewProps> = ({
       return;
     }
 
+    if (onConsumeCoinsForAi && !(await onConsumeCoinsForAi('ai_studio_voice'))) {
+      return;
+    }
+
     setIsBuildingCustom(true);
     try {
       const clipId = hashTextKey(customText.trim(), selectedVoice);
@@ -240,6 +249,15 @@ export const VoiceLibraryView: React.FC<VoiceLibraryViewProps> = ({
       if (isStudioCached) {
         await playCachedClipById(voiceClipId, speechRate);
       } else if (isOnline) {
+        const canSpend = onConsumeCoinsForAi ? await onConsumeCoinsForAi('ai_studio_voice') : true;
+        if (!canSpend) {
+          if (cachedIds.has(voiceClipId)) {
+            await playCachedClipById(voiceClipId, speechRate);
+          } else {
+            await speakOfflineBilingual(item.text, speechRate, persona?.gender ?? 'female');
+          }
+          return;
+        }
         const res = await generateAndCacheGeminiWav({
           clipId: voiceClipId,
           text: item.text,

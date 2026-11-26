@@ -39,6 +39,7 @@ export interface AssistantEngineContext {
   callers: CallerContact[];
   morningMessage: MorningMessage;
   pendingIntent: PendingAssistantIntent | null;
+  beforeCloudRequest?: () => Promise<boolean>;
 }
 
 function persianDigitsToAscii(input: string): string {
@@ -907,6 +908,16 @@ export async function processAssistantUtterance(
   // Android WebView can report offline while the configured API is reachable.
   // Try the real API; the catch below runs direct on-device Android web search
   // (or offline conversation fallback).
+  if (ctx.beforeCloudRequest) {
+    const allowed = await ctx.beforeCloudRequest();
+    if (!allowed) {
+      return {
+        action: 'answer',
+        replyText:
+          'برای پرسش‌وپاسخ آنلاین دستیار هوشمند سکه لازم است؛ با دیدن بنر ۱۰ ثانیه‌ای حامی، سکه رایگان دریافت کنید. تمام فرمان‌های آفلاین گوشی همچنان کاملاً رایگان هستند.',
+      };
+    }
+  }
 
   const rawQueryForWeb = cleanedUtterance || rawTranscript.trim();
   const forceLiveSearch = ctx.pendingIntent?.type === 'awaiting_search_query';

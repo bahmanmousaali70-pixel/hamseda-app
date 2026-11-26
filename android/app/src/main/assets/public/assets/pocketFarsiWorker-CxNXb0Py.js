@@ -6016,11 +6016,15 @@ async function inspectCacheStatus() {
 	} catch {
 		cache = null;
 	}
+	const savedCustom = await loadCustomVoiceEmbedding().catch(() => null);
+	const customVoiceLoaded = Boolean(savedCustom?.embedding?.length && savedCustom.frames);
 	if (!cache) return {
 		installed: false,
+		q4Installed: false,
 		highPrecisionInstalled: false,
 		sizeBytes: 0,
 		voiceCloneReady: false,
+		customVoiceLoaded,
 		device: "wasm"
 	};
 	const keys = await cache.keys();
@@ -6037,9 +6041,10 @@ async function inspectCacheStatus() {
 			}
 		}
 	}
-	const hasQ4 = keySet.has(REPO + "onnx/flow_lm_step_q4.onnx") || keySet.has(REPO + "onnx/flow_lm_step_q4f16.onnx");
+	const q4Installed = keySet.has(REPO + "onnx/flow_lm_step_q4.onnx") || keySet.has(REPO + "onnx/flow_lm_step_q4f16.onnx");
+	const q4WasmInstalled = keySet.has(REPO + "onnx/flow_lm_step_q4.onnx");
 	const highPrecisionInstalled = keySet.has(REPO + "onnx/flow_lm_step_fp16.onnx");
-	const installed = (hasQ4 || highPrecisionInstalled) && [
+	const installed = (q4Installed || highPrecisionInstalled) && [
 		"onnx/mimi_decoder.onnx",
 		"onnx/g2p_encoder_kv.onnx",
 		"onnx/g2p_decoder_kv.onnx",
@@ -6053,9 +6058,12 @@ async function inspectCacheStatus() {
 	const backend = await detectComputeBackend();
 	return {
 		installed,
+		q4Installed,
+		q4WasmInstalled,
 		highPrecisionInstalled,
 		sizeBytes: totalBytes,
 		voiceCloneReady,
+		customVoiceLoaded,
 		device: backend.device
 	};
 }
@@ -6123,7 +6131,8 @@ async function installModels(includeVoiceClone = false, precision = "q4") {
 }
 async function ensureInitialized(requestedPrecision = "q4") {
 	const st = await inspectCacheStatus();
-	const effectivePrecision = requestedPrecision === "high" && st.highPrecisionInstalled ? "high" : "q4";
+	if (!st.installed) throw new Error("فایل‌های آفلاین Pocket TTS Farsi هنوز نصب نشده‌اند؛ لطفاً ابتدا مدل را دانلود کنید.");
+	const effectivePrecision = requestedPrecision === "high" ? st.highPrecisionInstalled ? "high" : "q4" : st.q4Installed ? "q4" : "high";
 	if (flow && dec && g2pE && g2pD && bpe && lut && W && bos && activePrecision === effectivePrecision) return;
 	if (flow && activePrecision !== effectivePrecision) await resetSessions();
 	if (readyPromise) return readyPromise;
@@ -6180,11 +6189,14 @@ async function ensureInitialized(requestedPrecision = "q4") {
 		try {
 			await createSessions(device, activeVariant);
 		} catch (err) {
-			if (activeVariant === "fp16" || device === "webgpu") {
+			if (st.q4WasmInstalled && (activeVariant !== "q4" || device === "webgpu")) {
 				await resetSessions();
 				activePrecision = "q4";
 				await createSessions("wasm", "q4");
-			} else throw err;
+			} else {
+				await resetSessions();
+				throw err;
+			}
 		}
 		await generateChunk(await voiceState("female_short"), "salAm", TEMP_BY_DENOISE.strong, 3);
 		post("ready", {
@@ -6310,17 +6322,76 @@ function proj(lat) {
 	}
 	return x;
 }
+const CUSTOM_VOICE_DB = "hamseda-pocket-voice-v1";
+const CUSTOM_VOICE_STORE = "embeddings";
+function openCustomVoiceDb() {
+	return new Promise((resolve, reject) => {
+		const request = indexedDB.open(CUSTOM_VOICE_DB, 1);
+		request.onupgradeneeded = () => {
+			const db = request.result;
+			if (!db.objectStoreNames.contains(CUSTOM_VOICE_STORE)) db.createObjectStore(CUSTOM_VOICE_STORE);
+		};
+		request.onsuccess = () => resolve(request.result);
+		request.onerror = () => reject(request.error ?? /* @__PURE__ */ new Error("ذخیره‌سازی صدای اختصاصی در دسترس نیست."));
+	});
+}
+async function saveCustomVoiceEmbedding(embedding, frames) {
+	const db = await openCustomVoiceDb();
+	try {
+		await new Promise((resolve, reject) => {
+			const tx = db.transaction(CUSTOM_VOICE_STORE, "readwrite");
+			tx.objectStore(CUSTOM_VOICE_STORE).put({
+				embedding,
+				frames
+			}, "custom");
+			tx.oncomplete = () => resolve();
+			tx.onerror = () => reject(tx.error ?? /* @__PURE__ */ new Error("ذخیره صدای اختصاصی ناموفق بود."));
+			tx.onabort = () => reject(tx.error ?? /* @__PURE__ */ new Error("ذخیره صدای اختصاصی لغو شد."));
+		});
+	} finally {
+		db.close();
+	}
+}
+async function loadCustomVoiceEmbedding() {
+	const db = await openCustomVoiceDb();
+	try {
+		return await new Promise((resolve, reject) => {
+			const request = db.transaction(CUSTOM_VOICE_STORE, "readonly").objectStore(CUSTOM_VOICE_STORE).get("custom");
+			request.onsuccess = () => {
+				const value = request.result;
+				if (!value?.embedding || !value.frames) {
+					resolve(null);
+					return;
+				}
+				resolve({
+					embedding: new Float32Array(value.embedding),
+					frames: value.frames
+				});
+			};
+			request.onerror = () => reject(request.error ?? /* @__PURE__ */ new Error("خواندن صدای اختصاصی ناموفق بود."));
+		});
+	} finally {
+		db.close();
+	}
+}
 async function voiceState(name) {
 	const hit = voiceCache.get(name);
 	if (hit) return hit;
+	if (name === "custom") {
+		const saved = await loadCustomVoiceEmbedding();
+		if (!saved) throw new Error("صدای کلون‌شده ذخیره‌شده پیدا نشد؛ لطفاً کلون صدا را دوباره بسازید.");
+		const restored = await step(saved.embedding, saved.frames, emptyPast(), TEMP_BY_DENOISE.strong);
+		voiceCache.set(name, restored.presents);
+		return restored.presents;
+	}
 	const buf = await fetchCached(`voices/${name}.f32.bin`);
 	const emb = new Float32Array(buf);
 	const r = await step(emb, emb.length / DIM, emptyPast(), TEMP_BY_DENOISE.strong);
 	voiceCache.set(name, r.presents);
 	return r.presents;
 }
-async function encodeCustomVoice(audio24k) {
-	await ensureInitialized();
+async function encodeCustomVoice(audio24k, precision = "q4") {
+	await ensureInitialized(precision);
 	if (!venc) {
 		const encoderBuf = await fetchCached("onnx/voice_encoder.onnx");
 		venc = await Pc.create(encoderBuf, { executionProviders: ["wasm"] });
@@ -6335,6 +6406,7 @@ async function encodeCustomVoice(audio24k) {
 		paddedLen
 	]) })).voice_embeds;
 	const emb = new Float32Array(embTensor.data);
+	await saveCustomVoiceEmbedding(emb, embTensor.dims[1]);
 	const old = voiceCache.get("custom");
 	if (old) dispose(old);
 	const r = await step(emb, embTensor.dims[1], emptyPast(), TEMP_BY_DENOISE.strong);
@@ -6518,7 +6590,7 @@ self.onmessage = (e) => {
 					await caches.delete(CACHE_NAME);
 				} catch {}
 				post("uninstalled", await inspectCacheStatus());
-			} else if (m.type === "voice" && m.audio) await encodeCustomVoice(m.audio);
+			} else if (m.type === "voice" && m.audio) await encodeCustomVoice(m.audio, m.precision || "q4");
 			else if (m.type === "synth" && m.id && m.text) await runSynth(m.id, m.text, m.voice || "female_short", m.denoise || "strong", m.precision || "q4");
 		} catch (err) {
 			post("error", {

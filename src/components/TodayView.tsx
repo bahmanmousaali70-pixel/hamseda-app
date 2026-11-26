@@ -52,6 +52,7 @@ import type {
   OwnerRole,
   PackingItem,
   PackingTemplateId,
+  PartnerAlertMode,
   PersonalityFocusId,
   QuickVaultNote,
   ShoppingCategory,
@@ -129,6 +130,11 @@ interface TodayViewProps {
   onToggleShoppingItem: (id: string) => void;
   onDeleteShoppingItem: (id: string) => void;
   onClearCheckedShopping: () => void;
+  isSpacePaired?: boolean;
+  autoAlertShoppingOnAdd?: boolean;
+  onToggleAutoAlertShoppingOnAdd?: (enabled: boolean) => void;
+  onSendShoppingAlert?: (mode: PartnerAlertMode) => void;
+  onTestLocalShoppingAlert?: (mode: PartnerAlertMode) => void;
   onUpdateBudget: (amount: number) => void;
   onAddExpense: (entry: Omit<ExpenseEntry, 'id' | 'createdAt' | 'dateKey'>) => void;
   onDeleteExpense: (id: string) => void;
@@ -242,6 +248,11 @@ export const TodayView: React.FC<TodayViewProps> = ({
   onToggleShoppingItem,
   onDeleteShoppingItem,
   onClearCheckedShopping,
+  isSpacePaired,
+  autoAlertShoppingOnAdd,
+  onToggleAutoAlertShoppingOnAdd,
+  onSendShoppingAlert,
+  onTestLocalShoppingAlert,
   onUpdateBudget,
   onAddExpense,
   onDeleteExpense,
@@ -611,6 +622,14 @@ export const TodayView: React.FC<TodayViewProps> = ({
               onClearChecked={onClearCheckedShopping}
               onSpeakText={onSpeakText}
               onStatusToast={onStatusToast}
+              isSpacePaired={isSpacePaired}
+              partnerName={otherName}
+              autoAlertOnAdd={autoAlertShoppingOnAdd}
+              onToggleAutoAlertOnAdd={onToggleAutoAlertShoppingOnAdd}
+              onSendPartnerAlert={onSendShoppingAlert}
+              onTestLocalAlert={onTestLocalShoppingAlert}
+              notifPermission={notifPermission}
+              onRequestNotificationPermission={onRequestNotificationPermission}
             />
           ) : shoppingMealsTab === 'meals' ? (
             <MealPlannerPanel

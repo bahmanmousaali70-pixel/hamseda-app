@@ -58,6 +58,7 @@ import type {
   AppTab,
   AssistantActionType,
   CallerContact,
+  CoinGatedFeatureKey,
   DeviceOwner,
   ExpenseCategory,
   GroundingLink,
@@ -110,6 +111,7 @@ interface AssistantViewProps {
   onSpeakDailyEnglish?: () => void;
   onOpenDriveMode: () => void;
   pendingAssistantQuery?: {text: string; nonce: number} | null;
+  onConsumeCoinsForAi?: (feature: CoinGatedFeatureKey) => Promise<boolean>;
   onStatusToast: (msg: string) => void;
 }
 
@@ -242,6 +244,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
   onSpeakDailyEnglish,
   onOpenDriveMode,
   pendingAssistantQuery,
+  onConsumeCoinsForAi,
   onStatusToast,
 }) => {
   const selfName = getSelfName(settings, deviceOwner);
@@ -388,6 +391,9 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
           callers,
           morningMessage,
           pendingIntent,
+          beforeCloudRequest: onConsumeCoinsForAi
+            ? () => onConsumeCoinsForAi('ai_assistant_online')
+            : undefined,
           conversationHistory: messages.slice(-12).map((message) => ({
             role: message.sender,
             text: message.text,

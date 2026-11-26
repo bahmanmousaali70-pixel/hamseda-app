@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {WifiOff, X} from 'lucide-react';
+import {BellRing, Volume2, WifiOff, X} from 'lucide-react';
 import {AssistantView} from './components/AssistantView';
 import {CallerAnnouncerView} from './components/CallerAnnouncerView';
 import {DriveModeModal} from './components/DriveModeModal';
@@ -7,10 +7,13 @@ import {GratitudeView} from './components/GratitudeView';
 import {FamilyLifeSuite} from './components/FamilyLifeSuite';
 import {advanceDateKey} from './components/LifeToolsView';
 import {NightAndMessagesView} from './components/NightAndMessagesView';
+import {PersistentMiniPlayer} from './components/PersistentMiniPlayer';
+import {SponsorRewardModal} from './components/SponsorRewardModal';
 import {SyncSettingsView} from './components/SyncSettingsView';
 import {TodayView} from './components/TodayView';
 import {TopBar} from './components/TopBar';
 import {VoiceLibraryView} from './components/VoiceLibraryView';
+import {DARK_THEME_IDS, getThemeMeta, normalizeThemeId} from './data/themes';
 import {
   addDaysKey,
   DEFAULT_CALLERS,
@@ -29,6 +32,7 @@ import {
   toPersianDigits,
 } from './data/persianLibrary';
 import {useBackgroundScheduler} from './hooks/useBackgroundScheduler';
+import {useMediaPlayer} from './hooks/useMediaPlayer';
 import {useOnlineStatus} from './hooks/usePWAInstall';
 import {apiUrl, getCloudApiBaseUrl, safeReadJsonResponse} from './services/apiConfig';
 import {
@@ -39,7 +43,6 @@ import {
 } from './services/audioLibraryDb';
 import {
   deleteBillFromCloud,
-  deleteCallerFromCloud,
   deleteExpenseFromCloud,
   deleteGoalFromCloud,
   deleteGratitudeFromCloud,
@@ -54,7 +57,6 @@ import {
   ensureUserAndDiscoverSpace,
   joinSpaceByCode,
   pushBillToCloud,
-  pushCallerToCloud,
   pushExpenseToCloud,
   pushGoalToCloud,
   pushGratitudeToCloud,
@@ -63,6 +65,7 @@ import {
   pushMealPlanToCloud,
   pushMedicationToCloud,
   pushPackingToCloud,
+  pushPartnerAlertToCloud,
   pushScheduleToCloud,
   pushSettingsToCloud,
   pushShoppingToCloud,
@@ -72,6 +75,14 @@ import {
   uploadLocalBundleToSpace,
   type CoupleSpaceInfo,
 } from './services/coupleSyncService';
+import {
+  COIN_COSTS,
+  fetchActiveSponsorAds,
+  pickSponsorAdForUser,
+  readWalletSnapshot,
+  writeWalletSnapshot,
+  type WalletSnapshot,
+} from './services/sponsorAdsService';
 import {buildDailyBriefingText, fetchQuickWeatherBrief} from './services/dailyBriefing';
 import {
   auth,
@@ -110,12 +121,19 @@ import {
   stopAllSpeech,
   unlockAudioPlayback,
 } from './services/speechEngine';
+import {
+  executePartnerAlertEffects,
+  getHandledPartnerAlertIds,
+  markPartnerAlertHandled,
+  unlockPartnerAlertAudio,
+} from './services/partnerAlertService';
 import type {
   AppSettings,
   AppTab,
   AudioLibraryEntry,
   BillReminderItem,
   CallerContact,
+  CoinGatedFeatureKey,
   DeviceOwner,
   ExpenseCategory,
   ExpenseEntry,
@@ -131,6 +149,8 @@ import type {
   OwnerRole,
   PackingItem,
   PackingTemplateId,
+  PartnerAlertItem,
+  PartnerAlertMode,
   PersonalityFocusId,
   QuickVaultNote,
   ScheduledAnnouncement,
@@ -138,6 +158,7 @@ import type {
   ShoppingItem,
   SpecialEventItem,
   SpecialEventKind,
+  SponsorAdItem,
   SyncedPhoneContact,
   TodaySubSection,
   VoiceName,
@@ -179,10 +200,11 @@ const STORAGE_KEYS = {
   englishLearned: 'hamseda_learned_english_v1',
   personalityFocus: 'hamseda_personality_focus_v1',
   personalityDone: 'hamseda_personality_done_v1',
+  autoShoppingAlert: 'hamseda_auto_shopping_alert_v1',
 };
 
 const DEFAULT_SETTINGS: AppSettings = {
-  theme: 'ivory-champagne',
+  theme: 'emerald-pearl',
   defaultVoice: 'Kore',
   speechRate: 1,
   myName: 'من',
@@ -259,6 +281,7 @@ export default function App() {
     return {
       ...DEFAULT_SETTINGS,
       ...saved,
+      theme: normalizeThemeId(saved.theme),
       defaultVoice: sanitizeVoiceName(saved.defaultVoice, DEFAULT_SETTINGS.defaultVoice),
       myName: normalizedMyName,
       partnerName: normalizedPartnerName,
@@ -373,6 +396,17 @@ export default function App() {
   const [speechSourceLabel, setSpeechSourceLabel] = useState('');
   const [isGeneratingAi, setIsGeneratingAi] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [autoAlertShoppingOnAdd, setAutoAlertShoppingOnAdd] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(STORAGE_KEYS.autoShoppingAlert) === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [incomingPartnerAlert, setIncomingPartnerAlert] = useState<{
+    alert: PartnerAlertItem;
+    needsTapToPlayAudio: boolean;
+  } | null>(null);
 
   // Cloud Sync state
   const [deviceUid, setDeviceUid] = useState<string | null>(null);
@@ -417,6 +451,131 @@ export default function App() {
   const showToast = useCallback((msg: string) => {
     setToast(msg);
   }, []);
+
+  // Coin wallet & non-intrusive 10s rewarded Sponsor Ads
+  const [wallet, setWallet] = useState<WalletSnapshot>(() => readWalletSnapshot());
+  const walletRef = useRef<WalletSnapshot>(wallet);
+  walletRef.current = wallet;
+
+  const [activeSponsorAds, setActiveSponsorAds] = useState<SponsorAdItem[]>([]);
+  const [sponsorModalState, setSponsorModalState] = useState<{
+    open: boolean;
+    ad: SponsorAdItem | null;
+    reasonLabel?: string;
+    requiredCoins?: number;
+  }>({open: false, ad: null});
+
+  const pendingCoinRequestRef = useRef<{
+    cost: number;
+    label: string;
+    resolve: (granted: boolean) => void;
+  } | null>(null);
+
+  useEffect(() => {
+    writeWalletSnapshot(wallet);
+  }, [wallet]);
+
+  const openSponsorRewardModal = useCallback(
+    (reasonLabel?: string, requiredCoins?: number) => {
+      const ad = pickSponsorAdForUser(activeSponsorAds, walletRef.current.totalAdsWatched);
+      setSponsorModalState({
+        open: true,
+        ad,
+        reasonLabel,
+        requiredCoins,
+      });
+    },
+    [activeSponsorAds]
+  );
+
+  const handleCloseSponsorModal = useCallback(() => {
+    setSponsorModalState((prev) => ({...prev, open: false}));
+    const pending = pendingCoinRequestRef.current;
+    if (pending) {
+      pendingCoinRequestRef.current = null;
+      pending.resolve(false);
+    }
+  }, []);
+
+  const handleClaimSponsorReward = useCallback(
+    (earnedCoins: number) => {
+      const pending = pendingCoinRequestRef.current;
+      let nextCoins = walletRef.current.coins + earnedCoins;
+      let grantedPending = false;
+
+      if (pending && nextCoins >= pending.cost) {
+        nextCoins -= pending.cost;
+        grantedPending = true;
+      }
+
+      const nextWallet: WalletSnapshot = {
+        ...walletRef.current,
+        coins: nextCoins,
+        totalAdsWatched: walletRef.current.totalAdsWatched + 1,
+      };
+      walletRef.current = nextWallet;
+      setWallet(nextWallet);
+      setSponsorModalState((prev) => ({...prev, open: false}));
+
+      if (pending) {
+        pendingCoinRequestRef.current = null;
+        showToast(
+          grantedPending
+            ? `+${toPersianDigits(earnedCoins)} سکه دریافت شد و ${toPersianDigits(pending.cost)} سکه برای «${pending.label}» استفاده گردید.`
+            : `+${toPersianDigits(earnedCoins)} سکه هدیه اضافه شد.`
+        );
+        pending.resolve(grantedPending);
+      } else {
+        showToast(`+${toPersianDigits(earnedCoins)} سکه هدیه به کیف پول هم‌صدا اضافه شد.`);
+      }
+    },
+    [showToast]
+  );
+
+  const consumeCoinsForFeature = useCallback(
+    (feature: CoinGatedFeatureKey): Promise<boolean> => {
+      const meta = COIN_COSTS[feature];
+      const current = walletRef.current;
+      if (current.coins >= meta.cost) {
+        const nextWallet: WalletSnapshot = {
+          ...current,
+          coins: current.coins - meta.cost,
+        };
+        walletRef.current = nextWallet;
+        setWallet(nextWallet);
+        return Promise.resolve(true);
+      }
+
+      if (pendingCoinRequestRef.current) {
+        pendingCoinRequestRef.current.resolve(false);
+        pendingCoinRequestRef.current = null;
+      }
+
+      return new Promise<boolean>((resolve) => {
+        pendingCoinRequestRef.current = {
+          cost: meta.cost,
+          label: meta.label,
+          resolve,
+        };
+        openSponsorRewardModal(meta.label, meta.cost);
+      });
+    },
+    [openSponsorRewardModal]
+  );
+
+  // Persistent root media player (lives across tabs so live radio & music never cut off on navigation)
+  const mediaPlayer = useMediaPlayer({
+    rawMusicTracks: nightMusicResult?.tracks ?? [],
+    isOnline,
+    onStatusToast: showToast,
+  });
+
+  const deviceUidRef = useRef<string | null>(deviceUid);
+  deviceUidRef.current = deviceUid;
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  const showToastRef = useRef(showToast);
+  showToastRef.current = showToast;
 
   const handleChangeDeviceOwner = useCallback(
     (owner: DeviceOwner) => {
@@ -490,9 +649,9 @@ export default function App() {
 
   useEffect(() => {
     const root = document.documentElement;
-    root.dataset.theme = settings.theme;
-    const darkThemes = ['dark', 'obsidian-gold', 'royal-navy', 'midnight-purple', 'graphite'];
-    root.classList.toggle('dark', darkThemes.includes(settings.theme));
+    const normalizedTheme = normalizeThemeId(settings.theme);
+    root.dataset.theme = normalizedTheme;
+    root.classList.toggle('dark', DARK_THEME_IDS.has(normalizedTheme));
     localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(settings));
     syncAnnounceTogglesToNative({
       announceCalls:
@@ -656,6 +815,14 @@ export default function App() {
     localStorage.setItem(STORAGE_KEYS.personalityDone, JSON.stringify(completedExercisesState));
   }, [completedExercisesState]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.autoShoppingAlert, String(autoAlertShoppingOnAdd));
+    } catch {
+      // ignore storage errors
+    }
+  }, [autoAlertShoppingOnAdd]);
+
   // Check native Android capabilities and sync server URL + default bank SMS privacy policy
   useEffect(() => {
     getNativeCapabilities().then((caps) => {
@@ -684,9 +851,44 @@ export default function App() {
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, []);
 
+  const [cloudAuthError, setCloudAuthError] = useState<string | null>(null);
+  const [cloudRetryNonce, setCloudRetryNonce] = useState(0);
+
+  const latestLocalSyncBundleRef = useRef({
+    goals,
+    habits,
+    gratitudes,
+    schedules,
+    shoppingItems,
+    expenses,
+    bills,
+    meds,
+    meals,
+    vaultNotes,
+    packingItems,
+    specialEvents,
+    homeChores,
+  });
+  latestLocalSyncBundleRef.current = {
+    goals,
+    habits,
+    gratitudes,
+    schedules,
+    shoppingItems,
+    expenses,
+    bills,
+    meds,
+    meals,
+    vaultNotes,
+    packingItems,
+    specialEvents,
+    homeChores,
+  };
+
   // Firebase Auth listener + automatic space discovery & real-time sync
   useEffect(() => {
     let unsubSpace: (() => void) | null = null;
+    let active = true;
 
     const unsubAuth = onAuthStateChanged(auth, async (user) => {
       if (unsubSpace) {
@@ -694,11 +896,12 @@ export default function App() {
         unsubSpace = null;
       }
 
-      if (!user || !user.isAnonymous) {
+      if (!user) {
         setDeviceUid(null);
         setSpaceInfo(null);
         setCloudBusy(true);
         void ensureAnonymousDeviceIdentity().catch(async (err) => {
+          if (!active) return;
           const authError = err as {code?: string; message?: string};
           const errorCode = authError?.code || 'unknown';
           const errorMessage = authError?.message || String(err);
@@ -710,24 +913,35 @@ export default function App() {
 
           const diagnostics = await diagnoseFirebaseAuthNetwork();
           console.warn('Firebase Auth network diagnostics:', diagnostics);
-          showToast(
-            `ورود ناشناس: ${errorCode} | WebView: ${diagnostics.identityToolkit} / ${diagnostics.secureToken} | Android: ${diagnostics.nativeIdentityToolkit} / ${diagnostics.nativeSecureToken}`
-          );
+          const diagSummary = `ورود ناشناس: ${errorCode} | WebView: ${diagnostics.identityToolkit} / ${diagnostics.secureToken} | Android: ${diagnostics.nativeIdentityToolkit} / ${diagnostics.nativeSecureToken}`;
+          setCloudAuthError(diagSummary);
+          showToast(diagSummary);
           setCloudBusy(false);
         });
         return;
       }
 
+      setCloudAuthError(null);
       setDeviceUid(user.uid);
       setCloudBusy(true);
+      void fetchActiveSponsorAds().then((ads) => {
+        if (active && ads.length > 0) {
+          setActiveSponsorAds(ads);
+        }
+      });
       try {
         const discovered = await ensureUserAndDiscoverSpace(user);
+        if (!active) return;
+        if (!isCloudSpaceHydrated(discovered.spaceId)) {
+          await uploadLocalBundleToSpace(discovered.spaceId, latestLocalSyncBundleRef.current);
+          markCloudSpaceHydrated(discovered.spaceId);
+        }
+        if (!active) return;
         setSpaceInfo(discovered);
         unsubSpace = subscribeToCoupleSpace(discovered.spaceId, {
           onGoals: (cloudGoals) => { if (isCloudSpaceHydrated(discovered.spaceId)) setGoals(cloudGoals); },
           onHabits: (cloudHabits) => { if (isCloudSpaceHydrated(discovered.spaceId)) setHabits(cloudHabits); },
           onGratitudes: (cloudGratitudes) => { if (isCloudSpaceHydrated(discovered.spaceId)) setGratitudes(cloudGratitudes); },
-          onCallers: (cloudCallers) => { if (isCloudSpaceHydrated(discovered.spaceId)) setCallers(cloudCallers); },
           onSchedules: (cloudSchedules) => { if (isCloudSpaceHydrated(discovered.spaceId)) setSchedules(cloudSchedules); },
           onShopping: (cloudShopping) => { if (isCloudSpaceHydrated(discovered.spaceId)) setShoppingItems(cloudShopping); },
           onExpenses: (cloudExpenses) => { if (isCloudSpaceHydrated(discovered.spaceId)) setExpenses(cloudExpenses); },
@@ -738,32 +952,76 @@ export default function App() {
           onPacking: (cloudPacking) => { if (isCloudSpaceHydrated(discovered.spaceId)) setPackingItems(cloudPacking); },
           onEvents: (cloudEvents) => { if (isCloudSpaceHydrated(discovered.spaceId)) setSpecialEvents(cloudEvents); },
           onChores: (cloudChores) => { if (isCloudSpaceHydrated(discovered.spaceId)) setHomeChores(cloudChores); },
-          onSettings: (cloudSettings) => {
+          onAlerts: (cloudAlerts) => {
             if (!isCloudSpaceHydrated(discovered.spaceId)) return;
-            setSettings((prev) => ({
-              ...DEFAULT_SETTINGS,
-              ...prev,
-              ...cloudSettings,
-              defaultVoice: sanitizeVoiceName(cloudSettings.defaultVoice, prev.defaultVoice),
-              myName: cloudSettings.myName === 'مهدی' || cloudSettings.myName === 'بهمن' ? 'من' : cloudSettings.myName || 'من',
-              partnerName: cloudSettings.partnerName === 'زری' ? 'همراه' : cloudSettings.partnerName || prev.partnerName || 'همراه',
-              assistantName: cloudSettings.assistantName?.trim() && !['بهمن', 'زری', 'آوا'].includes(cloudSettings.assistantName.trim()) ? cloudSettings.assistantName.trim() : 'هم‌صدا',
-            }));
+            const handled = getHandledPartnerAlertIds();
+            const now = Date.now();
+            const myUid = deviceUidRef.current;
+            const fresh = cloudAlerts
+              .filter(
+                (a) =>
+                  !handled.has(a.id) &&
+                  now - a.createdAt < 3 * 60 * 1000 &&
+                  (!a.senderUid || !myUid || a.senderUid !== myUid)
+              )
+              .sort((a, b) => b.createdAt - a.createdAt)[0];
+
+            if (!fresh) return;
+            markPartnerAlertHandled(fresh.id);
+            setIncomingPartnerAlert({alert: fresh, needsTapToPlayAudio: false});
+            void executePartnerAlertEffects({
+              mode: fresh.mode,
+              title: fresh.title,
+              spokenText: fresh.spokenText,
+              voiceName: settingsRef.current.defaultVoice,
+              speechRate: settingsRef.current.speechRate,
+              alertRecord: fresh,
+            }).then((report) => {
+              if (report.needsTapToPlayAudio) {
+                setIncomingPartnerAlert({alert: fresh, needsTapToPlayAudio: true});
+              }
+              if (report.volumeAdjustedToHalf) {
+                showToastRef.current('صدای هشدار گوشی برای شنیدن پیام به ۵۰٪ تنظیم شد.');
+              }
+            });
           },
           onError: (msg) => console.warn('Cloud sync listener notice:', msg),
         });
       } catch (err) {
         console.warn('Cloud discovery error:', err);
+        setCloudAuthError(err instanceof Error ? err.message : 'خطا در همگام‌سازی اولیه فضای مشترک');
         showToast('ورود انجام شد، اما بارگذاری فضای مشترک ابری با تاخیر مواجه شد؛ داده‌های گوشی شما فعال هستند.');
       } finally {
-        setCloudBusy(false);
+        if (active) setCloudBusy(false);
       }
     });
 
     return () => {
+      active = false;
       unsubAuth();
       if (unsubSpace) unsubSpace();
     };
+  }, [showToast, cloudRetryNonce]);
+
+  const handleRetryCloudAuth = useCallback(() => {
+    setCloudAuthError(null);
+    setCloudBusy(true);
+    if (!auth.currentUser) {
+      void ensureAnonymousDeviceIdentity()
+        .then(() => {
+          setCloudRetryNonce((n) => n + 1);
+        })
+        .catch(async (err) => {
+          const authError = err as {code?: string; message?: string};
+          const diag = await diagnoseFirebaseAuthNetwork();
+          const msg = `ورود ناشناس: ${authError?.code || 'unknown'} | WebView: ${diag.identityToolkit} / ${diag.secureToken} | Android: ${diag.nativeIdentityToolkit} / ${diag.nativeSecureToken}`;
+          setCloudAuthError(msg);
+          showToast(msg);
+          setCloudBusy(false);
+        });
+      return;
+    }
+    setCloudRetryNonce((n) => n + 1);
   }, [showToast]);
 
   const refreshClips = useCallback(async () => {
@@ -1078,9 +1336,13 @@ export default function App() {
   const handleUpdateSettings = useCallback(
     (patch: Partial<AppSettings>) => {
       setSettings((prev) => {
-        const next = {...prev, ...patch};
+        const next: AppSettings = {
+          ...prev,
+          ...patch,
+          theme: patch.theme ? normalizeThemeId(patch.theme) : prev.theme,
+        };
         if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
-          pushSettingsToCloud(spaceInfo.spaceId, next).catch(() => {});
+          void pushSettingsToCloud(spaceInfo.spaceId, next).catch(() => {});
         }
         return next;
       });
@@ -1201,29 +1463,14 @@ export default function App() {
     if (!auth.currentUser) return;
     setCloudBusy(true);
     try {
+      // Pairing is a single operation: join, add any local-only records safely,
+      // then enable cloud snapshots before restarting the app's listeners.
       const joined = await joinSpaceByCode(spaceCode, auth.currentUser);
-      setSpaceInfo(joined);
-      showToast('به فضای مشترک متصل شدید! داده‌ها به‌صورت لحظه‌ای همگام می‌شوند.');
-      // Reboot the auth listener so it subscribes to the newly selected shared space.
-      window.setTimeout(() => window.location.reload(), 500);
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'امکان اتصال با این کد وجود نداشت.');
-    } finally {
-      setCloudBusy(false);
-    }
-  };
-
-  const handlePushLocalToCloud = async () => {
-    if (!spaceInfo) return;
-    setCloudBusy(true);
-    try {
-      await uploadLocalBundleToSpace(spaceInfo.spaceId, {
+      await uploadLocalBundleToSpace(joined.spaceId, {
         goals,
         habits,
         gratitudes,
-        callers,
         schedules,
-        settings,
         shoppingItems,
         expenses,
         bills,
@@ -1234,11 +1481,12 @@ export default function App() {
         specialEvents,
         homeChores,
       });
-      markCloudSpaceHydrated(spaceInfo.spaceId);
-      showToast('اطلاعات محلی بدون بازنویسی داده‌های موجود به فضای مشترک اضافه شد. در حال بارگذاری همگام‌سازی…');
-      window.location.reload();
+      markCloudSpaceHydrated(joined.spaceId);
+      setSpaceInfo(joined);
+      showToast('اتصال و ادغام اولیه انجام شد؛ همگام‌سازی خودکار فعال می‌شود.');
+      window.setTimeout(() => window.location.reload(), 500);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'خطا در ارسال به ابر');
+      showToast(err instanceof Error ? `اتصال یا ادغام کامل نشد: ${err.message}` : 'اتصال یا ادغام اطلاعات کامل نشد؛ اطلاعات گوشی حفظ شده‌اند.');
     } finally {
       setCloudBusy(false);
     }
@@ -1287,6 +1535,9 @@ export default function App() {
   const handleGenerateAiMessage = async () => {
     if (!isOnline) {
       showToast('برای تولید پیام تازه به اینترنت نیاز است؛ می‌توانید از پیام‌های کتابخانه آفلاین استفاده کنید.');
+      return;
+    }
+    if (!(await consumeCoinsForFeature('ai_morning_message'))) {
       return;
     }
     setIsGeneratingAi(true);
@@ -1460,17 +1711,105 @@ export default function App() {
   const handleAddCaller = (input: Omit<CallerContact, 'id'>) => {
     const created: CallerContact = {...input, id: `c-${Date.now()}`};
     setCallers((prev) => [created, ...prev]);
-    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
-      pushCallerToCloud(spaceInfo.spaceId, created).catch(() => {});
-    }
   };
 
   const handleDeleteCaller = (id: string) => {
     setCallers((prev) => prev.filter((c) => c.id !== id));
-    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
-      deleteCallerFromCloud(spaceInfo.spaceId, id).catch(() => {});
-    }
   };
+
+  const buildShoppingAlertPayload = useCallback(
+    (targetItems: ShoppingItem[]) => {
+      const remaining = targetItems.filter((it) => !it.checked);
+      const itemsToRead = (remaining.length > 0 ? remaining : targetItems).slice(0, 12);
+      const senderDisplay = selfName === 'من' ? 'همراه شما' : selfName;
+      if (itemsToRead.length === 0) {
+        return {
+          title: `هشدار لیست خرید از ${senderDisplay}`,
+          spokenText: `توجه! ${senderDisplay} یک هشدار خرید فوری فرستاد. لطفاً لیست خرید امروز هم‌صدا را بررسی کنید.`,
+        };
+      }
+      const spokenItems = itemsToRead
+        .map((it) => `${it.title}${it.note ? `، ${it.note}` : ''}`)
+        .join('، ');
+      const fullText = `توجه! ${senderDisplay} لیست خرید امروز را فرستاد (${toPersianDigits(
+        itemsToRead.length
+      )} مورد): ${spokenItems}.`;
+      return {
+        title: `لیست خرید جدید از ${senderDisplay}`,
+        spokenText: fullText.slice(0, 560),
+      };
+    },
+    [selfName]
+  );
+
+  const handleSendShoppingAlert = useCallback(
+    async (mode: PartnerAlertMode, overrideItems?: ShoppingItem[]) => {
+      void unlockPartnerAlertAudio();
+      void unlockAudioPlayback();
+      if (!spaceInfo || !isCloudSpaceHydrated(spaceInfo.spaceId)) {
+        showToast('ابتدا در تب «همگام‌سازی و ابزارها» دو گوشی را با یک کد متصل کنید.');
+        return;
+      }
+      const resolvedUid = deviceUid || auth.currentUser?.uid || '';
+      if (!resolvedUid) {
+        showToast('شناسه اتصال ابری هنوز آماده نیست؛ چند لحظه بعد دوباره امتحان کنید.');
+        return;
+      }
+      const sourceItems = overrideItems ?? shoppingItems;
+      const {title, spokenText} = buildShoppingAlertPayload(sourceItems);
+      const alertRecord: PartnerAlertItem = {
+        id: `alert-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        kind: 'shopping_alert',
+        mode,
+        senderOwner: deviceOwner,
+        senderName: selfName,
+        senderUid: resolvedUid,
+        title,
+        spokenText,
+        createdAt: Date.now(),
+      };
+      markPartnerAlertHandled(alertRecord.id);
+      try {
+        await pushPartnerAlertToCloud(spaceInfo.spaceId, alertRecord);
+        if (mode === 'alarm') {
+          showToast('آلارم صوتی لیست خرید به گوشی همراه ارسال شد.');
+        } else if (mode === 'vibrate') {
+          showToast('هشدار ویبره متوالی به گوشی همراه ارسال شد.');
+        } else {
+          showToast('آلارم صوتی و ویبره متوالی به گوشی همراه ارسال شد.');
+        }
+      } catch (err) {
+        showToast(
+          err instanceof Error
+            ? `ارسال هشدار انجام نشد: ${err.message}`
+            : 'ارسال هشدار به گوشی دوم ناموفق بود.'
+        );
+      }
+    },
+    [buildShoppingAlertPayload, deviceOwner, deviceUid, selfName, shoppingItems, showToast, spaceInfo]
+  );
+
+  const handleTestLocalShoppingAlert = useCallback(
+    async (mode: PartnerAlertMode) => {
+      await unlockPartnerAlertAudio();
+      await unlockAudioPlayback();
+      const {title, spokenText} = buildShoppingAlertPayload(shoppingItems);
+      const report = await executePartnerAlertEffects({
+        mode,
+        title,
+        spokenText,
+        voiceName: settings.defaultVoice,
+        speechRate: settings.speechRate,
+        skipNotification: true,
+      });
+      if (report.volumeAdjustedToHalf) {
+        showToast('تست انجام شد و صدای گوشی برای وضوح پیام روی ۵۰٪ تنظیم گردید.');
+      } else {
+        showToast('تست آلارم، ویبره متوالی و خواندن لیست خرید روی همین گوشی اجرا شد.');
+      }
+    },
+    [buildShoppingAlertPayload, settings.defaultVoice, settings.speechRate, shoppingItems, showToast]
+  );
 
   // Shopping CRUD
   const handleAddShoppingItem = (title: string, category: ShoppingCategory = 'grocery', note?: string) => {
@@ -1487,6 +1826,9 @@ export default function App() {
     setShoppingItems((prev) => [item, ...prev]);
     if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       pushShoppingToCloud(spaceInfo.spaceId, item).catch(() => {});
+      if (autoAlertShoppingOnAdd) {
+        void handleSendShoppingAlert('both', [item, ...shoppingItems]);
+      }
     }
   };
 
@@ -2053,22 +2395,23 @@ export default function App() {
 
   return (
     <div className="app-shell min-h-screen flex flex-col text-slate-900 dark:text-slate-100">
+      {/* Persistent Root Media Audio Elements (isolated, mounted across all tabs) */}
+      <audio ref={mediaPlayer.musicAudioRef} preload="none" {...mediaPlayer.audioEventHandlers.music} />
+      <audio ref={mediaPlayer.radioAudioRef} preload="none" {...mediaPlayer.audioEventHandlers.radio} />
+
       <TopBar
         activeTab={activeTab}
         deviceOwner={deviceOwner}
         selfName={selfName}
         assistantName={settings.assistantName?.trim() || 'هم‌صدا'}
         theme={settings.theme}
+        coins={wallet.coins}
         masterSpeakerEnabled={localVoiceControls.masterSpeakerEnabled}
         onSelectTheme={(theme) => {
           handleUpdateSettings({theme});
-          const labels: Record<AppSettings['theme'], string> = {
-            light: 'روشن', dark: 'تیره', 'obsidian-gold': 'مشکی و طلایی',
-            'royal-navy': 'سرمه‌ای سلطنتی', 'midnight-purple': 'بنفش نیمه‌شب',
-            graphite: 'گرافیتی', 'ivory-champagne': 'عاجی شامپاینی', 'arctic-silver': 'نقره‌ای یخی',
-          };
-          showToast(`پوسته ${labels[theme]} فعال شد.`);
+          showToast(`پوسته ${getThemeMeta(theme).label} فعال شد.`);
         }}
+        onOpenSponsorReward={() => openSponsorRewardModal()}
         onToggleMasterSpeaker={handleToggleMasterSpeaker}
         onRefreshApp={handleRefreshApp}
         onSelectTab={setActiveTab}
@@ -2077,6 +2420,60 @@ export default function App() {
       />
 
       <main className="relative flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-24 lg:pb-10">
+        {incomingPartnerAlert && (
+          <div className="mb-6 rounded-2xl border-2 border-amber-400 bg-emerald-950 text-white p-4 sm:p-5 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1.5 min-w-0">
+              <div className="flex items-center gap-2 text-amber-300 font-extrabold text-sm sm:text-base">
+                <BellRing className="w-5 h-5 shrink-0" />
+                <span>{incomingPartnerAlert.alert.title}</span>
+              </div>
+              <p className="text-xs sm:text-sm text-emerald-50 leading-7">
+                {incomingPartnerAlert.alert.spokenText}
+              </p>
+              {incomingPartnerAlert.needsTapToPlayAudio && (
+                <p className="text-[11px] text-amber-200">
+                  مرورگر گوشی برای امنیت، پخش خودکار صدا را نگه داشته؛ با لمس «پخش صدا و ویبره» لیست را بشنوید.
+                </p>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={async () => {
+                  await unlockPartnerAlertAudio();
+                  await unlockAudioPlayback();
+                  const activeAlert = incomingPartnerAlert.alert;
+                  await executePartnerAlertEffects({
+                    mode: activeAlert.mode === 'vibrate' ? 'vibrate' : 'both',
+                    title: activeAlert.title,
+                    spokenText: activeAlert.spokenText,
+                    voiceName: settings.defaultVoice,
+                    speechRate: settings.speechRate,
+                    skipNotification: true,
+                  });
+                  setIncomingPartnerAlert((prev) =>
+                    prev ? {...prev, needsTapToPlayAudio: false} : null
+                  );
+                }}
+                className="min-h-[44px] px-4 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs sm:text-sm font-bold flex items-center gap-2 cursor-pointer"
+              >
+                <Volume2 className="w-4 h-4 shrink-0" />
+                <span>پخش صدا و ویبره</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handleStopSpeech();
+                  setIncomingPartnerAlert(null);
+                }}
+                className="min-h-[44px] px-4 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold cursor-pointer"
+              >
+                متوجه شدم
+              </button>
+            </div>
+          </div>
+        )}
+
         {activeTab === 'family' && <FamilyLifeSuite />}
 
         {activeTab === 'today' && (
@@ -2125,6 +2522,11 @@ export default function App() {
             onToggleShoppingItem={handleToggleShoppingItem}
             onDeleteShoppingItem={handleDeleteShoppingItem}
             onClearCheckedShopping={handleClearCheckedShopping}
+            isSpacePaired={Boolean(spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId))}
+            autoAlertShoppingOnAdd={autoAlertShoppingOnAdd}
+            onToggleAutoAlertShoppingOnAdd={setAutoAlertShoppingOnAdd}
+            onSendShoppingAlert={handleSendShoppingAlert}
+            onTestLocalShoppingAlert={handleTestLocalShoppingAlert}
             onUpdateBudget={setMonthlyBudget}
             onAddExpense={handleAddExpense}
             onDeleteExpense={handleDeleteExpense}
@@ -2229,6 +2631,7 @@ export default function App() {
             onSpeakDailyEnglish={handleSpeakDailyEnglish}
             onOpenDriveMode={() => setDriveModeOpen(true)}
             pendingAssistantQuery={pendingAssistantQuery}
+            onConsumeCoinsForAi={consumeCoinsForFeature}
             onStatusToast={showToast}
           />
         )}
@@ -2255,6 +2658,7 @@ export default function App() {
             isSpeaking={isSpeaking}
             nightMoviesResult={nightMoviesResult}
             nightMusicResult={nightMusicResult}
+            mediaPlayer={mediaPlayer}
             onSaveNightResult={(res) => {
               if (res.mode === 'music') setNightMusicResult(res);
               else setNightMoviesResult(res);
@@ -2262,6 +2666,7 @@ export default function App() {
             onUpdateSettings={handleUpdateSettings}
             onSpeakText={handleSpeakText}
             onStopSpeech={handleStopSpeech}
+            onConsumeCoinsForAi={consumeCoinsForFeature}
             onStatusToast={showToast}
             assistantMediaTrigger={assistantMediaTrigger}
             messagePrefill={nightMessagePrefill}
@@ -2283,6 +2688,7 @@ export default function App() {
             onRefreshClips={refreshClips}
             onStopSpeech={handleStopSpeech}
             onUpdateRate={(rate) => handleUpdateSettings({speechRate: rate})}
+            onConsumeCoinsForAi={consumeCoinsForFeature}
             onStatusToast={showToast}
           />
         )}
@@ -2303,6 +2709,7 @@ export default function App() {
             onDeleteCaller={handleDeleteCaller}
             onSaveSyncedContacts={setSyncedContacts}
             onRefreshClips={refreshClips}
+            onConsumeCoinsForAi={consumeCoinsForFeature}
             onStatusToast={showToast}
           />
         )}
@@ -2335,6 +2742,7 @@ export default function App() {
             cachedClipsCount={audioClips.length}
             deviceUid={deviceUid}
             cloudBusy={cloudBusy}
+            cloudAuthError={cloudAuthError}
             spaceInfo={spaceInfo}
             nativeCaps={nativeCaps}
             onUpdateSettings={handleUpdateSettings}
@@ -2348,7 +2756,7 @@ export default function App() {
             onTestSchedule={(item) => handleTriggerSchedule(item, true)}
             onDownloadScheduleAlarm={handleDownloadScheduleAlarm}
             onJoinSpaceByCode={handleJoinSpaceByCode}
-            onPushLocalToCloud={handlePushLocalToCloud}
+            onRetryCloudAuth={handleRetryCloudAuth}
             onRequestNativePermissions={handleRequestNativePermissions}
             onOpenAppInfoSettings={handleOpenAppInfoSettings}
             onOpenXiaomiOtherPermissions={handleOpenXiaomiOtherPermissions}
@@ -2396,6 +2804,22 @@ export default function App() {
           </a>
         </div>
       </footer>
+
+      <PersistentMiniPlayer
+        player={mediaPlayer}
+        visible={activeTab !== 'night'}
+        onOpenMediaTab={() => setActiveTab('night')}
+      />
+
+      <SponsorRewardModal
+        open={sponsorModalState.open}
+        ad={sponsorModalState.ad}
+        reasonLabel={sponsorModalState.reasonLabel}
+        currentCoins={wallet.coins}
+        requiredCoins={sponsorModalState.requiredCoins}
+        onClose={handleCloseSponsorModal}
+        onClaimReward={handleClaimSponsorReward}
+      />
 
       {!isOnline && (
         <div className="fixed bottom-24 lg:bottom-5 left-4 z-40 flex items-center gap-2 rounded-xl bg-amber-600 px-3.5 py-2 text-xs font-medium text-white shadow-lg">

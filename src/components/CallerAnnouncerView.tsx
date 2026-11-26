@@ -41,8 +41,15 @@ import {
   stopAllSpeech,
   unlockAudioPlayback,
 } from '../services/speechEngine';
-import type {AppSettings, CallerContact, DeviceOwner, SyncedPhoneContact, VoiceName} from '../types/app';
-import {getPartnerNameForDevice} from '../utils/deviceIdentity';
+import type {
+  AppSettings,
+  CallerContact,
+  CoinGatedFeatureKey,
+  DeviceOwner,
+  SyncedPhoneContact,
+  VoiceName,
+} from '../types/app';
+import {getPartnerNameForDevice, getSelfName} from '../utils/deviceIdentity';
 import {buildSmsSpokenScript, isNumericOrShortcodeSender} from '../utils/smsFormatters';
 
 interface CallerAnnouncerViewProps {
@@ -60,6 +67,7 @@ interface CallerAnnouncerViewProps {
   onDeleteCaller: (id: string) => void;
   onSaveSyncedContacts: (contacts: SyncedPhoneContact[]) => void;
   onRefreshClips: () => Promise<void>;
+  onConsumeCoinsForAi?: (feature: CoinGatedFeatureKey) => Promise<boolean>;
   onStatusToast: (msg: string) => void;
 }
 
@@ -217,8 +225,10 @@ export const CallerAnnouncerView: React.FC<CallerAnnouncerViewProps> = ({
   onDeleteCaller,
   onSaveSyncedContacts,
   onRefreshClips,
+  onConsumeCoinsForAi,
   onStatusToast,
 }) => {
+  const selfName = getSelfName(settings, deviceOwner);
   const partnerOther = getPartnerNameForDevice(settings, deviceOwner);
   // Quick Bilingual Tester
   const [testName, setTestName] = useState(
@@ -598,6 +608,9 @@ export const CallerAnnouncerView: React.FC<CallerAnnouncerViewProps> = ({
   const handleSmartAnalyze = async () => {
     if (!testName.trim() || !isOnline) {
       onStatusToast('تحلیل هوشمند تلفظ نیازمند اتصال اینترنت است.');
+      return;
+    }
+    if (onConsumeCoinsForAi && !(await onConsumeCoinsForAi('ai_phonetic'))) {
       return;
     }
     setIsTesting(true);

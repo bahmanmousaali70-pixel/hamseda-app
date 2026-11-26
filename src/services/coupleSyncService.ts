@@ -24,6 +24,8 @@ import type {
   MealPlanEntry,
   MedicationItem,
   PackingItem,
+  PartnerAlertItem,
+  PartnerAlertMode,
   QuickVaultNote,
   ScheduledAnnouncement,
   ShoppingItem,
@@ -181,7 +183,11 @@ async function ensureMembership(
 }
 
 export async function joinSpaceByCode(spaceIdRaw: string, user: User): Promise<CoupleSpaceInfo> {
-  const spaceId = sanitizeId(spaceIdRaw.trim());
+  const rawTrimmed = spaceIdRaw.trim();
+  if (!/^[a-zA-Z0-9_-]{3,128}$/.test(rawTrimmed)) {
+    throw new Error('فرمت کد فضای مشترک معتبر نیست؛ کد را بدون فاصله اضافه وارد کنید.');
+  }
+  const spaceId = rawTrimmed;
   const uid = sanitizeId(user.uid);
   const displayName = clampStr(user.displayName ?? undefined, 100, 'همراه');
   const path = `spaces/${spaceId}`;
@@ -200,11 +206,14 @@ export async function joinSpaceByCode(spaceIdRaw: string, user: User): Promise<C
     });
     return {
       spaceId,
-      title: sdata.title ?? 'فضای مشترک من و زری',
+      title: sdata.title ?? 'فضای مشترک هم‌صدا',
       ownerUid: sdata.ownerUid,
       role,
     };
   } catch (err) {
+    if (err instanceof Error && err.message === 'کد فضای مشترک پیدا نشد.') {
+      throw err;
+    }
     handleFirestoreError(err, OperationType.GET, path);
   }
 }
@@ -215,9 +224,7 @@ export function subscribeToCoupleSpace(
     onGoals: (items: GoalItem[]) => void;
     onHabits: (items: HabitItem[]) => void;
     onGratitudes: (items: GratitudeEntry[]) => void;
-    onCallers: (items: CallerContact[]) => void;
     onSchedules: (items: ScheduledAnnouncement[]) => void;
-    onSettings: (settings: AppSettings) => void;
     onShopping?: (items: ShoppingItem[]) => void;
     onExpenses?: (items: ExpenseEntry[]) => void;
     onBills?: (items: BillReminderItem[]) => void;
@@ -227,14 +234,18 @@ export function subscribeToCoupleSpace(
     onPacking?: (items: PackingItem[]) => void;
     onEvents?: (items: SpecialEventItem[]) => void;
     onChores?: (items: HomeChoreItem[]) => void;
+    onAlerts?: (items: PartnerAlertItem[]) => void;
     onError: (msg: string) => void;
   }
 ): Unsubscribe {
   const unsubs: Unsubscribe[] = [];
 
   const reportListenerError = (label: string, err: Error) => {
-    console.warn(`Firestore ${label} listener error:`, err);
-    callbacks.onError(err.message || label);
+    try {
+      handleFirestoreError(err, OperationType.LIST, `spaces/${spaceId}/${label}`);
+    } catch (structuredErr) {
+      callbacks.onError(structuredErr instanceof Error ? structuredErr.message : err.message || label);
+    }
   };
 
 
@@ -325,35 +336,6 @@ export function subscribeToCoupleSpace(
 
   unsubs.push(
     onSnapshot(
-      collection(db, 'spaces', spaceId, 'callers'),
-      (snap) => {
-        // Empty snapshots are meaningful: they propagate deletions to every paired device.
-        const items: CallerContact[] = snap.docs
-          .map((d) => {
-            const data = d.data();
-            if (!data || typeof data.name !== 'string') return null;
-            return {
-              id: typeof data.id === 'string' ? data.id : d.id,
-              name: data.name,
-              latinAlias: typeof data.latinAlias === 'string' ? data.latinAlias : undefined,
-              persianPhonetic: typeof data.persianPhonetic === 'string' ? data.persianPhonetic : undefined,
-              relation: typeof data.relation === 'string' ? data.relation : '',
-              template: typeof data.template === 'string' ? data.template : 'تماس ورودی از طرف {name}',
-              repeatCount: data.repeatCount === 2 ? 2 : 1,
-              chimeStyle: data.chimeStyle ?? 'gentle',
-              voiceName: data.voiceName ?? 'Kore',
-              favorite: Boolean(data.favorite),
-            } as CallerContact;
-          })
-          .filter((item): item is CallerContact => item !== null);
-        callbacks.onCallers(items);
-      },
-      (err) => reportListenerError('callers', err)
-    )
-  );
-
-  unsubs.push(
-    onSnapshot(
       collection(db, 'spaces', spaceId, 'schedules'),
       (snap) => {
         // Empty snapshots are meaningful: they propagate deletions to every paired device.
@@ -377,34 +359,6 @@ export function subscribeToCoupleSpace(
         callbacks.onSchedules(items);
       },
       (err) => reportListenerError('schedules', err)
-    )
-  );
-
-  unsubs.push(
-    onSnapshot(
-      doc(db, 'spaces', spaceId, 'config', 'settings'),
-      (snap) => {
-        if (!snap.exists()) return;
-        const data = snap.data();
-        const rawMyName = typeof data.myName === 'string' && data.myName.trim() ? data.myName.trim() : 'بهمن';
-        callbacks.onSettings({
-          theme: data.theme === 'dark' ? 'dark' : 'light',
-          defaultVoice: data.defaultVoice ?? 'Kore',
-          speechRate: Number(data.speechRate ?? 1),
-          myName: rawMyName === 'مهدی' ? 'بهمن' : rawMyName,
-          partnerName: typeof data.partnerName === 'string' && data.partnerName.trim() ? data.partnerName : 'زری',
-          assistantName:
-            typeof data.assistantName === 'string' && data.assistantName.trim() ? data.assistantName.trim() : 'هم‌صدا',
-          assistantWakeWordEnabled: Boolean(data.assistantWakeWordEnabled ?? false),
-          backgroundKeepAlive: Boolean(data.backgroundKeepAlive),
-          announceCalls: data.announceCalls !== undefined ? Boolean(data.announceCalls) : true,
-          announceSms: data.announceSms !== undefined ? Boolean(data.announceSms) : true,
-          autoOpenMorning: data.autoOpenMorning !== undefined ? Boolean(data.autoOpenMorning) : true,
-          nightMovieAutoCheck: data.nightMovieAutoCheck !== undefined ? Boolean(data.nightMovieAutoCheck) : true,
-          nightMovieTime: typeof data.nightMovieTime === 'string' && /^\d{2}:\d{2}$/.test(data.nightMovieTime) ? data.nightMovieTime : '22:00',
-        });
-      },
-      (err) => reportListenerError('settings', err)
     )
   );
 
@@ -696,6 +650,39 @@ export function subscribeToCoupleSpace(
     );
   }
 
+  if (callbacks.onAlerts) {
+    const onAlertsCb = callbacks.onAlerts;
+    unsubs.push(
+      onSnapshot(
+        collection(db, 'spaces', spaceId, 'alerts'),
+        (snap) => {
+          const items: PartnerAlertItem[] = snap.docs
+            .map((d) => {
+              const data = d.data();
+              if (!data || typeof data.spokenText !== 'string') return null;
+              const mode: PartnerAlertMode =
+                data.mode === 'alarm' || data.mode === 'vibrate' || data.mode === 'both' ? data.mode : 'both';
+              return {
+                id: typeof data.id === 'string' ? data.id : d.id,
+                kind: 'shopping_alert',
+                mode,
+                senderOwner: data.senderOwner === 'zari' ? 'zari' : 'man',
+                senderName: typeof data.senderName === 'string' ? data.senderName : 'همراه',
+                senderUid: typeof data.senderUid === 'string' ? data.senderUid : '',
+                title: typeof data.title === 'string' ? data.title : 'هشدار لیست خرید',
+                spokenText: data.spokenText,
+                createdAt: Number(data.clientCreatedAt ?? Date.now()),
+              } as PartnerAlertItem;
+            })
+            .filter((x): x is PartnerAlertItem => x !== null)
+            .sort((a, b) => b.createdAt - a.createdAt);
+          onAlertsCb(items);
+        },
+        (err) => reportListenerError('alerts', err)
+      )
+    );
+  }
+
   return () => {
     for (const u of unsubs) u();
   };
@@ -718,7 +705,7 @@ export async function pushGoalToCloud(spaceId: string, goal: GoalItem): Promise<
     timeBlock: goal.timeBlock,
     priority: goal.priority,
     completed: Boolean(goal.completed),
-    dateKey: clampStr(goal.dateKey, 20),
+    dateKey: goal.dateKey && goal.dateKey.trim().length >= 8 ? clampStr(goal.dateKey, 20) : '2026-01-01',
     updatedByUid: uid,
     updatedAt: serverTimestamp(),
   };
@@ -728,7 +715,13 @@ export async function pushGoalToCloud(spaceId: string, goal: GoalItem): Promise<
   if (goal.reminderTime && /^\d{2}:\d{2}$/.test(goal.reminderTime)) {
     fields.reminderTime = goal.reminderTime;
   }
-  if (goal.reminderVoice) {
+  if (
+    goal.reminderVoice === 'Kore' ||
+    goal.reminderVoice === 'Zephyr' ||
+    goal.reminderVoice === 'Puck' ||
+    goal.reminderVoice === 'Charon' ||
+    goal.reminderVoice === 'Fenrir'
+  ) {
     fields.reminderVoice = goal.reminderVoice;
   }
 
@@ -812,7 +805,7 @@ export async function pushGratitudeToCloud(spaceId: string, entry: GratitudeEntr
   try {
     await setDoc(doc(db, 'spaces', spaceId, 'gratitudes', id), {
       id,
-      dateKey: clampStr(entry.dateKey, 20),
+      dateKey: entry.dateKey && entry.dateKey.trim().length >= 8 ? clampStr(entry.dateKey, 20) : '2026-01-01',
       jalaliDate: clampStr(entry.jalaliDate, 80, 'امروز'),
       author: entry.author,
       mood: entry.mood,
@@ -904,7 +897,14 @@ export async function pushScheduleToCloud(
     topic: schedule.topic,
     time: /^\d{2}:\d{2}$/.test(schedule.time) ? schedule.time : '08:00',
     enabled: Boolean(schedule.enabled),
-    voiceName: schedule.voiceName,
+    voiceName:
+      schedule.voiceName === 'Kore' ||
+      schedule.voiceName === 'Zephyr' ||
+      schedule.voiceName === 'Puck' ||
+      schedule.voiceName === 'Charon' ||
+      schedule.voiceName === 'Fenrir'
+        ? schedule.voiceName
+        : 'Kore',
     days: schedule.days,
     updatedByUid: uid,
     updatedAt: serverTimestamp(),
@@ -946,8 +946,9 @@ export async function pushSettingsToCloud(spaceId: string, settings: AppSettings
   if (!uid) return;
   const path = `spaces/${spaceId}/config/settings`;
   const ref = doc(db, 'spaces', spaceId, 'config', 'settings');
+  const validThemes = new Set(['emerald-pearl', 'nordic-linen', 'espresso-sand', 'velvet-night', 'plum-noir', 'light', 'dark']);
   const payload = {
-    theme: settings.theme === 'dark' ? 'dark' : 'light',
+    theme: validThemes.has(settings.theme) ? settings.theme : 'emerald-pearl',
     defaultVoice: settings.defaultVoice,
     speechRate: Math.max(0.5, Math.min(2, Number(settings.speechRate || 1))),
     myName: clampStr(settings.myName, 60, 'بهمن'),
@@ -1368,6 +1369,37 @@ export async function deleteHomeChoreFromCloud(spaceId: string, choreId: string)
   }
 }
 
+export async function pushPartnerAlertToCloud(
+  spaceId: string,
+  alert: PartnerAlertItem
+): Promise<void> {
+  const uid = getUidOrNull();
+  if (!uid) return;
+  const id = sanitizeId(alert.id);
+  const path = `spaces/${spaceId}/alerts/${id}`;
+  const mode: PartnerAlertMode =
+    alert.mode === 'alarm' || alert.mode === 'vibrate' || alert.mode === 'both' ? alert.mode : 'both';
+  try {
+    await setDoc(doc(db, 'spaces', spaceId, 'alerts', id), {
+      id,
+      kind: 'shopping_alert',
+      mode,
+      senderOwner: alert.senderOwner === 'zari' ? 'zari' : 'man',
+      senderName: clampStr(alert.senderName, 60, 'همراه'),
+      senderUid: uid,
+      title: clampStr(alert.title, 160, 'هشدار لیست خرید'),
+      spokenText: clampStr(alert.spokenText, 600, 'لیست خرید به‌روزرسانی شد.'),
+      clientCreatedAt: Number(alert.createdAt || Date.now()),
+      authorUid: uid,
+      updatedByUid: uid,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.CREATE, path);
+  }
+}
+
 
 async function pushOnlyMissing<T extends {id: string}>(
   spaceId: string,
@@ -1376,8 +1408,14 @@ async function pushOnlyMissing<T extends {id: string}>(
   pushItem: (spaceId: string, item: T) => Promise<void>
 ): Promise<void> {
   if (items.length === 0) return;
-  const snapshot = await getDocs(collection(db, 'spaces', spaceId, collectionName));
-  const existingIds = new Set(snapshot.docs.map((item) => item.id));
+  const path = `spaces/${spaceId}/${collectionName}`;
+  let existingIds: Set<string>;
+  try {
+    const snapshot = await getDocs(collection(db, 'spaces', spaceId, collectionName));
+    existingIds = new Set(snapshot.docs.map((item) => item.id));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.LIST, path);
+  }
   const missingItems = items.filter((item) => !existingIds.has(sanitizeId(item.id)));
   await Promise.all(missingItems.map((item) => pushItem(spaceId, item)));
 }
@@ -1388,9 +1426,7 @@ export async function uploadLocalBundleToSpace(
     goals: GoalItem[];
     habits: HabitItem[];
     gratitudes: GratitudeEntry[];
-    callers: CallerContact[];
     schedules: ScheduledAnnouncement[];
-    settings: AppSettings;
     shoppingItems?: ShoppingItem[];
     expenses?: ExpenseEntry[];
     bills?: BillReminderItem[];
@@ -1403,18 +1439,12 @@ export async function uploadLocalBundleToSpace(
   }
 ): Promise<void> {
   if (!getUidOrNull()) throw new Error('شناسه دستگاه معتبر نیست؛ دوباره اتصال را برقرار کنید.');
-  // First-time pairing is additive: never overwrite records already present in the shared space.
-  const settingsRef = doc(db, 'spaces', spaceId, 'config', 'settings');
-  const settingsSnapshot = await getDoc(settingsRef);
-  if (!settingsSnapshot.exists()) {
-    await pushSettingsToCloud(spaceId, bundle.settings);
-  }
+  // Device-specific settings and caller contacts intentionally remain local to each phone.
 
   await Promise.all([
     pushOnlyMissing(spaceId, 'goals', bundle.goals, pushGoalToCloud),
     pushOnlyMissing(spaceId, 'habits', bundle.habits, pushHabitToCloud),
     pushOnlyMissing(spaceId, 'gratitudes', bundle.gratitudes, pushGratitudeToCloud),
-    pushOnlyMissing(spaceId, 'callers', bundle.callers, pushCallerToCloud),
     pushOnlyMissing(spaceId, 'schedules', bundle.schedules, pushScheduleToCloud),
     pushOnlyMissing(spaceId, 'shopping', bundle.shoppingItems ?? [], pushShoppingToCloud),
     pushOnlyMissing(spaceId, 'expenses', bundle.expenses ?? [], pushExpenseToCloud),

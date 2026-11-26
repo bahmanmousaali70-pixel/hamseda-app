@@ -11,8 +11,14 @@ service cloud.firestore {
     }
 
     function isAuthenticatedDevice() {
-      // Device pairing uses Firebase anonymous auth; Google/email verification is not required.
+      // Device pairing uses Firebase anonymous auth or linked admin account.
       return isSignedIn();
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && request.auth.token.email == 'mehdi.secret7@gmail.com'
+        && request.auth.token.email_verified == true;
     }
 
     function isValidId(id) {
@@ -160,7 +166,7 @@ service cloud.firestore {
     function isValidSpaceSettings(data) {
       return data.keys().hasAll(['theme', 'defaultVoice', 'speechRate', 'myName', 'partnerName', 'backgroundKeepAlive', 'updatedByUid', 'updatedAt'])
         && data.keys().hasOnly(['theme', 'defaultVoice', 'speechRate', 'myName', 'partnerName', 'assistantName', 'assistantWakeWordEnabled', 'backgroundKeepAlive', 'announceCalls', 'announceSms', 'autoOpenMorning', 'nightMovieAutoCheck', 'nightMovieTime', 'updatedByUid', 'updatedAt'])
-        && data.theme is string && data.theme in ['light', 'dark']
+        && data.theme is string && data.theme in ['emerald-pearl', 'nordic-linen', 'espresso-sand', 'velvet-night', 'plum-noir', 'light', 'dark']
         && data.defaultVoice is string && data.defaultVoice in ['Kore', 'Zephyr', 'Puck', 'Charon', 'Fenrir']
         && data.speechRate is number && data.speechRate >= 0.5 && data.speechRate <= 2.0
         && data.myName is string && data.myName.size() >= 1 && data.myName.size() <= 60
@@ -326,6 +332,42 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    function isValidPartnerAlert(data, alertId) {
+      return data.keys().hasAll(['id', 'kind', 'mode', 'senderOwner', 'senderName', 'senderUid', 'title', 'spokenText', 'clientCreatedAt', 'authorUid', 'updatedByUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'kind', 'mode', 'senderOwner', 'senderName', 'senderUid', 'title', 'spokenText', 'clientCreatedAt', 'authorUid', 'updatedByUid', 'createdAt', 'updatedAt'])
+        && data.id is string && data.id == alertId && isValidId(data.id)
+        && data.kind is string && data.kind == 'shopping_alert'
+        && data.mode is string && data.mode in ['alarm', 'vibrate', 'both']
+        && data.senderOwner is string && data.senderOwner in ['man', 'zari']
+        && data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 60
+        && data.senderUid is string && data.senderUid == request.auth.uid && isValidId(data.senderUid)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 160
+        && data.spokenText is string && data.spokenText.size() >= 1 && data.spokenText.size() <= 600
+        && data.clientCreatedAt is number
+        && data.authorUid is string && data.authorUid == request.auth.uid && isValidId(data.authorUid)
+        && data.updatedByUid is string && data.updatedByUid == request.auth.uid && isValidId(data.updatedByUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSponsorAd(data, adId) {
+      return data.keys().hasAll(['id', 'title', 'description', 'imageUrl', 'linkUrl', 'rewardCoins', 'durationSeconds', 'active', 'impressions', 'clicks', 'createdByUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'title', 'description', 'imageUrl', 'linkUrl', 'rewardCoins', 'durationSeconds', 'active', 'impressions', 'clicks', 'createdByUid', 'createdAt', 'updatedAt'])
+        && data.id is string && data.id == adId && isValidId(data.id)
+        && data.title is string && data.title.size() >= 2 && data.title.size() <= 120
+        && data.description is string && data.description.size() >= 2 && data.description.size() <= 300
+        && data.imageUrl is string && data.imageUrl.size() <= 1000 && (data.imageUrl == '' || data.imageUrl.matches('^https?://.+'))
+        && data.linkUrl is string && data.linkUrl.size() >= 8 && data.linkUrl.size() <= 1000 && data.linkUrl.matches('^https?://.+')
+        && data.rewardCoins is number && data.rewardCoins >= 5 && data.rewardCoins <= 500
+        && data.durationSeconds is number && data.durationSeconds >= 5 && data.durationSeconds <= 60
+        && data.active is bool
+        && data.impressions is number && data.impressions >= 0 && data.impressions <= 100000000
+        && data.clicks is number && data.clicks >= 0 && data.clicks <= 100000000
+        && data.createdByUid is string && isValidId(data.createdByUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
     match /users/{userId} {
       allow get: if isAuthenticatedDevice() && isValidId(userId) && request.auth.uid == userId;
       allow create: if isAuthenticatedDevice()
@@ -373,10 +415,7 @@ service cloud.firestore {
           && isValidId(spaceId)
           && isValidId(memberUid)
           && (memberUid == request.auth.uid || isSpaceMember(spaceId));
-        allow list: if isAuthenticatedDevice()
-          && isSpaceMember(spaceId)
-          && (get(/databases/$(database)/documents/spaces/$(spaceId)).data.ownerUid == request.auth.uid
-            || resource.data.uid is string);
+        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId);
         allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(memberUid)
@@ -398,7 +437,7 @@ service cloud.firestore {
 
       match /goals/{goalId} {
         allow get: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(goalId) && isSpaceMember(spaceId);
-        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId);
         allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(goalId)
@@ -422,7 +461,7 @@ service cloud.firestore {
 
       match /habits/{habitId} {
         allow get: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(habitId) && isSpaceMember(spaceId);
-        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId);
         allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(habitId)
@@ -446,7 +485,7 @@ service cloud.firestore {
 
       match /gratitudes/{entryId} {
         allow get: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(entryId) && isSpaceMember(spaceId);
-        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId);
         allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(entryId)
@@ -460,7 +499,7 @@ service cloud.firestore {
 
       match /callers/{callerId} {
         allow get: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(callerId) && isSpaceMember(spaceId);
-        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId);
         allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(callerId)
@@ -484,7 +523,7 @@ service cloud.firestore {
 
       match /schedules/{scheduleId} {
         allow get: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(scheduleId) && isSpaceMember(spaceId);
-        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId);
         allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(scheduleId)
@@ -529,7 +568,7 @@ service cloud.firestore {
 
       match /shopping/{itemId} {
         allow get: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(itemId) && isSpaceMember(spaceId);
-        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId);
         allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(itemId)
@@ -553,7 +592,7 @@ service cloud.firestore {
 
       match /expenses/{expenseId} {
         allow get: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(expenseId) && isSpaceMember(spaceId);
-        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId);
         allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(expenseId)
@@ -577,7 +616,7 @@ service cloud.firestore {
 
       match /bills/{billId} {
         allow get: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(billId) && isSpaceMember(spaceId);
-        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId);
         allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(billId)
@@ -601,7 +640,7 @@ service cloud.firestore {
 
       match /meds/{medId} {
         allow get: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(medId) && isSpaceMember(spaceId);
-        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId);
         allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(medId)
@@ -625,7 +664,7 @@ service cloud.firestore {
 
       match /meals/{mealId} {
         allow get: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(mealId) && isSpaceMember(spaceId);
-        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId);
         allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(mealId)
@@ -649,7 +688,7 @@ service cloud.firestore {
 
       match /vault/{noteId} {
         allow get: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(noteId) && isSpaceMember(spaceId);
-        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId);
         allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(noteId)
@@ -673,7 +712,7 @@ service cloud.firestore {
 
       match /packing/{itemId} {
         allow get: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(itemId) && isSpaceMember(spaceId);
-        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId);
         allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(itemId)
@@ -697,7 +736,7 @@ service cloud.firestore {
 
       match /events/{eventId} {
         allow get: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(eventId) && isSpaceMember(spaceId);
-        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId);
         allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(eventId)
@@ -721,7 +760,7 @@ service cloud.firestore {
 
       match /chores/{choreId} {
         allow get: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(choreId) && isSpaceMember(spaceId);
-        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId);
         allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(choreId)
@@ -742,6 +781,49 @@ service cloud.firestore {
           && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'area', 'intervalDays', 'lastDoneDateKey', 'nextDueDateKey', 'owner', 'updatedByUid', 'updatedAt']);
         allow delete: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(choreId) && isSpaceMember(spaceId);
       }
+
+      match /alerts/{alertId} {
+        allow get: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(alertId) && isSpaceMember(spaceId);
+        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId);
+        allow create: if isAuthenticatedDevice()
+          && isValidId(spaceId)
+          && isValidId(alertId)
+          && isSpaceMember(spaceId)
+          && isValidPartnerAlert(incoming(), alertId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow delete: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(alertId) && isSpaceMember(spaceId);
+      }
+    }
+
+    match /sponsorAds/{adId} {
+      allow get: if isAuthenticatedDevice() && isValidId(adId) && (resource.data.active == true || isAdmin());
+      allow list: if isAuthenticatedDevice() && (resource.data.active == true || isAdmin());
+      allow create: if isAdmin()
+        && isValidId(adId)
+        && isValidSponsorAd(incoming(), adId)
+        && incoming().createdByUid == request.auth.uid
+        && incoming().impressions == 0
+        && incoming().clicks == 0
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(adId)
+        && isValidSponsorAd(incoming(), adId)
+        && incoming().id == existing().id
+        && incoming().createdByUid == existing().createdByUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'imageUrl', 'linkUrl', 'rewardCoins', 'durationSeconds', 'active', 'impressions', 'clicks', 'updatedAt']))
+          || (isAuthenticatedDevice()
+            && existing().active == true
+            && incoming().diff(existing()).affectedKeys().hasOnly(['impressions', 'clicks', 'updatedAt'])
+            && incoming().impressions >= existing().impressions
+            && incoming().impressions <= existing().impressions + 1
+            && incoming().clicks >= existing().clicks
+            && incoming().clicks <= existing().clicks + 1)
+        );
+      allow delete: if isAdmin() && isValidId(adId);
     }
   }
 }

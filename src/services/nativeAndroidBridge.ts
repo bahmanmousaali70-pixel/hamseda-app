@@ -205,6 +205,17 @@ interface RoozhayeNativePlugin {
     authRedirect?: boolean;
     error?: string;
   }>;
+  triggerPartnerAlertFeedback(options: {
+    vibrate: boolean;
+    ensureVolume: boolean;
+    minVolumePercent: number;
+  }): Promise<{
+    ok: boolean;
+    vibrated?: boolean;
+    volumeAdjusted?: boolean;
+    musicPercent?: number;
+    alarmPercent?: number;
+  }>;
 }
 
 const RoozhayeNative = registerPlugin<RoozhayeNativePlugin>('RoozhayeNative');
@@ -1010,5 +1021,30 @@ export async function checkConnectivityNative(url?: string): Promise<NativeConne
       authRedirect: false,
       error: err instanceof Error ? err.message : 'خطا در بررسی شبکه',
     };
+  }
+}
+
+export async function triggerNativePartnerAlertFeedback(options: {
+  vibrate: boolean;
+  ensureVolume: boolean;
+  minVolumePercent?: number;
+}): Promise<{
+  ok: boolean;
+  vibrated?: boolean;
+  volumeAdjusted?: boolean;
+  musicPercent?: number;
+  alarmPercent?: number;
+}> {
+  if (!isNativeAndroid()) {
+    return {ok: false};
+  }
+  try {
+    return await RoozhayeNative.triggerPartnerAlertFeedback({
+      vibrate: options.vibrate,
+      ensureVolume: options.ensureVolume,
+      minVolumePercent: options.minVolumePercent ?? 50,
+    });
+  } catch {
+    return {ok: false};
   }
 }

@@ -108,6 +108,20 @@ export interface ShoppingItem {
   createdAt: number;
 }
 
+export type PartnerAlertMode = 'alarm' | 'vibrate' | 'both';
+
+export interface PartnerAlertItem {
+  id: string;
+  kind: 'shopping_alert';
+  mode: PartnerAlertMode;
+  senderOwner: DeviceOwner;
+  senderName: string;
+  senderUid: string;
+  title: string;
+  spokenText: string;
+  createdAt: number;
+}
+
 export type ExpenseCategory = 'food' | 'bills' | 'transport' | 'health' | 'family' | 'other';
 export type ExpenseSplitMode = 'shared' | 'personal' | 'for_partner' | 'settlement';
 
@@ -213,8 +227,40 @@ export type PersonalityFocusId = 'analytical' | 'creative' | 'sensitive' | 'acti
 
 export type TodaySubSection = 'planner' | 'reminders' | 'shopping_meals' | 'finance_bills' | 'health_vault' | 'growth_lab';
 
+export type HamsedaThemeId =
+  | 'emerald-pearl'
+  | 'nordic-linen'
+  | 'espresso-sand'
+  | 'velvet-night'
+  | 'plum-noir';
+
+export type CoinGatedFeatureKey =
+  | 'ai_morning_message'
+  | 'ai_special_message'
+  | 'ai_movies_discover'
+  | 'ai_music_discover'
+  | 'ai_assistant_online'
+  | 'ai_studio_voice'
+  | 'ai_phonetic';
+
+export interface SponsorAdItem {
+  id: string;
+  title: string;
+  description: string;
+  imageUrl: string;
+  linkUrl: string;
+  rewardCoins: number;
+  durationSeconds: number;
+  active: boolean;
+  impressions: number;
+  clicks: number;
+  createdByUid: string;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
 export interface AppSettings {
-  theme: 'light' | 'dark' | 'obsidian-gold' | 'royal-navy' | 'midnight-purple' | 'graphite' | 'ivory-champagne' | 'arctic-silver';
+  theme: HamsedaThemeId;
   defaultVoice: VoiceName;
   speechRate: number;
   myName: string;

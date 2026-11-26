@@ -26,6 +26,9 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
+import android.os.VibratorManager;
 import android.provider.AlarmClock;
 import android.provider.ContactsContract;
 import android.provider.MediaStore;
@@ -2185,6 +2188,85 @@ public class RoozhayeNativePlugin extends Plugin {
             final JSObject finalRet = ret;
             mainHandler.post(() -> call.resolve(finalRet));
         }, "HamsedaNetCheck").start();
+    }
+
+    @PluginMethod
+    public void triggerPartnerAlertFeedback(PluginCall call) {
+        boolean shouldVibrate = Boolean.TRUE.equals(call.getBoolean("vibrate", true));
+        boolean ensureVolume = Boolean.TRUE.equals(call.getBoolean("ensureVolume", true));
+        Integer minPctObj = call.getInt("minVolumePercent", 50);
+        int minPct = minPctObj != null ? Math.max(10, Math.min(100, minPctObj)) : 50;
+
+        Context ctx = getContext().getApplicationContext();
+        JSObject ret = new JSObject();
+        boolean vibrated = false;
+        boolean volumeAdjusted = false;
+        int musicPercent = -1;
+        int alarmPercent = -1;
+
+        if (ensureVolume) {
+            try {
+                AudioManager am = (AudioManager) ctx.getSystemService(Context.AUDIO_SERVICE);
+                if (am != null) {
+                    int maxMusic = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+                    if (maxMusic > 0) {
+                        int curMusic = am.getStreamVolume(AudioManager.STREAM_MUSIC);
+                        int targetMusic = Math.max(1, (int) Math.ceil(maxMusic * (minPct / 100.0)));
+                        if (curMusic < targetMusic) {
+                            am.setStreamVolume(AudioManager.STREAM_MUSIC, targetMusic, 0);
+                            curMusic = targetMusic;
+                            volumeAdjusted = true;
+                        }
+                        musicPercent = (int) Math.round((curMusic * 100.0) / maxMusic);
+                    }
+                    int maxAlarm = am.getStreamMaxVolume(AudioManager.STREAM_ALARM);
+                    if (maxAlarm > 0) {
+                        int curAlarm = am.getStreamVolume(AudioManager.STREAM_ALARM);
+                        int targetAlarm = Math.max(1, (int) Math.ceil(maxAlarm * (minPct / 100.0)));
+                        if (curAlarm < targetAlarm) {
+                            am.setStreamVolume(AudioManager.STREAM_ALARM, targetAlarm, 0);
+                            curAlarm = targetAlarm;
+                            volumeAdjusted = true;
+                        }
+                        alarmPercent = (int) Math.round((curAlarm * 100.0) / maxAlarm);
+                    }
+                }
+            } catch (Exception ignored) {
+                // DND or system policy may block stream adjustments on some ROMs
+            }
+        }
+
+        if (shouldVibrate) {
+            try {
+                long[] pattern = new long[]{0, 300, 140, 300, 140, 480, 160, 300, 140, 480};
+                Vibrator vibrator = null;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    VibratorManager vm = (VibratorManager) ctx.getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
+                    if (vm != null) {
+                        vibrator = vm.getDefaultVibrator();
+                    }
+                } else {
+                    vibrator = (Vibrator) ctx.getSystemService(Context.VIBRATOR_SERVICE);
+                }
+                if (vibrator != null && vibrator.hasVibrator()) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));
+                    } else {
+                        vibrator.vibrate(pattern, -1);
+                    }
+                    vibrated = true;
+                }
+            } catch (Exception ignored) {
+                // Ignore vibrator unavailability
+            }
+        }
+
+        ret.put("ok", true);
+        ret.put("vibrated", vibrated);
+        ret.put("volumeAdjusted", volumeAdjusted);
+        ret.put("musicPercent", musicPercent);
+        ret.put("alarmPercent", alarmPercent);
+        call.resolve(ret);
     }
 
     private JSObject buildCapsObject() {

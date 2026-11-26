@@ -2,8 +2,11 @@ import {registerPlugin} from '@capacitor/core';
 import {initializeApp} from 'firebase/app';
 import {
   getAuth,
+  GoogleAuthProvider,
+  linkWithPopup,
   onAuthStateChanged,
   signInAnonymously,
+  signInWithPopup,
   signOut,
   type User,
 } from 'firebase/auth';
@@ -12,6 +15,8 @@ import {
   getDocFromServer,
   getFirestore,
   initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   type Firestore,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -21,7 +26,10 @@ export const db: Firestore = (() => {
   try {
     return initializeFirestore(
       app,
-      {experimentalForceLongPolling: true},
+      {
+        experimentalForceLongPolling: true,
+        localCache: persistentLocalCache({tabManager: persistentMultipleTabManager()}),
+      },
       firebaseConfig.firestoreDatabaseId
     );
   } catch {
@@ -207,15 +215,19 @@ export async function diagnoseFirebaseAuthNetwork(): Promise<FirebaseAuthNetwork
 
 let anonymousIdentityPromise: Promise<User> | null = null;
 
-/** Ensures this installation uses an anonymous device identity, never a Google/Gmail session. */
+export const ADMIN_EMAIL = 'mehdi.secret7@gmail.com';
+
+export function isVerifiedAdminUser(user: User | null): boolean {
+  if (!user) return false;
+  return Boolean(user.email && user.email.toLowerCase() === ADMIN_EMAIL && user.emailVerified);
+}
+
+/** Ensures this installation has an authenticated Firebase user (defaults to anonymous if signed out). */
 export async function ensureAnonymousDeviceIdentity(): Promise<User> {
-  if (auth.currentUser?.isAnonymous) return auth.currentUser;
+  if (auth.currentUser) return auth.currentUser;
   if (!anonymousIdentityPromise) {
     anonymousIdentityPromise = (async () => {
-      if (auth.currentUser && !auth.currentUser.isAnonymous) {
-        await signOut(auth);
-      }
-      if (auth.currentUser?.isAnonymous) return auth.currentUser;
+      if (auth.currentUser) return auth.currentUser;
       const result = await signInAnonymously(auth);
       return result.user;
     })().finally(() => {
@@ -223,6 +235,49 @@ export async function ensureAnonymousDeviceIdentity(): Promise<User> {
     });
   }
   return anonymousIdentityPromise;
+}
+
+/** Signs in the app owner via Google Auth to unlock the Firestore-protected Sponsor Admin Panel. */
+export async function signInAdminWithGoogle(): Promise<User> {
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({prompt: 'select_account'});
+
+  let signedUser: User;
+  if (auth.currentUser?.isAnonymous) {
+    try {
+      const linked = await linkWithPopup(auth.currentUser, provider);
+      signedUser = linked.user;
+    } catch (err) {
+      const code = (err as {code?: string})?.code || '';
+      if (
+        code === 'auth/credential-already-in-use' ||
+        code === 'auth/email-already-in-use' ||
+        code === 'auth/provider-already-linked'
+      ) {
+        const res = await signInWithPopup(auth, provider);
+        signedUser = res.user;
+      } else {
+        throw err;
+      }
+    }
+  } else {
+    const res = await signInWithPopup(auth, provider);
+    signedUser = res.user;
+  }
+
+  if (!isVerifiedAdminUser(signedUser)) {
+    await signOut(auth);
+    await signInAnonymously(auth).catch(() => {});
+    throw new Error('این حساب گوگل به‌عنوان مالک اصلی هم‌صدا تایید نشده است.');
+  }
+  return signedUser;
+}
+
+/** Exits admin session and returns cleanly to anonymous device mode. */
+export async function signOutAdminToAnonymous(): Promise<User> {
+  await signOut(auth);
+  const res = await signInAnonymously(auth);
+  return res.user;
 }
 
 export {onAuthStateChanged};

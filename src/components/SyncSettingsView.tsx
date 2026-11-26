@@ -26,7 +26,9 @@ import {
   Volume2,
   VolumeX,
 } from 'lucide-react';
+import {APP_THEMES} from '../data/themes';
 import {toPersianDigits, VOICE_PERSONAS} from '../data/persianLibrary';
+import {SponsorAdminPanel} from './SponsorAdminPanel';
 import {usePWAInstall} from '../hooks/usePWAInstall';
 import {apiUrl, getCloudApiBaseUrl, safeReadJsonResponse, setCloudApiBaseUrl} from '../services/apiConfig';
 import type {CoupleSpaceInfo} from '../services/coupleSyncService';
@@ -93,6 +95,7 @@ interface SyncSettingsViewProps {
   cachedClipsCount: number;
   deviceUid: string | null;
   cloudBusy: boolean;
+  cloudAuthError?: string | null;
   spaceInfo: CoupleSpaceInfo | null;
   nativeCaps: NativeCapabilities;
   onUpdateSettings: (patch: Partial<AppSettings>) => void;
@@ -121,7 +124,7 @@ interface SyncSettingsViewProps {
   onTestSchedule: (schedule: ScheduledAnnouncement) => void;
   onDownloadScheduleAlarm: (schedule: ScheduledAnnouncement) => Promise<void>;
   onJoinSpaceByCode: (spaceCode: string) => Promise<void>;
-  onPushLocalToCloud: () => Promise<void>;
+  onRetryCloudAuth?: () => void;
   onRequestNativePermissions: () => Promise<void>;
   onOpenAppInfoSettings: () => Promise<void>;
   onOpenXiaomiOtherPermissions: () => Promise<void>;
@@ -170,6 +173,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
   cachedClipsCount,
   deviceUid,
   cloudBusy,
+  cloudAuthError,
   spaceInfo,
   nativeCaps,
   onUpdateSettings,
@@ -183,7 +187,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
   onTestSchedule,
   onDownloadScheduleAlarm,
   onJoinSpaceByCode,
-  onPushLocalToCloud,
+  onRetryCloudAuth,
   onRequestNativePermissions,
   onOpenAppInfoSettings,
   onOpenXiaomiOtherPermissions,
@@ -674,18 +678,36 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
           همگام‌سازی دو گوشی با کد اتصال
         </h2>
         <p className="text-sm leading-7 text-slate-600 dark:text-slate-300">
-          هم‌صدا برای هر نصب یک شناسه امن و ناشناس می‌سازد. برای اتصال گوشی دوم، کد فضای مشترک را فقط با همراه مورداعتماد خود به اشتراک بگذارید؛ نیازی به Gmail یا ساخت حساب کاربری نیست. پس از اتصال، اطلاعات محلی این گوشی تا زمان ادغام امن دست‌نخورده می‌ماند. دکمه ادغام، فقط مواردی را که هنوز در فضای مشترک نیستند اضافه می‌کند و اطلاعات موجود آنجا را بازنویسی نمی‌کند. پس از آن، تغییرات و حذف‌ها در هر دو گوشی به‌صورت خودکار همگام می‌شوند.
+          هم‌صدا برای هر نصب یک شناسه امن و ناشناس می‌سازد. برای اتصال گوشی دوم، کد فضای مشترک را فقط با همراه مورداعتماد خود به اشتراک بگذارید؛ نیازی به Gmail یا ساخت حساب کاربری نیست. هنگام اتصال با کد، اطلاعات محلی این گوشی به‌صورت خودکار و امن بدون بازنویسی داده‌های موجود ادغام می‌شوند (تنظیمات دستگاه و لیست تماس‌گیرندگان روی هر گوشی محلی می‌مانند) و از آن لحظه تمام تغییرات و حذف‌ها در هر دو گوشی به‌صورت لحظه‌ای و آفلاین/آنلاین همگام می‌شوند.
         </p>
         {deviceUid && spaceInfo ? (
           <div className="rounded-xl bg-slate-50/80 dark:bg-[#0B1312] border border-slate-200 dark:border-emerald-900 p-4 space-y-3">
             <div className="text-xs text-slate-500 dark:text-slate-400">کد اتصال این فضای مشترک</div>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <code dir="ltr" className="text-sm font-mono-num font-bold text-slate-900 dark:text-white break-all">{spaceInfo.spaceId}</code>
-              <button type="button" onClick={handleCopySpaceId} className="min-h-[40px] px-3 rounded-lg bg-emerald-700 text-white text-xs font-semibold flex items-center gap-2">
+              <button type="button" onClick={handleCopySpaceId} className="min-h-[40px] px-3 rounded-lg bg-emerald-700 text-white text-xs font-semibold flex items-center gap-2 cursor-pointer">
                 <Copy className="w-4 h-4" /> کپی کد اتصال
               </button>
             </div>
-            <div className="text-[11px] text-slate-500 dark:text-slate-400">شناسه دستگاه: <code dir="ltr">{deviceUid.slice(0, 12)}…</code></div>
+            <div className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
+              وضعیت همگام‌سازی: متصل و فعال ({spaceInfo.role === 'owner' ? 'میزبان فضای مشترک' : 'گوشی متصل‌شده'}) · شناسه دستگاه: <code dir="ltr">{deviceUid.slice(0, 12)}…</code>
+            </div>
+          </div>
+        ) : cloudAuthError ? (
+          <div className="rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 p-4 space-y-2.5">
+            <div className="text-xs font-bold text-rose-800 dark:text-rose-200">اتصال ابری هنوز برقرار نشده است</div>
+            <p className="text-xs leading-6 text-rose-700 dark:text-rose-300 break-words">{cloudAuthError}</p>
+            {onRetryCloudAuth && (
+              <button
+                type="button"
+                disabled={cloudBusy}
+                onClick={onRetryCloudAuth}
+                className="min-h-[40px] px-4 rounded-xl bg-rose-700 hover:bg-rose-800 disabled:opacity-50 text-white text-xs font-semibold flex items-center gap-2 cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>تلاش مجدد برای اتصال ابری</span>
+              </button>
+            )}
           </div>
         ) : (
           <p className="text-sm text-slate-500">در حال آماده‌سازی شناسه دستگاه و فضای مشترک…</p>
@@ -698,9 +720,6 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
               <Link2 className="w-4 h-4" /> اتصال
             </button>
           </div>
-          <button type="button" disabled={cloudBusy || !spaceInfo} onClick={onPushLocalToCloud} className="w-full min-h-[44px] px-4 rounded-xl border border-slate-200 dark:border-emerald-900 text-slate-700 dark:text-slate-200 text-xs font-semibold disabled:opacity-50">
-            ادغام امن اطلاعات محلی (بدون بازنویسی داده‌های موجود)
-          </button>
         </div>
         <p className="text-[11px] leading-5 text-slate-500 dark:text-slate-400">
           داده‌های فعلی روی حافظه همین گوشی حفظ می‌شوند. کد اتصال را عمومی منتشر نکنید؛ هر کسی که آن را داشته باشد می‌تواند درخواست عضویت در فضای مشترک بدهد.
@@ -1045,33 +1064,34 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
 
           <div>
             <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-2">
-              حالت نمایش
+              انتخاب پوسته و رنگ نمایش
             </label>
-            <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 dark:bg-emerald-950/70 rounded-xl">
-              <button
-                type="button"
-                onClick={() => onUpdateSettings({theme: 'light'})}
-                className={`min-h-[42px] rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer ${
-                  settings.theme === 'light'
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400'
-                }`}
-              >
-                <Sun className="w-4 h-4" />
-                <span>روز روشن</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => onUpdateSettings({theme: 'dark'})}
-                className={`min-h-[42px] rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer ${
-                  settings.theme === 'dark'
-                    ? 'bg-[#172724] text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400'
-                }`}
-              >
-                <Moon className="w-4 h-4" />
-                <span>شب آرام</span>
-              </button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {APP_THEMES.map((t) => {
+                const selected = settings.theme === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => onUpdateSettings({theme: t.id})}
+                    className={`min-h-[46px] px-3 py-2 rounded-xl border text-right flex items-center gap-2.5 transition-all cursor-pointer ${
+                      selected
+                        ? 'border-emerald-700 bg-emerald-50/90 dark:bg-emerald-950/60 dark:border-amber-400/60 shadow-xs'
+                        : 'border-slate-200 dark:border-emerald-900/60 bg-slate-50/70 dark:bg-[#0B1312]'
+                    }`}
+                  >
+                    <span
+                      className="w-5 h-5 rounded-full shrink-0 border border-black/15"
+                      style={{background: `linear-gradient(135deg, ${t.accentColor}, ${t.secondaryColor})`}}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-xs font-bold text-slate-900 dark:text-white truncate">{t.label}</span>
+                      <span className="block text-[10px] text-slate-500 dark:text-slate-400 truncate">{t.hint}</span>
+                    </span>
+                    {selected && <Check className="w-4 h-4 text-emerald-700 dark:text-amber-300 shrink-0" />}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </section>
@@ -1157,6 +1177,9 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
           </form>
         </section>
       </div>
+
+      {/* Admin-only Google-Auth Sponsor Ads Manager */}
+      <SponsorAdminPanel onStatusToast={onStatusToast} />
 
       {/* Free Public Sponsorship Card */}
       <section className="rounded-2xl luxury-card p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-amber-300/60 dark:border-emerald-800/70">

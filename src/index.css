@@ -102,74 +102,65 @@ button, a, input, textarea, select {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Premium Hamseda theme system — selected on the root and persisted in app settings. */
-:root[data-theme="obsidian-gold"] {
-  --luxury-bg: #090909;
-  --luxury-surface: #151412;
-  --luxury-subtle: #211e18;
-  --luxury-border: rgba(190, 151, 76, .28);
-  --luxury-accent: #c6a15b;
-  --luxury-gold: #e6c477;
+/* Curated Hamseda 5-theme palette — persisted in app settings & cloud sync */
+:root[data-theme="emerald-pearl"] {
+  --luxury-bg: #F6F7F4;
+  --luxury-surface: #FFFFFF;
+  --luxury-subtle: #ECEFE9;
+  --luxury-border: #D9E2D7;
+  --luxury-accent: #0B6B53;
+  --luxury-gold: #B48A3E;
 }
-:root[data-theme="royal-navy"] {
-  --luxury-bg: #071426;
-  --luxury-surface: #10223a;
-  --luxury-subtle: #162c48;
-  --luxury-border: rgba(126, 164, 205, .28);
-  --luxury-accent: #82b7e8;
-  --luxury-gold: #d7c18b;
+:root[data-theme="nordic-linen"] {
+  --luxury-bg: #F1F5F8;
+  --luxury-surface: #FFFFFF;
+  --luxury-subtle: #E6EDF3;
+  --luxury-border: #CFDCE6;
+  --luxury-accent: #1D4ED8;
+  --luxury-gold: #0F766E;
 }
-:root[data-theme="midnight-purple"] {
-  --luxury-bg: #100b1d;
-  --luxury-surface: #1d1530;
-  --luxury-subtle: #281d3d;
-  --luxury-border: rgba(174, 139, 224, .26);
-  --luxury-accent: #b69be8;
-  --luxury-gold: #e0c3ff;
+:root[data-theme="espresso-sand"] {
+  --luxury-bg: #F6F1EA;
+  --luxury-surface: #FFFDF9;
+  --luxury-subtle: #EFE6DA;
+  --luxury-border: #DFD2C0;
+  --luxury-accent: #7C4A2D;
+  --luxury-gold: #B45309;
 }
-:root[data-theme="graphite"] {
-  --luxury-bg: #111619;
-  --luxury-surface: #1b2429;
-  --luxury-subtle: #263239;
-  --luxury-border: rgba(117, 190, 190, .24);
-  --luxury-accent: #62c7c2;
-  --luxury-gold: #a9e4dc;
+:root[data-theme="velvet-night"] {
+  --luxury-bg: #0B1117;
+  --luxury-surface: #121C26;
+  --luxury-subtle: #192634;
+  --luxury-border: rgba(45, 212, 191, 0.22);
+  --luxury-accent: #2DD4BF;
+  --luxury-gold: #FBBF24;
 }
-:root[data-theme="ivory-champagne"] {
-  --luxury-bg: #f5f0e6;
-  --luxury-surface: #fffdf8;
-  --luxury-subtle: #eee7d9;
-  --luxury-border: #dfd2b9;
-  --luxury-accent: #8a6940;
-  --luxury-gold: #b28b55;
+:root[data-theme="plum-noir"] {
+  --luxury-bg: #110D16;
+  --luxury-surface: #1B1424;
+  --luxury-subtle: #251B31;
+  --luxury-border: rgba(244, 114, 182, 0.24);
+  --luxury-accent: #F472B6;
+  --luxury-gold: #FBBF24;
 }
-:root[data-theme="arctic-silver"] {
-  --luxury-bg: #eef3f7;
-  --luxury-surface: #ffffff;
-  --luxury-subtle: #e4edf4;
-  --luxury-border: #cbd9e4;
-  --luxury-accent: #527b9b;
-  --luxury-gold: #8aa6ba;
-}
-:root[data-theme="obsidian-gold"] .app-shell,
-:root[data-theme="royal-navy"] .app-shell,
-:root[data-theme="midnight-purple"] .app-shell,
-:root[data-theme="graphite"] .app-shell {
+:root[data-theme="velvet-night"] .app-shell,
+:root[data-theme="plum-noir"] .app-shell {
   background:
-    radial-gradient(ellipse at 10% 0%, color-mix(in srgb, var(--luxury-accent) 15%, transparent), transparent 34rem),
+    radial-gradient(ellipse at 10% 0%, color-mix(in srgb, var(--luxury-accent) 14%, transparent), transparent 34rem),
     radial-gradient(ellipse at 90% 8%, color-mix(in srgb, var(--luxury-gold) 10%, transparent), transparent 38rem),
     var(--luxury-bg);
 }
-:root[data-theme="ivory-champagne"] .app-shell,
-:root[data-theme="arctic-silver"] .app-shell {
+:root[data-theme="emerald-pearl"] .app-shell,
+:root[data-theme="nordic-linen"] .app-shell,
+:root[data-theme="espresso-sand"] .app-shell {
   background:
-    radial-gradient(ellipse at 12% 0%, color-mix(in srgb, var(--luxury-accent) 10%, transparent), transparent 34rem),
+    radial-gradient(ellipse at 12% 0%, color-mix(in srgb, var(--luxury-accent) 9%, transparent), transparent 34rem),
     linear-gradient(160deg, var(--luxury-bg), var(--luxury-subtle));
 }
 .luxury-card {
   background: var(--luxury-surface);
   border-color: var(--luxury-border);
-  box-shadow: 0 14px 42px -28px color-mix(in srgb, var(--luxury-accent) 35%, transparent);
+  box-shadow: 0 14px 42px -28px color-mix(in srgb, var(--luxury-accent) 32%, transparent);
 }
 .luxury-surface-subtle {
   background: var(--luxury-subtle);
