@@ -77,6 +77,7 @@ import {
   auth,
   onAuthStateChanged,
   ensureAnonymousDeviceIdentity,
+  diagnoseFirebaseAuthNetwork,
 } from './services/firebaseClient';
 import {
   setActiveOfflineEngineNative,
@@ -697,15 +698,21 @@ export default function App() {
         setDeviceUid(null);
         setSpaceInfo(null);
         setCloudBusy(true);
-        void ensureAnonymousDeviceIdentity().catch((err) => {
+        void ensureAnonymousDeviceIdentity().catch(async (err) => {
           const authError = err as {code?: string; message?: string};
           const errorCode = authError?.code || 'unknown';
           const errorMessage = authError?.message || String(err);
           console.warn('Anonymous device identity setup failed:', {
             code: errorCode,
             message: errorMessage,
+            online: typeof navigator !== 'undefined' ? navigator.onLine : 'unknown',
           });
-          showToast(`خطای ورود ناشناس فایربیس: ${errorCode} — ${errorMessage}`);
+
+          const diagnostics = await diagnoseFirebaseAuthNetwork();
+          console.warn('Firebase Auth network diagnostics:', diagnostics);
+          showToast(
+            `ورود ناشناس: ${errorCode} | Identity Toolkit: ${diagnostics.identityToolkit} | Secure Token: ${diagnostics.secureToken}`
+          );
           setCloudBusy(false);
         });
         return;
