@@ -360,7 +360,7 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null);
 
   // Cloud Sync state
-  const [cloudUserEmail, setCloudUserEmail] = useState<string | null>(null);
+  const [deviceUid, setCloudUserEmail] = useState<string | null>(null);
   const [cloudBusy, setCloudBusy] = useState(false);
   const [spaceInfo, setSpaceInfo] = useState<CoupleSpaceInfo | null>(null);
 
@@ -2303,7 +2303,7 @@ export default function App() {
             keepAliveActive={keepAliveActive}
             isOnline={isOnline}
             cachedClipsCount={audioClips.length}
-            cloudUserEmail={cloudUserEmail}
+            deviceUid={deviceUid}
             cloudBusy={cloudBusy}
             spaceInfo={spaceInfo}
             nativeCaps={nativeCaps}
