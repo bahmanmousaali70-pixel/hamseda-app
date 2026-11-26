@@ -23,7 +23,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '24'
-          cache: 'npm'
 
       - name: Resolve npm dependency graph without running package scripts
         run: npm install --package-lock-only --ignore-scripts --legacy-peer-deps
