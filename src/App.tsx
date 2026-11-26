@@ -214,6 +214,13 @@ function readJsonStorage<T>(key: string, fallback: T): T {
   }
 }
 
+function mergeCloudItems<T extends {id: string}>(localItems: T[], cloudItems: T[]): T[] {
+  const merged = new Map<string, T>();
+  localItems.forEach((item) => merged.set(item.id, item));
+  cloudItems.forEach((item) => merged.set(item.id, item));
+  return Array.from(merged.values());
+}
+
 export default function App() {
   const isOnline = useOnlineStatus();
   const [activeTab, setActiveTab] = useState<AppTab>('today');
@@ -697,21 +704,21 @@ export default function App() {
         const discovered = await ensureUserAndDiscoverSpace(user);
         setSpaceInfo(discovered);
         unsubSpace = subscribeToCoupleSpace(discovered.spaceId, {
-          onGoals: (cloudGoals) => setGoals(cloudGoals),
-          onHabits: (cloudHabits) => setHabits(cloudHabits),
-          onGratitudes: (cloudGratitudes) => setGratitudes(cloudGratitudes),
-          onCallers: (cloudCallers) => setCallers(cloudCallers),
-          onSchedules: (cloudSchedules) => setSchedules(cloudSchedules),
-          onShopping: (cloudShopping) => setShoppingItems(cloudShopping),
-          onExpenses: (cloudExpenses) => setExpenses(cloudExpenses),
-          onBills: (cloudBills) => setBills(cloudBills),
-          onMeds: (cloudMeds) => setMeds(cloudMeds),
+          onGoals: (cloudGoals) => setGoals((local) => mergeCloudItems(local, cloudGoals)),
+          onHabits: (cloudHabits) => setHabits((local) => mergeCloudItems(local, cloudHabits)),
+          onGratitudes: (cloudGratitudes) => setGratitudes((local) => mergeCloudItems(local, cloudGratitudes)),
+          onCallers: (cloudCallers) => setCallers((local) => mergeCloudItems(local, cloudCallers)),
+          onSchedules: (cloudSchedules) => setSchedules((local) => mergeCloudItems(local, cloudSchedules)),
+          onShopping: (cloudShopping) => setShoppingItems((local) => mergeCloudItems(local, cloudShopping)),
+          onExpenses: (cloudExpenses) => setExpenses((local) => mergeCloudItems(local, cloudExpenses)),
+          onBills: (cloudBills) => setBills((local) => mergeCloudItems(local, cloudBills)),
+          onMeds: (cloudMeds) => setMeds((local) => mergeCloudItems(local, cloudMeds)),
           onMeals: (cloudMeals) =>
-            setMeals(DEFAULT_MEAL_PLAN.map((def) => cloudMeals.find((cm) => cm.id === def.id) ?? def)),
-          onVault: (cloudVault) => setVaultNotes(cloudVault),
-          onPacking: (cloudPacking) => setPackingItems(cloudPacking),
-          onEvents: (cloudEvents) => setSpecialEvents(cloudEvents),
-          onChores: (cloudChores) => setHomeChores(cloudChores),
+            setMeals((local) => mergeCloudItems(local, cloudMeals)),
+          onVault: (cloudVault) => setVaultNotes((local) => mergeCloudItems(local, cloudVault)),
+          onPacking: (cloudPacking) => setPackingItems((local) => mergeCloudItems(local, cloudPacking)),
+          onEvents: (cloudEvents) => setSpecialEvents((local) => mergeCloudItems(local, cloudEvents)),
+          onChores: (cloudChores) => setHomeChores((local) => mergeCloudItems(local, cloudChores)),
           onSettings: (cloudSettings) =>
             setSettings((prev) => ({
               ...DEFAULT_SETTINGS,
