@@ -27,6 +27,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(RoozhayeNativePlugin.class);
+        registerPlugin(NativeAuthDiagnosticsPlugin.class);
         super.onCreate(savedInstanceState);
         installSafeExternalUrlInterceptor();
         PeriodicWorkRequest updateCheck = new PeriodicWorkRequest.Builder(GithubUpdateWorker.class, 12, TimeUnit.HOURS).build();
