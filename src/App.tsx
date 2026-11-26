@@ -2318,10 +2318,6 @@ export default function App() {
             onDeleteSchedule={handleDeleteSchedule}
             onTestSchedule={(item) => handleTriggerSchedule(item, true)}
             onDownloadScheduleAlarm={handleDownloadScheduleAlarm}
-            onCloudSignIn={handleCloudSignIn}
-            onCloudSignOut={handleCloudSignOut}
-            onDeleteAccount={handleDeleteCloudAccount}
-            onInvitePartner={handleInvitePartner}
             onJoinSpaceByCode={handleJoinSpaceByCode}
             onPushLocalToCloud={handlePushLocalToCloud}
             onRequestNativePermissions={handleRequestNativePermissions}
