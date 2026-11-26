@@ -727,7 +727,6 @@ export default function App() {
           onGoals: (cloudGoals) => { if (isCloudSpaceHydrated(discovered.spaceId)) setGoals(cloudGoals); },
           onHabits: (cloudHabits) => { if (isCloudSpaceHydrated(discovered.spaceId)) setHabits(cloudHabits); },
           onGratitudes: (cloudGratitudes) => { if (isCloudSpaceHydrated(discovered.spaceId)) setGratitudes(cloudGratitudes); },
-          onCallers: (cloudCallers) => { if (isCloudSpaceHydrated(discovered.spaceId)) setCallers(cloudCallers); },
           onSchedules: (cloudSchedules) => { if (isCloudSpaceHydrated(discovered.spaceId)) setSchedules(cloudSchedules); },
           onShopping: (cloudShopping) => { if (isCloudSpaceHydrated(discovered.spaceId)) setShoppingItems(cloudShopping); },
           onExpenses: (cloudExpenses) => { if (isCloudSpaceHydrated(discovered.spaceId)) setExpenses(cloudExpenses); },
@@ -738,18 +737,6 @@ export default function App() {
           onPacking: (cloudPacking) => { if (isCloudSpaceHydrated(discovered.spaceId)) setPackingItems(cloudPacking); },
           onEvents: (cloudEvents) => { if (isCloudSpaceHydrated(discovered.spaceId)) setSpecialEvents(cloudEvents); },
           onChores: (cloudChores) => { if (isCloudSpaceHydrated(discovered.spaceId)) setHomeChores(cloudChores); },
-          onSettings: (cloudSettings) => {
-            if (!isCloudSpaceHydrated(discovered.spaceId)) return;
-            setSettings((prev) => ({
-              ...DEFAULT_SETTINGS,
-              ...prev,
-              ...cloudSettings,
-              defaultVoice: sanitizeVoiceName(cloudSettings.defaultVoice, prev.defaultVoice),
-              myName: cloudSettings.myName === 'مهدی' || cloudSettings.myName === 'بهمن' ? 'من' : cloudSettings.myName || 'من',
-              partnerName: cloudSettings.partnerName === 'زری' ? 'همراه' : cloudSettings.partnerName || prev.partnerName || 'همراه',
-              assistantName: cloudSettings.assistantName?.trim() && !['بهمن', 'زری', 'آوا'].includes(cloudSettings.assistantName.trim()) ? cloudSettings.assistantName.trim() : 'هم‌صدا',
-            }));
-          },
           onError: (msg) => console.warn('Cloud sync listener notice:', msg),
         });
       } catch (err) {
@@ -1079,9 +1066,6 @@ export default function App() {
     (patch: Partial<AppSettings>) => {
       setSettings((prev) => {
         const next = {...prev, ...patch};
-        if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
-          pushSettingsToCloud(spaceInfo.spaceId, next).catch(() => {});
-        }
         return next;
       });
     },
@@ -1208,9 +1192,7 @@ export default function App() {
         goals,
         habits,
         gratitudes,
-        callers,
         schedules,
-        settings,
         shoppingItems,
         expenses,
         bills,
