@@ -12,6 +12,8 @@ import {
   getDocFromServer,
   getFirestore,
   initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   type Firestore,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -21,7 +23,10 @@ export const db: Firestore = (() => {
   try {
     return initializeFirestore(
       app,
-      {experimentalForceLongPolling: true},
+      {
+        experimentalForceLongPolling: true,
+        localCache: persistentLocalCache({tabManager: persistentMultipleTabManager()}),
+      },
       firebaseConfig.firestoreDatabaseId
     );
   } catch {

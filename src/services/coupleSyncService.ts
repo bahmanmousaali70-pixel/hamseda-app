@@ -215,9 +215,7 @@ export function subscribeToCoupleSpace(
     onGoals: (items: GoalItem[]) => void;
     onHabits: (items: HabitItem[]) => void;
     onGratitudes: (items: GratitudeEntry[]) => void;
-    onCallers: (items: CallerContact[]) => void;
     onSchedules: (items: ScheduledAnnouncement[]) => void;
-    onSettings: (settings: AppSettings) => void;
     onShopping?: (items: ShoppingItem[]) => void;
     onExpenses?: (items: ExpenseEntry[]) => void;
     onBills?: (items: BillReminderItem[]) => void;
@@ -325,35 +323,6 @@ export function subscribeToCoupleSpace(
 
   unsubs.push(
     onSnapshot(
-      collection(db, 'spaces', spaceId, 'callers'),
-      (snap) => {
-        // Empty snapshots are meaningful: they propagate deletions to every paired device.
-        const items: CallerContact[] = snap.docs
-          .map((d) => {
-            const data = d.data();
-            if (!data || typeof data.name !== 'string') return null;
-            return {
-              id: typeof data.id === 'string' ? data.id : d.id,
-              name: data.name,
-              latinAlias: typeof data.latinAlias === 'string' ? data.latinAlias : undefined,
-              persianPhonetic: typeof data.persianPhonetic === 'string' ? data.persianPhonetic : undefined,
-              relation: typeof data.relation === 'string' ? data.relation : '',
-              template: typeof data.template === 'string' ? data.template : 'تماس ورودی از طرف {name}',
-              repeatCount: data.repeatCount === 2 ? 2 : 1,
-              chimeStyle: data.chimeStyle ?? 'gentle',
-              voiceName: data.voiceName ?? 'Kore',
-              favorite: Boolean(data.favorite),
-            } as CallerContact;
-          })
-          .filter((item): item is CallerContact => item !== null);
-        callbacks.onCallers(items);
-      },
-      (err) => reportListenerError('callers', err)
-    )
-  );
-
-  unsubs.push(
-    onSnapshot(
       collection(db, 'spaces', spaceId, 'schedules'),
       (snap) => {
         // Empty snapshots are meaningful: they propagate deletions to every paired device.
@@ -377,34 +346,6 @@ export function subscribeToCoupleSpace(
         callbacks.onSchedules(items);
       },
       (err) => reportListenerError('schedules', err)
-    )
-  );
-
-  unsubs.push(
-    onSnapshot(
-      doc(db, 'spaces', spaceId, 'config', 'settings'),
-      (snap) => {
-        if (!snap.exists()) return;
-        const data = snap.data();
-        const rawMyName = typeof data.myName === 'string' && data.myName.trim() ? data.myName.trim() : 'بهمن';
-        callbacks.onSettings({
-          theme: data.theme === 'dark' ? 'dark' : 'light',
-          defaultVoice: data.defaultVoice ?? 'Kore',
-          speechRate: Number(data.speechRate ?? 1),
-          myName: rawMyName === 'مهدی' ? 'بهمن' : rawMyName,
-          partnerName: typeof data.partnerName === 'string' && data.partnerName.trim() ? data.partnerName : 'زری',
-          assistantName:
-            typeof data.assistantName === 'string' && data.assistantName.trim() ? data.assistantName.trim() : 'هم‌صدا',
-          assistantWakeWordEnabled: Boolean(data.assistantWakeWordEnabled ?? false),
-          backgroundKeepAlive: Boolean(data.backgroundKeepAlive),
-          announceCalls: data.announceCalls !== undefined ? Boolean(data.announceCalls) : true,
-          announceSms: data.announceSms !== undefined ? Boolean(data.announceSms) : true,
-          autoOpenMorning: data.autoOpenMorning !== undefined ? Boolean(data.autoOpenMorning) : true,
-          nightMovieAutoCheck: data.nightMovieAutoCheck !== undefined ? Boolean(data.nightMovieAutoCheck) : true,
-          nightMovieTime: typeof data.nightMovieTime === 'string' && /^\d{2}:\d{2}$/.test(data.nightMovieTime) ? data.nightMovieTime : '22:00',
-        });
-      },
-      (err) => reportListenerError('settings', err)
     )
   );
 
@@ -1388,9 +1329,7 @@ export async function uploadLocalBundleToSpace(
     goals: GoalItem[];
     habits: HabitItem[];
     gratitudes: GratitudeEntry[];
-    callers: CallerContact[];
     schedules: ScheduledAnnouncement[];
-    settings: AppSettings;
     shoppingItems?: ShoppingItem[];
     expenses?: ExpenseEntry[];
     bills?: BillReminderItem[];
@@ -1403,18 +1342,12 @@ export async function uploadLocalBundleToSpace(
   }
 ): Promise<void> {
   if (!getUidOrNull()) throw new Error('شناسه دستگاه معتبر نیست؛ دوباره اتصال را برقرار کنید.');
-  // First-time pairing is additive: never overwrite records already present in the shared space.
-  const settingsRef = doc(db, 'spaces', spaceId, 'config', 'settings');
-  const settingsSnapshot = await getDoc(settingsRef);
-  if (!settingsSnapshot.exists()) {
-    await pushSettingsToCloud(spaceId, bundle.settings);
-  }
+  // Device-specific settings and caller contacts intentionally remain local to each phone.
 
   await Promise.all([
     pushOnlyMissing(spaceId, 'goals', bundle.goals, pushGoalToCloud),
     pushOnlyMissing(spaceId, 'habits', bundle.habits, pushHabitToCloud),
     pushOnlyMissing(spaceId, 'gratitudes', bundle.gratitudes, pushGratitudeToCloud),
-    pushOnlyMissing(spaceId, 'callers', bundle.callers, pushCallerToCloud),
     pushOnlyMissing(spaceId, 'schedules', bundle.schedules, pushScheduleToCloud),
     pushOnlyMissing(spaceId, 'shopping', bundle.shoppingItems ?? [], pushShoppingToCloud),
     pushOnlyMissing(spaceId, 'expenses', bundle.expenses ?? [], pushExpenseToCloud),

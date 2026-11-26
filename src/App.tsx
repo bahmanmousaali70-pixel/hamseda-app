@@ -727,7 +727,6 @@ export default function App() {
           onGoals: (cloudGoals) => { if (isCloudSpaceHydrated(discovered.spaceId)) setGoals(cloudGoals); },
           onHabits: (cloudHabits) => { if (isCloudSpaceHydrated(discovered.spaceId)) setHabits(cloudHabits); },
           onGratitudes: (cloudGratitudes) => { if (isCloudSpaceHydrated(discovered.spaceId)) setGratitudes(cloudGratitudes); },
-          onCallers: (cloudCallers) => { if (isCloudSpaceHydrated(discovered.spaceId)) setCallers(cloudCallers); },
           onSchedules: (cloudSchedules) => { if (isCloudSpaceHydrated(discovered.spaceId)) setSchedules(cloudSchedules); },
           onShopping: (cloudShopping) => { if (isCloudSpaceHydrated(discovered.spaceId)) setShoppingItems(cloudShopping); },
           onExpenses: (cloudExpenses) => { if (isCloudSpaceHydrated(discovered.spaceId)) setExpenses(cloudExpenses); },
@@ -738,18 +737,6 @@ export default function App() {
           onPacking: (cloudPacking) => { if (isCloudSpaceHydrated(discovered.spaceId)) setPackingItems(cloudPacking); },
           onEvents: (cloudEvents) => { if (isCloudSpaceHydrated(discovered.spaceId)) setSpecialEvents(cloudEvents); },
           onChores: (cloudChores) => { if (isCloudSpaceHydrated(discovered.spaceId)) setHomeChores(cloudChores); },
-          onSettings: (cloudSettings) => {
-            if (!isCloudSpaceHydrated(discovered.spaceId)) return;
-            setSettings((prev) => ({
-              ...DEFAULT_SETTINGS,
-              ...prev,
-              ...cloudSettings,
-              defaultVoice: sanitizeVoiceName(cloudSettings.defaultVoice, prev.defaultVoice),
-              myName: cloudSettings.myName === 'مهدی' || cloudSettings.myName === 'بهمن' ? 'من' : cloudSettings.myName || 'من',
-              partnerName: cloudSettings.partnerName === 'زری' ? 'همراه' : cloudSettings.partnerName || prev.partnerName || 'همراه',
-              assistantName: cloudSettings.assistantName?.trim() && !['بهمن', 'زری', 'آوا'].includes(cloudSettings.assistantName.trim()) ? cloudSettings.assistantName.trim() : 'هم‌صدا',
-            }));
-          },
           onError: (msg) => console.warn('Cloud sync listener notice:', msg),
         });
       } catch (err) {
@@ -1079,9 +1066,6 @@ export default function App() {
     (patch: Partial<AppSettings>) => {
       setSettings((prev) => {
         const next = {...prev, ...patch};
-        if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
-          pushSettingsToCloud(spaceInfo.spaceId, next).catch(() => {});
-        }
         return next;
       });
     },
@@ -1201,29 +1185,14 @@ export default function App() {
     if (!auth.currentUser) return;
     setCloudBusy(true);
     try {
+      // Pairing is a single operation: join, add any local-only records safely,
+      // then enable cloud snapshots before restarting the app's listeners.
       const joined = await joinSpaceByCode(spaceCode, auth.currentUser);
-      setSpaceInfo(joined);
-      showToast('به فضای مشترک متصل شدید! داده‌ها به‌صورت لحظه‌ای همگام می‌شوند.');
-      // Reboot the auth listener so it subscribes to the newly selected shared space.
-      window.setTimeout(() => window.location.reload(), 500);
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'امکان اتصال با این کد وجود نداشت.');
-    } finally {
-      setCloudBusy(false);
-    }
-  };
-
-  const handlePushLocalToCloud = async () => {
-    if (!spaceInfo) return;
-    setCloudBusy(true);
-    try {
-      await uploadLocalBundleToSpace(spaceInfo.spaceId, {
+      await uploadLocalBundleToSpace(joined.spaceId, {
         goals,
         habits,
         gratitudes,
-        callers,
         schedules,
-        settings,
         shoppingItems,
         expenses,
         bills,
@@ -1234,11 +1203,12 @@ export default function App() {
         specialEvents,
         homeChores,
       });
-      markCloudSpaceHydrated(spaceInfo.spaceId);
-      showToast('اطلاعات محلی بدون بازنویسی داده‌های موجود به فضای مشترک اضافه شد. در حال بارگذاری همگام‌سازی…');
-      window.location.reload();
+      markCloudSpaceHydrated(joined.spaceId);
+      setSpaceInfo(joined);
+      showToast('اتصال و ادغام اولیه انجام شد؛ همگام‌سازی خودکار فعال می‌شود.');
+      window.setTimeout(() => window.location.reload(), 500);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'خطا در ارسال به ابر');
+      showToast(err instanceof Error ? `اتصال یا ادغام کامل نشد: ${err.message}` : 'اتصال یا ادغام اطلاعات کامل نشد؛ اطلاعات گوشی حفظ شده‌اند.');
     } finally {
       setCloudBusy(false);
     }
@@ -2348,7 +2318,6 @@ export default function App() {
             onTestSchedule={(item) => handleTriggerSchedule(item, true)}
             onDownloadScheduleAlarm={handleDownloadScheduleAlarm}
             onJoinSpaceByCode={handleJoinSpaceByCode}
-            onPushLocalToCloud={handlePushLocalToCloud}
             onRequestNativePermissions={handleRequestNativePermissions}
             onOpenAppInfoSettings={handleOpenAppInfoSettings}
             onOpenXiaomiOtherPermissions={handleOpenXiaomiOtherPermissions}
