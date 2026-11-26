@@ -1,3 +1,4 @@
+# Rebuild trigger: generate a fresh APK after installer rejection.
 name: Build Android APK
 
 concurrency:
