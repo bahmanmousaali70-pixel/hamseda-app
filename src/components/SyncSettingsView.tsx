@@ -674,7 +674,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
           همگام‌سازی دو گوشی با کد اتصال
         </h2>
         <p className="text-sm leading-7 text-slate-600 dark:text-slate-300">
-          هم‌صدا برای هر نصب یک شناسه امن و ناشناس می‌سازد. برای اتصال گوشی دوم، کد فضای مشترک را فقط با همراه مورداعتماد خود به اشتراک بگذارید؛ نیازی به Gmail یا ساخت حساب کاربری نیست. پس از اتصال، تغییرات تازه به‌صورت خودکار همگام می‌شوند؛ برای ادغام اطلاعاتی که از قبل روی این گوشی دارید، دکمه ارسال اطلاعات را یک‌بار بزنید.
+          هم‌صدا برای هر نصب یک شناسه امن و ناشناس می‌سازد. برای اتصال گوشی دوم، کد فضای مشترک را فقط با همراه مورداعتماد خود به اشتراک بگذارید؛ نیازی به Gmail یا ساخت حساب کاربری نیست. پس از اتصال، اطلاعات محلی این گوشی تا زمان ادغام امن دست‌نخورده می‌ماند. دکمه ادغام، فقط مواردی را که هنوز در فضای مشترک نیستند اضافه می‌کند و اطلاعات موجود آنجا را بازنویسی نمی‌کند. پس از آن، تغییرات و حذف‌ها در هر دو گوشی به‌صورت خودکار همگام می‌شوند.
         </p>
         {deviceUid && spaceInfo ? (
           <div className="rounded-xl bg-slate-50/80 dark:bg-[#0B1312] border border-slate-200 dark:border-emerald-900 p-4 space-y-3">
@@ -699,7 +699,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
             </button>
           </div>
           <button type="button" disabled={cloudBusy || !spaceInfo} onClick={onPushLocalToCloud} className="w-full min-h-[44px] px-4 rounded-xl border border-slate-200 dark:border-emerald-900 text-slate-700 dark:text-slate-200 text-xs font-semibold disabled:opacity-50">
-            ادغام اطلاعات محلی این گوشی با فضای مشترک
+            ادغام امن اطلاعات محلی (بدون بازنویسی داده‌های موجود)
           </button>
         </div>
         <p className="text-[11px] leading-5 text-slate-500 dark:text-slate-400">
