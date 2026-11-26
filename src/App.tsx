@@ -214,11 +214,18 @@ function readJsonStorage<T>(key: string, fallback: T): T {
   }
 }
 
-function mergeCloudItems<T extends {id: string}>(localItems: T[], cloudItems: T[]): T[] {
-  const merged = new Map<string, T>();
-  localItems.forEach((item) => merged.set(item.id, item));
-  cloudItems.forEach((item) => merged.set(item.id, item));
-  return Array.from(merged.values());
+const CLOUD_SPACE_HYDRATED_PREFIX = 'hamseda_cloud_space_hydrated_v1:';
+
+function isCloudSpaceHydrated(spaceId: string): boolean {
+  try {
+    return localStorage.getItem(`${CLOUD_SPACE_HYDRATED_PREFIX}${spaceId}`) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function markCloudSpaceHydrated(spaceId: string): void {
+  localStorage.setItem(`${CLOUD_SPACE_HYDRATED_PREFIX}${spaceId}`, 'true');
 }
 
 export default function App() {
@@ -704,22 +711,22 @@ export default function App() {
         const discovered = await ensureUserAndDiscoverSpace(user);
         setSpaceInfo(discovered);
         unsubSpace = subscribeToCoupleSpace(discovered.spaceId, {
-          onGoals: (cloudGoals) => setGoals((local) => mergeCloudItems(local, cloudGoals)),
-          onHabits: (cloudHabits) => setHabits((local) => mergeCloudItems(local, cloudHabits)),
-          onGratitudes: (cloudGratitudes) => setGratitudes((local) => mergeCloudItems(local, cloudGratitudes)),
-          onCallers: (cloudCallers) => setCallers((local) => mergeCloudItems(local, cloudCallers)),
-          onSchedules: (cloudSchedules) => setSchedules((local) => mergeCloudItems(local, cloudSchedules)),
-          onShopping: (cloudShopping) => setShoppingItems((local) => mergeCloudItems(local, cloudShopping)),
-          onExpenses: (cloudExpenses) => setExpenses((local) => mergeCloudItems(local, cloudExpenses)),
-          onBills: (cloudBills) => setBills((local) => mergeCloudItems(local, cloudBills)),
-          onMeds: (cloudMeds) => setMeds((local) => mergeCloudItems(local, cloudMeds)),
-          onMeals: (cloudMeals) =>
-            setMeals((local) => mergeCloudItems(local, cloudMeals)),
-          onVault: (cloudVault) => setVaultNotes((local) => mergeCloudItems(local, cloudVault)),
-          onPacking: (cloudPacking) => setPackingItems((local) => mergeCloudItems(local, cloudPacking)),
-          onEvents: (cloudEvents) => setSpecialEvents((local) => mergeCloudItems(local, cloudEvents)),
-          onChores: (cloudChores) => setHomeChores((local) => mergeCloudItems(local, cloudChores)),
-          onSettings: (cloudSettings) =>
+          onGoals: (cloudGoals) => { if (isCloudSpaceHydrated(discovered.spaceId)) setGoals(cloudGoals); },
+          onHabits: (cloudHabits) => { if (isCloudSpaceHydrated(discovered.spaceId)) setHabits(cloudHabits); },
+          onGratitudes: (cloudGratitudes) => { if (isCloudSpaceHydrated(discovered.spaceId)) setGratitudes(cloudGratitudes); },
+          onCallers: (cloudCallers) => { if (isCloudSpaceHydrated(discovered.spaceId)) setCallers(cloudCallers); },
+          onSchedules: (cloudSchedules) => { if (isCloudSpaceHydrated(discovered.spaceId)) setSchedules(cloudSchedules); },
+          onShopping: (cloudShopping) => { if (isCloudSpaceHydrated(discovered.spaceId)) setShoppingItems(cloudShopping); },
+          onExpenses: (cloudExpenses) => { if (isCloudSpaceHydrated(discovered.spaceId)) setExpenses(cloudExpenses); },
+          onBills: (cloudBills) => { if (isCloudSpaceHydrated(discovered.spaceId)) setBills(cloudBills); },
+          onMeds: (cloudMeds) => { if (isCloudSpaceHydrated(discovered.spaceId)) setMeds(cloudMeds); },
+          onMeals: (cloudMeals) => { if (isCloudSpaceHydrated(discovered.spaceId)) setMeals(cloudMeals); },
+          onVault: (cloudVault) => { if (isCloudSpaceHydrated(discovered.spaceId)) setVaultNotes(cloudVault); },
+          onPacking: (cloudPacking) => { if (isCloudSpaceHydrated(discovered.spaceId)) setPackingItems(cloudPacking); },
+          onEvents: (cloudEvents) => { if (isCloudSpaceHydrated(discovered.spaceId)) setSpecialEvents(cloudEvents); },
+          onChores: (cloudChores) => { if (isCloudSpaceHydrated(discovered.spaceId)) setHomeChores(cloudChores); },
+          onSettings: (cloudSettings) => {
+            if (!isCloudSpaceHydrated(discovered.spaceId)) return;
             setSettings((prev) => ({
               ...DEFAULT_SETTINGS,
               ...prev,
@@ -728,7 +735,8 @@ export default function App() {
               myName: cloudSettings.myName === 'مهدی' || cloudSettings.myName === 'بهمن' ? 'من' : cloudSettings.myName || 'من',
               partnerName: cloudSettings.partnerName === 'زری' ? 'همراه' : cloudSettings.partnerName || prev.partnerName || 'همراه',
               assistantName: cloudSettings.assistantName?.trim() && !['بهمن', 'زری', 'آوا'].includes(cloudSettings.assistantName.trim()) ? cloudSettings.assistantName.trim() : 'هم‌صدا',
-            })),
+            }));
+          },
           onError: (msg) => console.warn('Cloud sync listener notice:', msg),
         });
       } catch (err) {
@@ -939,7 +947,7 @@ export default function App() {
           s.id === scheduleId ? {...s, lastTriggeredDate: dateKey} : s
         );
         const target = updated.find((s) => s.id === scheduleId);
-        if (target && spaceInfo) {
+        if (target && spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
           pushScheduleToCloud(spaceInfo.spaceId, target).catch(() => {});
         }
         return updated;
@@ -1058,7 +1066,7 @@ export default function App() {
     (patch: Partial<AppSettings>) => {
       setSettings((prev) => {
         const next = {...prev, ...patch};
-        if (spaceInfo) {
+        if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
           pushSettingsToCloud(spaceInfo.spaceId, next).catch(() => {});
         }
         return next;
@@ -1213,7 +1221,9 @@ export default function App() {
         specialEvents,
         homeChores,
       });
-      showToast('تمام داده‌ها و تنظیمات این گوشی به فضای مشترک ارسال شد.');
+      markCloudSpaceHydrated(spaceInfo.spaceId);
+      showToast('اطلاعات محلی بدون بازنویسی داده‌های موجود به فضای مشترک اضافه شد. در حال بارگذاری همگام‌سازی…');
+      window.location.reload();
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'خطا در ارسال به ابر');
     } finally {
