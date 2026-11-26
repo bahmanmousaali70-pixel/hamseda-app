@@ -91,7 +91,7 @@ interface SyncSettingsViewProps {
   keepAliveActive: boolean;
   isOnline: boolean;
   cachedClipsCount: number;
-  cloudUserEmail: string | null;
+  deviceUid: string | null;
   cloudBusy: boolean;
   spaceInfo: CoupleSpaceInfo | null;
   nativeCaps: NativeCapabilities;
@@ -168,7 +168,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
   keepAliveActive,
   isOnline,
   cachedClipsCount,
-  cloudUserEmail,
+  deviceUid,
   cloudBusy,
   spaceInfo,
   nativeCaps,
@@ -676,7 +676,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
         <p className="text-sm leading-7 text-slate-600 dark:text-slate-300">
           هم‌صدا برای هر نصب یک شناسه امن و ناشناس می‌سازد. برای اتصال گوشی دوم، کد فضای مشترک را فقط با همراه مورداعتماد خود به اشتراک بگذارید؛ نیازی به Gmail یا ساخت حساب کاربری نیست.
         </p>
-        {cloudUserEmail && spaceInfo ? (
+        {deviceUid && spaceInfo ? (
           <div className="rounded-xl bg-slate-50/80 dark:bg-[#0B1312] border border-slate-200 dark:border-emerald-900 p-4 space-y-3">
             <div className="text-xs text-slate-500 dark:text-slate-400">کد اتصال این فضای مشترک</div>
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -685,7 +685,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
                 <Copy className="w-4 h-4" /> کپی کد اتصال
               </button>
             </div>
-            <div className="text-[11px] text-slate-500 dark:text-slate-400">شناسه دستگاه: <code dir="ltr">{cloudUserEmail.slice(0, 12)}…</code></div>
+            <div className="text-[11px] text-slate-500 dark:text-slate-400">شناسه دستگاه: <code dir="ltr">{deviceUid.slice(0, 12)}…</code></div>
           </div>
         ) : (
           <p className="text-sm text-slate-500">در حال آماده‌سازی شناسه دستگاه و فضای مشترک…</p>
@@ -694,7 +694,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
           <label className="block text-xs font-bold text-slate-800 dark:text-slate-100">اتصال این گوشی به فضای مشترک گوشی دیگر</label>
           <div className="flex flex-wrap gap-2">
             <input type="text" dir="ltr" value={joinCodeInput} onChange={(e) => setJoinCodeInput(e.target.value.trim())} placeholder="کد اتصال دریافتی از گوشی دیگر" className="flex-1 min-w-[180px] min-h-[44px] px-3 rounded-xl border border-slate-200 dark:border-emerald-900 bg-white dark:bg-[#121E1C] text-xs font-mono-num text-slate-900 dark:text-white" />
-            <button type="button" disabled={cloudBusy || !joinCodeInput.trim() || !cloudUserEmail} onClick={() => onJoinSpaceByCode(joinCodeInput)} className="min-h-[44px] px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white text-xs font-semibold flex items-center gap-1.5">
+            <button type="button" disabled={cloudBusy || !joinCodeInput.trim() || !deviceUid} onClick={() => onJoinSpaceByCode(joinCodeInput)} className="min-h-[44px] px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white text-xs font-semibold flex items-center gap-1.5">
               <Link2 className="w-4 h-4" /> اتصال
             </button>
           </div>
