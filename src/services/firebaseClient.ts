@@ -134,6 +134,56 @@ async function testConnection(): Promise<void> {
 
 testConnection();
 
+
+export interface FirebaseAuthNetworkDiagnostics {
+  identityToolkit: string;
+  secureToken: string;
+}
+
+/** Tests Firebase Auth endpoints with deliberately invalid credentials; no account is created. */
+export async function diagnoseFirebaseAuthNetwork(): Promise<FirebaseAuthNetworkDiagnostics> {
+  const request = async (url: string, init: RequestInit): Promise<string> => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6000);
+    try {
+      const response = await fetch(url, {...init, signal: controller.signal});
+      let code = `HTTP_${response.status}`;
+      try {
+        const payload = await response.json() as {error?: {message?: string}};
+        if (payload?.error?.message) code += ` ${payload.error.message}`;
+      } catch {
+        // Keep the HTTP status when the response is not JSON.
+      }
+      return code.slice(0, 100);
+    } catch (error) {
+      const message = error instanceof Error ? error.name : 'FETCH_FAILED';
+      return message === 'AbortError' ? 'TIMEOUT_6S' : `FETCH_FAILED ${message}`;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  const apiKey = encodeURIComponent(firebaseConfig.apiKey);
+  const [identityToolkit, secureToken] = await Promise.all([
+    request(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        email: 'diagnostic-invalid-email',
+        password: 'diagnostic-only',
+        returnSecureToken: true,
+      }),
+    }),
+    request(`https://securetoken.googleapis.com/v1/token?key=${apiKey}`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: 'grant_type=refresh_token&refresh_token=diagnostic-invalid-token',
+    }),
+  ]);
+
+  return {identityToolkit, secureToken};
+}
+
 let anonymousIdentityPromise: Promise<User> | null = null;
 
 /** Ensures this installation uses an anonymous device identity, never a Google/Gmail session. */
