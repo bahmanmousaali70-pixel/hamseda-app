@@ -360,7 +360,7 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null);
 
   // Cloud Sync state
-  const [deviceUid, setCloudUserEmail] = useState<string | null>(null);
+  const [deviceUid, setDeviceUid] = useState<string | null>(null);
   const [cloudBusy, setCloudBusy] = useState(false);
   const [spaceInfo, setSpaceInfo] = useState<CoupleSpaceInfo | null>(null);
 
@@ -680,7 +680,7 @@ export default function App() {
       }
 
       if (!user) {
-        setCloudUserEmail(null);
+        setDeviceUid(null);
         setSpaceInfo(null);
         setCloudBusy(true);
         void ensureAnonymousDeviceIdentity().catch((err) => {
@@ -691,7 +691,7 @@ export default function App() {
         return;
       }
 
-      setCloudUserEmail(user.uid);
+      setDeviceUid(user.uid);
       setCloudBusy(true);
       try {
         const discovered = await ensureUserAndDiscoverSpace(user);
