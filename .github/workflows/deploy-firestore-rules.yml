@@ -11,7 +11,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   deploy-rules:
@@ -20,17 +19,19 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Authenticate to Google Cloud using Workload Identity Federation
-        uses: google-github-actions/auth@v3
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-
-      - name: Set up Node.js 24
+      - name: Set up Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: '24'
-
+      - name: Validate Firebase deployment credential
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: |
+          if [ -z "$FIREBASE_TOKEN" ]; then
+            echo "::error::Add the FIREBASE_TOKEN repository secret before deploying rules."
+            exit 1
+          fi
       - name: Deploy Firestore rules to the configured named database
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
         run: npx --yes firebase-tools@latest deploy --only firestore:rules --project modified-transport-wv0ns --non-interactive
