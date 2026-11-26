@@ -194,6 +194,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
   const {isInstallable, isInstalled, isIOS, install} = usePWAInstall();
   const [importText, setImportText] = useState('');
   const [copied, setCopied] = useState(false);
+  const [copiedSpace, setCopiedSpace] = useState(false);
   const [smsBlockedSenders, setSmsBlockedSenders] = useState(() => localStorage.getItem('rmz_sms_blocked_senders') ?? '');
   const [smsBlockedKeywords, setSmsBlockedKeywords] = useState(() => localStorage.getItem('rmz_sms_blocked_keywords') ?? 'تبریک برنده شدید\\nجایزه رایگان\\nخرید شارژ\\nوام فوری');
   const [smsImportantSenders, setSmsImportantSenders] = useState(() => localStorage.getItem('rmz_sms_important_senders') ?? '');
