@@ -347,7 +347,7 @@ service cloud.firestore {
     }
 
     match /spaces/{spaceId} {
-      // Space IDs are high-entropy Firebase UID-derived bearer codes shared by the owner.
+      // Space IDs are random 192-bit bearer codes shared by the owner.
       allow get: if isVerifiedUser() && isValidId(spaceId);
       allow list: if isVerifiedUser()
         && (
@@ -359,28 +359,14 @@ service cloud.firestore {
         && incoming().ownerUid == request.auth.uid
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time;
-      allow update: if (
-        isVerifiedUser()
+      allow update: if isVerifiedUser()
         && isValidId(spaceId)
         && isValidSpace(incoming())
         && existing().ownerUid == request.auth.uid
         && incoming().ownerUid == existing().ownerUid
-        && incoming().ownerEmail == existing().ownerEmail
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
-        && incoming().diff(existing()).affectedKeys().hasOnly(['partnerEmail', 'title', 'updatedAt'])
-      ) || (
-        isVerifiedUser()
-        && isValidId(spaceId)
-        && isValidSpace(incoming())
-        && incoming().partnerEmail == ''
-        && incoming().ownerUid == existing().ownerUid
-        && incoming().ownerEmail == existing().ownerEmail
-        && incoming().createdAt == existing().createdAt
-        && incoming().title == existing().title
-        && incoming().updatedAt == request.time
-        && incoming().diff(existing()).affectedKeys().hasOnly(['partnerEmail', 'updatedAt'])
-      );
+        && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'updatedAt']);
       allow delete: if isVerifiedUser() && isValidId(spaceId) && existing().ownerUid == request.auth.uid;
 
       match /members/{memberUid} {
