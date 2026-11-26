@@ -216,7 +216,6 @@ export function subscribeToCoupleSpace(
     onHabits: (items: HabitItem[]) => void;
     onGratitudes: (items: GratitudeEntry[]) => void;
     onSchedules: (items: ScheduledAnnouncement[]) => void;
-    onSettings: (settings: AppSettings) => void;
     onShopping?: (items: ShoppingItem[]) => void;
     onExpenses?: (items: ExpenseEntry[]) => void;
     onBills?: (items: BillReminderItem[]) => void;
@@ -347,34 +346,6 @@ export function subscribeToCoupleSpace(
         callbacks.onSchedules(items);
       },
       (err) => reportListenerError('schedules', err)
-    )
-  );
-
-  unsubs.push(
-    onSnapshot(
-      doc(db, 'spaces', spaceId, 'config', 'settings'),
-      (snap) => {
-        if (!snap.exists()) return;
-        const data = snap.data();
-        const rawMyName = typeof data.myName === 'string' && data.myName.trim() ? data.myName.trim() : 'بهمن';
-        callbacks.onSettings({
-          theme: data.theme === 'dark' ? 'dark' : 'light',
-          defaultVoice: data.defaultVoice ?? 'Kore',
-          speechRate: Number(data.speechRate ?? 1),
-          myName: rawMyName === 'مهدی' ? 'بهمن' : rawMyName,
-          partnerName: typeof data.partnerName === 'string' && data.partnerName.trim() ? data.partnerName : 'زری',
-          assistantName:
-            typeof data.assistantName === 'string' && data.assistantName.trim() ? data.assistantName.trim() : 'هم‌صدا',
-          assistantWakeWordEnabled: Boolean(data.assistantWakeWordEnabled ?? false),
-          backgroundKeepAlive: Boolean(data.backgroundKeepAlive),
-          announceCalls: data.announceCalls !== undefined ? Boolean(data.announceCalls) : true,
-          announceSms: data.announceSms !== undefined ? Boolean(data.announceSms) : true,
-          autoOpenMorning: data.autoOpenMorning !== undefined ? Boolean(data.autoOpenMorning) : true,
-          nightMovieAutoCheck: data.nightMovieAutoCheck !== undefined ? Boolean(data.nightMovieAutoCheck) : true,
-          nightMovieTime: typeof data.nightMovieTime === 'string' && /^\d{2}:\d{2}$/.test(data.nightMovieTime) ? data.nightMovieTime : '22:00',
-        });
-      },
-      (err) => reportListenerError('settings', err)
     )
   );
 
