@@ -3,6 +3,7 @@ import {
   getAuth,
   onAuthStateChanged,
   signInAnonymously,
+  signOut,
   type User,
 } from 'firebase/auth';
 import {
@@ -133,11 +134,24 @@ async function testConnection(): Promise<void> {
 
 testConnection();
 
-/** Creates a per-install anonymous Firebase identity; no Google/Gmail account is requested. */
+let anonymousIdentityPromise: Promise<User> | null = null;
+
+/** Ensures this installation uses an anonymous device identity, never a Google/Gmail session. */
 export async function ensureAnonymousDeviceIdentity(): Promise<User> {
-  if (auth.currentUser) return auth.currentUser;
-  const result = await signInAnonymously(auth);
-  return result.user;
+  if (auth.currentUser?.isAnonymous) return auth.currentUser;
+  if (!anonymousIdentityPromise) {
+    anonymousIdentityPromise = (async () => {
+      if (auth.currentUser && !auth.currentUser.isAnonymous) {
+        await signOut(auth);
+      }
+      if (auth.currentUser?.isAnonymous) return auth.currentUser;
+      const result = await signInAnonymously(auth);
+      return result.user;
+    })().finally(() => {
+      anonymousIdentityPromise = null;
+    });
+  }
+  return anonymousIdentityPromise;
 }
 
 export {onAuthStateChanged};
