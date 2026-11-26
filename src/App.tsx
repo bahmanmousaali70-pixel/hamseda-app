@@ -686,7 +686,7 @@ export default function App() {
         unsubSpace = null;
       }
 
-      if (!user) {
+      if (!user || !user.isAnonymous) {
         setDeviceUid(null);
         setSpaceInfo(null);
         setCloudBusy(true);
