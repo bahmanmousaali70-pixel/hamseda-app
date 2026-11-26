@@ -697,9 +697,6 @@ export default function App() {
         const discovered = await ensureUserAndDiscoverSpace(user);
         setSpaceInfo(discovered);
         unsubSpace = subscribeToCoupleSpace(discovered.spaceId, {
-          onSpaceMeta: (partnerEmail) => {
-            setSpaceInfo((prev) => (prev ? {...prev, partnerEmail} : prev));
-          },
           onGoals: (cloudGoals) => setGoals(cloudGoals),
           onHabits: (cloudHabits) => setHabits(cloudHabits),
           onGratitudes: (cloudGratitudes) => setGratitudes(cloudGratitudes),
