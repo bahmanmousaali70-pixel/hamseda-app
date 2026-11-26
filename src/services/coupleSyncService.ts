@@ -39,8 +39,6 @@ export interface CoupleSpaceInfo {
   spaceId: string;
   title: string;
   ownerUid: string;
-  ownerEmail: string;
-  partnerEmail: string;
   role: 'owner' | 'partner';
 }
 
@@ -65,9 +63,8 @@ function sanitizeId(raw: string): string {
 
 export async function ensureUserAndDiscoverSpace(user: User): Promise<CoupleSpaceInfo> {
   const uid = sanitizeId(user.uid);
-  const email = (user.email ?? '').trim();
-  const lowerEmail = email.toLowerCase();
-  const displayName = clampStr(user.displayName || lowerEmail.split('@')[0], 100, 'همراه');
+  const email = '';
+  const displayName = clampStr(user.displayName, 100, 'همراه');
   const userPath = `users/${uid}`;
 
   // 1. Ensure user profile exists
@@ -107,41 +104,11 @@ export async function ensureUserAndDiscoverSpace(user: User): Promise<CoupleSpac
           spaceId: activeSpaceId,
           title: sdata.title ?? 'فضای مشترک من و زری',
           ownerUid: sdata.ownerUid,
-          ownerEmail: sdata.ownerEmail,
-          partnerEmail: sdata.partnerEmail ?? '',
           role,
         };
       }
     } catch {
       // fall through to discovery
-    }
-  }
-
-  // 3. Auto-discover if partnerEmail matches Zari's Gmail!
-  if (email) {
-    try {
-      const partnerQ = query(collection(db, 'spaces'), where('partnerEmail', '==', email));
-      const partnerSnaps = await getDocs(partnerQ);
-      if (!partnerSnaps.empty) {
-        const docSnap = partnerSnaps.docs[0];
-        const sdata = docSnap.data();
-        const foundId = docSnap.id;
-        await ensureMembership(foundId, uid, email, displayName, 'partner');
-        await updateDoc(doc(db, 'users', uid), {
-          activeSpaceId: foundId,
-          updatedAt: serverTimestamp(),
-        });
-        return {
-          spaceId: foundId,
-          title: sdata.title ?? 'فضای مشترک من و زری',
-          ownerUid: sdata.ownerUid,
-          ownerEmail: sdata.ownerEmail,
-          partnerEmail: sdata.partnerEmail ?? '',
-          role: 'partner',
-        };
-      }
-    } catch (err) {
-      console.warn('Partner discovery skipped:', err);
     }
   }
 
@@ -176,7 +143,7 @@ export async function ensureUserAndDiscoverSpace(user: User): Promise<CoupleSpac
   try {
     await setDoc(doc(db, 'spaces', newSpaceId), {
       ownerUid: uid,
-      ownerEmail: email,
+      ownerEmail: '',
       title: 'فضای مشترک روزهای من و زری',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -225,24 +192,11 @@ async function ensureMembership(
   }
 }
 
-export async function invitePartnerEmail(spaceId: string, partnerEmail: string): Promise<void> {
-  const cleaned = partnerEmail.trim().toLowerCase();
-  const path = `spaces/${spaceId}`;
-  try {
-    await updateDoc(doc(db, 'spaces', spaceId), {
-      partnerEmail: clampStr(cleaned, 254),
-      updatedAt: serverTimestamp(),
-    });
-  } catch (err) {
-    handleFirestoreError(err, OperationType.UPDATE, path);
-  }
-}
-
 export async function joinSpaceByCode(spaceIdRaw: string, user: User): Promise<CoupleSpaceInfo> {
   const spaceId = sanitizeId(spaceIdRaw.trim());
   const uid = sanitizeId(user.uid);
-  const email = (user.email ?? '').trim();
-  const displayName = clampStr(user.displayName || email.split('@')[0], 100, 'زری');
+  const email = '';
+  const displayName = clampStr(user.displayName, 100, 'همراه');
   const path = `spaces/${spaceId}`;
 
   try {
@@ -261,8 +215,6 @@ export async function joinSpaceByCode(spaceIdRaw: string, user: User): Promise<C
       spaceId,
       title: sdata.title ?? 'فضای مشترک من و زری',
       ownerUid: sdata.ownerUid,
-      ownerEmail: sdata.ownerEmail,
-      partnerEmail: sdata.partnerEmail ?? '',
       role,
     };
   } catch (err) {
@@ -273,7 +225,6 @@ export async function joinSpaceByCode(spaceIdRaw: string, user: User): Promise<C
 export function subscribeToCoupleSpace(
   spaceId: string,
   callbacks: {
-    onSpaceMeta: (partnerEmail: string) => void;
     onGoals: (items: GoalItem[]) => void;
     onHabits: (items: HabitItem[]) => void;
     onGratitudes: (items: GratitudeEntry[]) => void;
@@ -299,18 +250,7 @@ export function subscribeToCoupleSpace(
     callbacks.onError(err.message || label);
   };
 
-  unsubs.push(
-    onSnapshot(
-      doc(db, 'spaces', spaceId),
-      (snap) => {
-        if (snap.exists()) {
-          const data = snap.data();
-          callbacks.onSpaceMeta(typeof data.partnerEmail === 'string' ? data.partnerEmail : '');
-        }
-      },
-      (err) => reportListenerError('spaceMeta', err)
-    )
-  );
+
 
   unsubs.push(
     onSnapshot(
