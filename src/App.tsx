@@ -1096,7 +1096,7 @@ export default function App() {
     (item: Omit<ScheduledAnnouncement, 'id'>) => {
       const created: ScheduledAnnouncement = {...item, id: `sch-${Date.now()}`};
       setSchedules((prev) => [created, ...prev]);
-      if (spaceInfo) {
+      if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
         pushScheduleToCloud(spaceInfo.spaceId, created).catch(() => {});
       }
     },
@@ -1108,7 +1108,7 @@ export default function App() {
       setSchedules((prev) => {
         const next = prev.map((s) => (s.id === id ? {...s, enabled: !s.enabled} : s));
         const target = next.find((s) => s.id === id);
-        if (target && spaceInfo) {
+        if (target && spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
           pushScheduleToCloud(spaceInfo.spaceId, target).catch(() => {});
         }
         return next;
@@ -1122,7 +1122,7 @@ export default function App() {
       setSchedules((prev) => {
         const next = prev.map((s) => (s.id === id ? {...s, ...patch} : s));
         const target = next.find((s) => s.id === id);
-        if (target && spaceInfo) {
+        if (target && spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
           pushScheduleToCloud(spaceInfo.spaceId, target).catch(() => {});
         }
         return next;
@@ -1134,7 +1134,7 @@ export default function App() {
   const handleDeleteSchedule = useCallback(
     (id: string) => {
       setSchedules((prev) => prev.filter((s) => s.id !== id));
-      if (spaceInfo) {
+      if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
         deleteScheduleFromCloud(spaceInfo.spaceId, id).catch(() => {});
       }
     },
@@ -1332,7 +1332,7 @@ export default function App() {
       createdAt: Date.now(),
     };
     setGoals((prev) => [newGoal, ...prev]);
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       pushGoalToCloud(spaceInfo.spaceId, newGoal).catch(() => {});
     }
   };
@@ -1341,7 +1341,7 @@ export default function App() {
     setGoals((prev) => {
       const next = prev.map((g) => (g.id === id ? {...g, completed: !g.completed} : g));
       const target = next.find((g) => g.id === id);
-      if (target && spaceInfo) {
+      if (target && spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
         pushGoalToCloud(spaceInfo.spaceId, target).catch(() => {});
       }
       return next;
@@ -1350,7 +1350,7 @@ export default function App() {
 
   const handleDeleteGoal = (id: string) => {
     setGoals((prev) => prev.filter((g) => g.id !== id));
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       deleteGoalFromCloud(spaceInfo.spaceId, id).catch(() => {});
     }
   };
@@ -1371,7 +1371,7 @@ export default function App() {
       })
     );
     if (movedCount > 0) {
-      if (spaceInfo) {
+      if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
         movedGoals.forEach((g) => {
           pushGoalToCloud(spaceInfo.spaceId, g).catch(() => {});
         });
@@ -1393,7 +1393,7 @@ export default function App() {
         };
       });
       const target = next.find((h) => h.id === habitId);
-      if (target && spaceInfo) {
+      if (target && spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
         pushHabitToCloud(spaceInfo.spaceId, target).catch(() => {});
       }
       return next;
@@ -1408,14 +1408,14 @@ export default function App() {
       completedDates: [],
     };
     setHabits((prev) => [...prev, item]);
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       pushHabitToCloud(spaceInfo.spaceId, item).catch(() => {});
     }
   };
 
   const handleDeleteHabit = (id: string) => {
     setHabits((prev) => prev.filter((h) => h.id !== id));
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       deleteHabitFromCloud(spaceInfo.spaceId, id).catch(() => {});
     }
   };
@@ -1431,7 +1431,7 @@ export default function App() {
       createdAt: Date.now(),
     };
     setGratitudes((prev) => [entry, ...prev]);
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       pushGratitudeToCloud(spaceInfo.spaceId, entry).catch(() => {});
     }
     showToast('شکرگذاری امروز با موفقیت ثبت شد.');
@@ -1439,7 +1439,7 @@ export default function App() {
 
   const handleDeleteGratitude = (id: string) => {
     setGratitudes((prev) => prev.filter((g) => g.id !== id));
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       deleteGratitudeFromCloud(spaceInfo.spaceId, id).catch(() => {});
     }
   };
@@ -1447,14 +1447,14 @@ export default function App() {
   const handleAddCaller = (input: Omit<CallerContact, 'id'>) => {
     const created: CallerContact = {...input, id: `c-${Date.now()}`};
     setCallers((prev) => [created, ...prev]);
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       pushCallerToCloud(spaceInfo.spaceId, created).catch(() => {});
     }
   };
 
   const handleDeleteCaller = (id: string) => {
     setCallers((prev) => prev.filter((c) => c.id !== id));
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       deleteCallerFromCloud(spaceInfo.spaceId, id).catch(() => {});
     }
   };
@@ -1472,7 +1472,7 @@ export default function App() {
       createdAt: Date.now(),
     };
     setShoppingItems((prev) => [item, ...prev]);
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       pushShoppingToCloud(spaceInfo.spaceId, item).catch(() => {});
     }
   };
@@ -1493,7 +1493,7 @@ export default function App() {
     }
     if (created.length === 0) return;
     setShoppingItems((prev) => [...created, ...prev]);
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       created.forEach((it) => {
         pushShoppingToCloud(spaceInfo.spaceId, it).catch(() => {});
       });
@@ -1504,7 +1504,7 @@ export default function App() {
     setShoppingItems((prev) => {
       const next = prev.map((it) => (it.id === id ? {...it, checked: !it.checked} : it));
       const target = next.find((it) => it.id === id);
-      if (target && spaceInfo) {
+      if (target && spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
         pushShoppingToCloud(spaceInfo.spaceId, target).catch(() => {});
       }
       return next;
@@ -1513,7 +1513,7 @@ export default function App() {
 
   const handleDeleteShoppingItem = (id: string) => {
     setShoppingItems((prev) => prev.filter((it) => it.id !== id));
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       deleteShoppingFromCloud(spaceInfo.spaceId, id).catch(() => {});
     }
   };
@@ -1521,7 +1521,7 @@ export default function App() {
   const handleClearCheckedShopping = () => {
     const removedIds = shoppingItems.filter((it) => it.checked).map((it) => it.id);
     setShoppingItems((prev) => prev.filter((it) => !it.checked));
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       removedIds.forEach((id) => {
         deleteShoppingFromCloud(spaceInfo.spaceId, id).catch(() => {});
       });
@@ -1537,14 +1537,14 @@ export default function App() {
       createdAt: Date.now(),
     };
     setExpenses((prev) => [created, ...prev]);
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       pushExpenseToCloud(spaceInfo.spaceId, created).catch(() => {});
     }
   };
 
   const handleDeleteExpense = (id: string) => {
     setExpenses((prev) => prev.filter((e) => e.id !== id));
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       deleteExpenseFromCloud(spaceInfo.spaceId, id).catch(() => {});
     }
   };
@@ -1558,7 +1558,7 @@ export default function App() {
       createdAt: Date.now(),
     };
     setBills((prev) => [created, ...prev]);
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       pushBillToCloud(spaceInfo.spaceId, created).catch(() => {});
     }
   };
@@ -1585,7 +1585,7 @@ export default function App() {
         paid: false,
       };
       setBills((prev) => prev.map((b) => (b.id === id ? updatedBill : b)));
-      if (spaceInfo) {
+      if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
         pushBillToCloud(spaceInfo.spaceId, updatedBill).catch(() => {});
       }
       showToast(`«${targetBill.title}» پرداخت شد و سررسید بعدی (${nextDueDateKey}) تنظیم گردید.`);
@@ -1594,14 +1594,14 @@ export default function App() {
 
     const updatedBill: BillReminderItem = {...targetBill, paid: becomingPaid};
     setBills((prev) => prev.map((b) => (b.id === id ? updatedBill : b)));
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       pushBillToCloud(spaceInfo.spaceId, updatedBill).catch(() => {});
     }
   };
 
   const handleDeleteBill = (id: string) => {
     setBills((prev) => prev.filter((b) => b.id !== id));
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       deleteBillFromCloud(spaceInfo.spaceId, id).catch(() => {});
     }
   };
@@ -1615,7 +1615,7 @@ export default function App() {
       createdAt: Date.now(),
     };
     setMeds((prev) => [...prev, created]);
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       pushMedicationToCloud(spaceInfo.spaceId, created).catch(() => {});
     }
   };
@@ -1632,7 +1632,7 @@ export default function App() {
         };
       });
       const target = next.find((m) => m.id === id);
-      if (target && spaceInfo) {
+      if (target && spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
         pushMedicationToCloud(spaceInfo.spaceId, target).catch(() => {});
       }
       return next;
@@ -1643,7 +1643,7 @@ export default function App() {
     setMeds((prev) => {
       const next = prev.map((m) => (m.id === id ? {...m, enabled: !m.enabled} : m));
       const target = next.find((m) => m.id === id);
-      if (target && spaceInfo) {
+      if (target && spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
         pushMedicationToCloud(spaceInfo.spaceId, target).catch(() => {});
       }
       return next;
@@ -1652,7 +1652,7 @@ export default function App() {
 
   const handleDeleteMed = (id: string) => {
     setMeds((prev) => prev.filter((m) => m.id !== id));
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       deleteMedicationFromCloud(spaceInfo.spaceId, id).catch(() => {});
     }
   };
@@ -1660,7 +1660,7 @@ export default function App() {
   // Meal Planner Save
   const handleSaveMealDay = (entry: MealPlanEntry) => {
     setMeals((prev) => prev.map((m) => (m.id === entry.id ? entry : m)));
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       pushMealPlanToCloud(spaceInfo.spaceId, entry).catch(() => {});
     }
   };
@@ -1673,14 +1673,14 @@ export default function App() {
       createdAt: Date.now(),
     };
     setVaultNotes((prev) => [created, ...prev]);
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       pushVaultNoteToCloud(spaceInfo.spaceId, created).catch(() => {});
     }
   };
 
   const handleDeleteVaultNote = (id: string) => {
     setVaultNotes((prev) => prev.filter((v) => v.id !== id));
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       deleteVaultNoteFromCloud(spaceInfo.spaceId, id).catch(() => {});
     }
   };
@@ -1696,7 +1696,7 @@ export default function App() {
       createdAt: Date.now(),
     };
     setPackingItems((prev) => [created, ...prev]);
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       pushPackingToCloud(spaceInfo.spaceId, created).catch(() => {});
     }
   };
@@ -1724,7 +1724,7 @@ export default function App() {
       return;
     }
     setPackingItems((prev) => [...created, ...prev]);
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       created.forEach((item) => {
         pushPackingToCloud(spaceInfo.spaceId, item).catch(() => {});
       });
@@ -1736,7 +1736,7 @@ export default function App() {
     setPackingItems((prev) => {
       const next = prev.map((it) => (it.id === id ? {...it, checked: !it.checked} : it));
       const target = next.find((it) => it.id === id);
-      if (target && spaceInfo) {
+      if (target && spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
         pushPackingToCloud(spaceInfo.spaceId, target).catch(() => {});
       }
       return next;
@@ -1745,7 +1745,7 @@ export default function App() {
 
   const handleDeletePackingItem = (id: string) => {
     setPackingItems((prev) => prev.filter((it) => it.id !== id));
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       deletePackingFromCloud(spaceInfo.spaceId, id).catch(() => {});
     }
   };
@@ -1775,14 +1775,14 @@ export default function App() {
       createdAt: Date.now(),
     };
     setSpecialEvents((prev) => [created, ...prev]);
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       pushSpecialEventToCloud(spaceInfo.spaceId, created).catch(() => {});
     }
   };
 
   const handleDeleteSpecialEvent = (id: string) => {
     setSpecialEvents((prev) => prev.filter((ev) => ev.id !== id));
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       deleteSpecialEventFromCloud(spaceInfo.spaceId, id).catch(() => {});
     }
   };
@@ -1813,7 +1813,7 @@ export default function App() {
       createdAt: Date.now(),
     };
     setHomeChores((prev) => [created, ...prev]);
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       pushHomeChoreToCloud(spaceInfo.spaceId, created).catch(() => {});
     }
   };
@@ -1831,7 +1831,7 @@ export default function App() {
           : ch
       );
       const target = next.find((ch) => ch.id === id);
-      if (target && spaceInfo) {
+      if (target && spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
         pushHomeChoreToCloud(spaceInfo.spaceId, target).catch(() => {});
       }
       return next;
@@ -1841,7 +1841,7 @@ export default function App() {
 
   const handleDeleteChore = (id: string) => {
     setHomeChores((prev) => prev.filter((ch) => ch.id !== id));
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       deleteHomeChoreFromCloud(spaceInfo.spaceId, id).catch(() => {});
     }
   };
