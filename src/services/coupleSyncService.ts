@@ -10,9 +10,6 @@ import {
   setDoc,
   updateDoc,
   where,
-  writeBatch,
-  type DocumentSnapshot,
-  type Query,
   type Unsubscribe,
 } from 'firebase/firestore';
 import type {
@@ -39,14 +36,21 @@ export interface CoupleSpaceInfo {
   spaceId: string;
   title: string;
   ownerUid: string;
-  ownerEmail: string;
-  partnerEmail: string;
   role: 'owner' | 'partner';
 }
 
 function clampStr(val: string | undefined, max: number, fallback = ''): string {
   const s = (val ?? fallback).trim();
   return s.length > max ? s.slice(0, max) : s;
+}
+
+function createPairingSpaceId(): string {
+  const bytes = new Uint8Array(24);
+  if (typeof crypto === 'undefined' || typeof crypto.getRandomValues !== 'function') {
+    throw new Error('این دستگاه امکان ساخت کد اتصال امن را ندارد.');
+  }
+  crypto.getRandomValues(bytes);
+  return `space_${Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
 }
 
 function sanitizeId(raw: string): string {
@@ -56,9 +60,7 @@ function sanitizeId(raw: string): string {
 
 export async function ensureUserAndDiscoverSpace(user: User): Promise<CoupleSpaceInfo> {
   const uid = sanitizeId(user.uid);
-  const email = (user.email ?? '').trim();
-  const lowerEmail = email.toLowerCase();
-  const displayName = clampStr(user.displayName || lowerEmail.split('@')[0], 100, 'همراه');
+  const displayName = clampStr(user.displayName ?? undefined, 100, 'همراه');
   const userPath = `users/${uid}`;
 
   // 1. Ensure user profile exists
@@ -76,7 +78,6 @@ export async function ensureUserAndDiscoverSpace(user: User): Promise<CoupleSpac
     } else {
       await setDoc(userRef, {
         uid,
-        email,
         displayName,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -93,46 +94,16 @@ export async function ensureUserAndDiscoverSpace(user: User): Promise<CoupleSpac
       if (spaceSnap.exists()) {
         const sdata = spaceSnap.data();
         const role: 'owner' | 'partner' = sdata.ownerUid === uid ? 'owner' : 'partner';
-        await ensureMembership(activeSpaceId, uid, email, displayName, role);
+        await ensureMembership(activeSpaceId, uid, displayName, role);
         return {
           spaceId: activeSpaceId,
           title: sdata.title ?? 'فضای مشترک من و زری',
           ownerUid: sdata.ownerUid,
-          ownerEmail: sdata.ownerEmail,
-          partnerEmail: sdata.partnerEmail ?? '',
           role,
         };
       }
     } catch {
       // fall through to discovery
-    }
-  }
-
-  // 3. Auto-discover if partnerEmail matches Zari's Gmail!
-  if (email) {
-    try {
-      const partnerQ = query(collection(db, 'spaces'), where('partnerEmail', '==', email));
-      const partnerSnaps = await getDocs(partnerQ);
-      if (!partnerSnaps.empty) {
-        const docSnap = partnerSnaps.docs[0];
-        const sdata = docSnap.data();
-        const foundId = docSnap.id;
-        await ensureMembership(foundId, uid, email, displayName, 'partner');
-        await updateDoc(doc(db, 'users', uid), {
-          activeSpaceId: foundId,
-          updatedAt: serverTimestamp(),
-        });
-        return {
-          spaceId: foundId,
-          title: sdata.title ?? 'فضای مشترک من و زری',
-          ownerUid: sdata.ownerUid,
-          ownerEmail: sdata.ownerEmail,
-          partnerEmail: sdata.partnerEmail ?? '',
-          role: 'partner',
-        };
-      }
-    } catch (err) {
-      console.warn('Partner discovery skipped:', err);
     }
   }
 
@@ -144,7 +115,7 @@ export async function ensureUserAndDiscoverSpace(user: User): Promise<CoupleSpac
       const docSnap = ownerSnaps.docs[0];
       const sdata = docSnap.data();
       const foundId = docSnap.id;
-      await ensureMembership(foundId, uid, email, displayName, 'owner');
+      await ensureMembership(foundId, uid, displayName, 'owner');
       await updateDoc(doc(db, 'users', uid), {
         activeSpaceId: foundId,
         updatedAt: serverTimestamp(),
@@ -153,8 +124,6 @@ export async function ensureUserAndDiscoverSpace(user: User): Promise<CoupleSpac
         spaceId: foundId,
         title: sdata.title ?? 'فضای مشترک من و زری',
         ownerUid: sdata.ownerUid,
-        ownerEmail: sdata.ownerEmail,
-        partnerEmail: sdata.partnerEmail ?? '',
         role: 'owner',
       };
     }
@@ -163,16 +132,15 @@ export async function ensureUserAndDiscoverSpace(user: User): Promise<CoupleSpac
   }
 
   // 5. Create fresh CoupleSpace owned by this user
-  const newSpaceId = sanitizeId(`space_${uid}`);
+  const newSpaceId = createPairingSpaceId();
   try {
     await setDoc(doc(db, 'spaces', newSpaceId), {
       ownerUid: uid,
-      ownerEmail: email,
       title: 'فضای مشترک روزهای من و زری',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-    await ensureMembership(newSpaceId, uid, email, displayName, 'owner');
+    await ensureMembership(newSpaceId, uid, displayName, 'owner');
     await updateDoc(doc(db, 'users', uid), {
       activeSpaceId: newSpaceId,
       updatedAt: serverTimestamp(),
@@ -185,8 +153,6 @@ export async function ensureUserAndDiscoverSpace(user: User): Promise<CoupleSpac
     spaceId: newSpaceId,
     title: 'فضای مشترک روزهای من و زری',
     ownerUid: uid,
-    ownerEmail: email,
-    partnerEmail: '',
     role: 'owner',
   };
 }
@@ -194,7 +160,6 @@ export async function ensureUserAndDiscoverSpace(user: User): Promise<CoupleSpac
 async function ensureMembership(
   spaceId: string,
   uid: string,
-  email: string,
   displayName: string,
   role: 'owner' | 'partner'
 ): Promise<void> {
@@ -205,7 +170,6 @@ async function ensureMembership(
     if (!snap.exists()) {
       await setDoc(ref, {
         uid,
-        email,
         displayName,
         role,
         joinedAt: serverTimestamp(),
@@ -216,24 +180,10 @@ async function ensureMembership(
   }
 }
 
-export async function invitePartnerEmail(spaceId: string, partnerEmail: string): Promise<void> {
-  const cleaned = partnerEmail.trim().toLowerCase();
-  const path = `spaces/${spaceId}`;
-  try {
-    await updateDoc(doc(db, 'spaces', spaceId), {
-      partnerEmail: clampStr(cleaned, 254),
-      updatedAt: serverTimestamp(),
-    });
-  } catch (err) {
-    handleFirestoreError(err, OperationType.UPDATE, path);
-  }
-}
-
 export async function joinSpaceByCode(spaceIdRaw: string, user: User): Promise<CoupleSpaceInfo> {
   const spaceId = sanitizeId(spaceIdRaw.trim());
   const uid = sanitizeId(user.uid);
-  const email = (user.email ?? '').trim();
-  const displayName = clampStr(user.displayName || email.split('@')[0], 100, 'زری');
+  const displayName = clampStr(user.displayName ?? undefined, 100, 'همراه');
   const path = `spaces/${spaceId}`;
 
   try {
@@ -243,7 +193,7 @@ export async function joinSpaceByCode(spaceIdRaw: string, user: User): Promise<C
     }
     const sdata = snap.data();
     const role: 'owner' | 'partner' = sdata.ownerUid === uid ? 'owner' : 'partner';
-    await ensureMembership(spaceId, uid, email, displayName, role);
+    await ensureMembership(spaceId, uid, displayName, role);
     await updateDoc(doc(db, 'users', uid), {
       activeSpaceId: spaceId,
       updatedAt: serverTimestamp(),
@@ -252,8 +202,6 @@ export async function joinSpaceByCode(spaceIdRaw: string, user: User): Promise<C
       spaceId,
       title: sdata.title ?? 'فضای مشترک من و زری',
       ownerUid: sdata.ownerUid,
-      ownerEmail: sdata.ownerEmail,
-      partnerEmail: sdata.partnerEmail ?? '',
       role,
     };
   } catch (err) {
@@ -264,7 +212,6 @@ export async function joinSpaceByCode(spaceIdRaw: string, user: User): Promise<C
 export function subscribeToCoupleSpace(
   spaceId: string,
   callbacks: {
-    onSpaceMeta: (partnerEmail: string) => void;
     onGoals: (items: GoalItem[]) => void;
     onHabits: (items: HabitItem[]) => void;
     onGratitudes: (items: GratitudeEntry[]) => void;
@@ -290,24 +237,13 @@ export function subscribeToCoupleSpace(
     callbacks.onError(err.message || label);
   };
 
-  unsubs.push(
-    onSnapshot(
-      doc(db, 'spaces', spaceId),
-      (snap) => {
-        if (snap.exists()) {
-          const data = snap.data();
-          callbacks.onSpaceMeta(typeof data.partnerEmail === 'string' ? data.partnerEmail : '');
-        }
-      },
-      (err) => reportListenerError('spaceMeta', err)
-    )
-  );
+
 
   unsubs.push(
     onSnapshot(
       collection(db, 'spaces', spaceId, 'goals'),
       (snap) => {
-        if (snap.empty) return;
+        // Empty snapshots are meaningful: they propagate deletions to every paired device.
         const items: GoalItem[] = snap.docs
           .map((d) => {
             const data = d.data();
@@ -329,7 +265,7 @@ export function subscribeToCoupleSpace(
           })
           .filter((item): item is GoalItem => item !== null)
           .sort((a, b) => b.createdAt - a.createdAt);
-        if (items.length > 0) callbacks.onGoals(items);
+        callbacks.onGoals(items);
       },
       (err) => reportListenerError('goals', err)
     )
@@ -339,7 +275,7 @@ export function subscribeToCoupleSpace(
     onSnapshot(
       collection(db, 'spaces', spaceId, 'habits'),
       (snap) => {
-        if (snap.empty) return;
+        // Empty snapshots are meaningful: they propagate deletions to every paired device.
         const items: HabitItem[] = snap.docs
           .map((d) => {
             const data = d.data();
@@ -352,7 +288,7 @@ export function subscribeToCoupleSpace(
             } as HabitItem;
           })
           .filter((item): item is HabitItem => item !== null);
-        if (items.length > 0) callbacks.onHabits(items);
+        callbacks.onHabits(items);
       },
       (err) => reportListenerError('habits', err)
     )
@@ -362,7 +298,7 @@ export function subscribeToCoupleSpace(
     onSnapshot(
       collection(db, 'spaces', spaceId, 'gratitudes'),
       (snap) => {
-        if (snap.empty) return;
+        // Empty snapshots are meaningful: they propagate deletions to every paired device.
         const items: GratitudeEntry[] = snap.docs
           .map((d) => {
             const data = d.data();
@@ -381,7 +317,7 @@ export function subscribeToCoupleSpace(
           })
           .filter((item): item is GratitudeEntry => item !== null)
           .sort((a, b) => b.createdAt - a.createdAt);
-        if (items.length > 0) callbacks.onGratitudes(items);
+        callbacks.onGratitudes(items);
       },
       (err) => reportListenerError('gratitudes', err)
     )
@@ -391,7 +327,7 @@ export function subscribeToCoupleSpace(
     onSnapshot(
       collection(db, 'spaces', spaceId, 'callers'),
       (snap) => {
-        if (snap.empty) return;
+        // Empty snapshots are meaningful: they propagate deletions to every paired device.
         const items: CallerContact[] = snap.docs
           .map((d) => {
             const data = d.data();
@@ -410,7 +346,7 @@ export function subscribeToCoupleSpace(
             } as CallerContact;
           })
           .filter((item): item is CallerContact => item !== null);
-        if (items.length > 0) callbacks.onCallers(items);
+        callbacks.onCallers(items);
       },
       (err) => reportListenerError('callers', err)
     )
@@ -420,7 +356,7 @@ export function subscribeToCoupleSpace(
     onSnapshot(
       collection(db, 'spaces', spaceId, 'schedules'),
       (snap) => {
-        if (snap.empty) return;
+        // Empty snapshots are meaningful: they propagate deletions to every paired device.
         const items: ScheduledAnnouncement[] = snap.docs
           .map((d) => {
             const data = d.data();
@@ -438,7 +374,7 @@ export function subscribeToCoupleSpace(
             } as ScheduledAnnouncement;
           })
           .filter((item): item is ScheduledAnnouncement => item !== null);
-        if (items.length > 0) callbacks.onSchedules(items);
+        callbacks.onSchedules(items);
       },
       (err) => reportListenerError('schedules', err)
     )
@@ -478,7 +414,7 @@ export function subscribeToCoupleSpace(
       onSnapshot(
         collection(db, 'spaces', spaceId, 'shopping'),
         (snap) => {
-          if (snap.empty) return;
+          // Empty snapshots are meaningful: they propagate deletions to every paired device.
           const items: ShoppingItem[] = snap.docs
             .map((d) => {
               const data = d.data();
@@ -494,7 +430,7 @@ export function subscribeToCoupleSpace(
             })
             .filter((x): x is ShoppingItem => x !== null)
             .sort((a, b) => b.createdAt - a.createdAt);
-          if (items.length > 0) onShoppingCb(items);
+          onShoppingCb(items);
         },
         (err) => reportListenerError('shopping', err)
       )
@@ -507,7 +443,7 @@ export function subscribeToCoupleSpace(
       onSnapshot(
         collection(db, 'spaces', spaceId, 'expenses'),
         (snap) => {
-          if (snap.empty) return;
+          // Empty snapshots are meaningful: they propagate deletions to every paired device.
           const items: ExpenseEntry[] = snap.docs
             .map((d) => {
               const data = d.data();
@@ -531,7 +467,7 @@ export function subscribeToCoupleSpace(
             })
             .filter((x): x is ExpenseEntry => x !== null)
             .sort((a, b) => b.createdAt - a.createdAt);
-          if (items.length > 0) onExpensesCb(items);
+          onExpensesCb(items);
         },
         (err) => reportListenerError('expenses', err)
       )
@@ -544,7 +480,7 @@ export function subscribeToCoupleSpace(
       onSnapshot(
         collection(db, 'spaces', spaceId, 'bills'),
         (snap) => {
-          if (snap.empty) return;
+          // Empty snapshots are meaningful: they propagate deletions to every paired device.
           const items: BillReminderItem[] = snap.docs
             .map((d) => {
               const data = d.data();
@@ -563,7 +499,7 @@ export function subscribeToCoupleSpace(
             })
             .filter((x): x is BillReminderItem => x !== null)
             .sort((a, b) => a.dueDateKey.localeCompare(b.dueDateKey));
-          if (items.length > 0) onBillsCb(items);
+          onBillsCb(items);
         },
         (err) => reportListenerError('bills', err)
       )
@@ -576,7 +512,7 @@ export function subscribeToCoupleSpace(
       onSnapshot(
         collection(db, 'spaces', spaceId, 'meds'),
         (snap) => {
-          if (snap.empty) return;
+          // Empty snapshots are meaningful: they propagate deletions to every paired device.
           const items: MedicationItem[] = snap.docs
             .map((d) => {
               const data = d.data();
@@ -596,7 +532,7 @@ export function subscribeToCoupleSpace(
             })
             .filter((x): x is MedicationItem => x !== null)
             .sort((a, b) => a.time.localeCompare(b.time));
-          if (items.length > 0) onMedsCb(items);
+          onMedsCb(items);
         },
         (err) => reportListenerError('meds', err)
       )
@@ -609,7 +545,7 @@ export function subscribeToCoupleSpace(
       onSnapshot(
         collection(db, 'spaces', spaceId, 'meals'),
         (snap) => {
-          if (snap.empty) return;
+          // Empty snapshots are meaningful: they propagate deletions to every paired device.
           const items: MealPlanEntry[] = snap.docs
             .map((d) => {
               const data = d.data();
@@ -623,7 +559,7 @@ export function subscribeToCoupleSpace(
               } as MealPlanEntry;
             })
             .filter((x): x is MealPlanEntry => x !== null);
-          if (items.length > 0) onMealsCb(items);
+          onMealsCb(items);
         },
         (err) => reportListenerError('meals', err)
       )
@@ -636,7 +572,7 @@ export function subscribeToCoupleSpace(
       onSnapshot(
         collection(db, 'spaces', spaceId, 'vault'),
         (snap) => {
-          if (snap.empty) return;
+          // Empty snapshots are meaningful: they propagate deletions to every paired device.
           const items: QuickVaultNote[] = snap.docs
             .map((d) => {
               const data = d.data();
@@ -652,7 +588,7 @@ export function subscribeToCoupleSpace(
             })
             .filter((x): x is QuickVaultNote => x !== null)
             .sort((a, b) => b.createdAt - a.createdAt);
-          if (items.length > 0) onVaultCb(items);
+          onVaultCb(items);
         },
         (err) => reportListenerError('vault', err)
       )
@@ -665,7 +601,7 @@ export function subscribeToCoupleSpace(
       onSnapshot(
         collection(db, 'spaces', spaceId, 'packing'),
         (snap) => {
-          if (snap.empty) return;
+          // Empty snapshots are meaningful: they propagate deletions to every paired device.
           const items: PackingItem[] = snap.docs
             .map((d) => {
               const data = d.data();
@@ -687,7 +623,7 @@ export function subscribeToCoupleSpace(
             })
             .filter((x): x is PackingItem => x !== null)
             .sort((a, b) => b.createdAt - a.createdAt);
-          if (items.length > 0) onPackingCb(items);
+          onPackingCb(items);
         },
         (err) => reportListenerError('packing', err)
       )
@@ -700,7 +636,7 @@ export function subscribeToCoupleSpace(
       onSnapshot(
         collection(db, 'spaces', spaceId, 'events'),
         (snap) => {
-          if (snap.empty) return;
+          // Empty snapshots are meaningful: they propagate deletions to every paired device.
           const items: SpecialEventItem[] = snap.docs
             .map((d) => {
               const data = d.data();
@@ -722,7 +658,7 @@ export function subscribeToCoupleSpace(
             })
             .filter((x): x is SpecialEventItem => x !== null)
             .sort((a, b) => b.createdAt - a.createdAt);
-          if (items.length > 0) onEventsCb(items);
+          onEventsCb(items);
         },
         (err) => reportListenerError('events', err)
       )
@@ -735,7 +671,7 @@ export function subscribeToCoupleSpace(
       onSnapshot(
         collection(db, 'spaces', spaceId, 'chores'),
         (snap) => {
-          if (snap.empty) return;
+          // Empty snapshots are meaningful: they propagate deletions to every paired device.
           const items: HomeChoreItem[] = snap.docs
             .map((d) => {
               const data = d.data();
@@ -753,7 +689,7 @@ export function subscribeToCoupleSpace(
             })
             .filter((x): x is HomeChoreItem => x !== null)
             .sort((a, b) => a.nextDueDateKey.localeCompare(b.nextDueDateKey));
-          if (items.length > 0) onChoresCb(items);
+          onChoresCb(items);
         },
         (err) => reportListenerError('chores', err)
       )
@@ -1433,99 +1369,19 @@ export async function deleteHomeChoreFromCloud(spaceId: string, choreId: string)
 }
 
 
-const ACCOUNT_DATA_COLLECTIONS = [
-  'goals', 'habits', 'gratitudes', 'callers', 'schedules',
-  'shopping', 'expenses', 'bills', 'meds', 'meals',
-  'vault', 'packing', 'events', 'chores',
-] as const;
-
-async function deleteQueryResults(q: Query): Promise<number> {
-  const snapshot = await getDocs(q);
-  let deleted = 0;
-  for (let offset = 0; offset < snapshot.docs.length; offset += 400) {
-    const batch = writeBatch(db);
-    const page = snapshot.docs.slice(offset, offset + 400);
-    page.forEach((item) => batch.delete(item.ref));
-    await batch.commit();
-    deleted += page.length;
-  }
-  return deleted;
+async function pushOnlyMissing<T extends {id: string}>(
+  spaceId: string,
+  collectionName: string,
+  items: T[],
+  pushItem: (spaceId: string, item: T) => Promise<void>
+): Promise<void> {
+  if (items.length === 0) return;
+  const snapshot = await getDocs(collection(db, 'spaces', spaceId, collectionName));
+  const existingIds = new Set(snapshot.docs.map((item) => item.id));
+  const missingItems = items.filter((item) => !existingIds.has(sanitizeId(item.id)));
+  await Promise.all(missingItems.map((item) => pushItem(spaceId, item)));
 }
 
-/**
- * Deletes the signed-in user's Firestore profile and account-linked space data.
- * If the user owns a shared space, all of that space's shared content is deleted.
- * If the user is a partner, only their authored records and membership are removed.
- */
-export async function deleteUserCloudData(user: User, activeSpaceId?: string | null): Promise<void> {
-  const uid = user.uid;
-  const email = (user.email ?? '').trim();
-  if (!uid || !email) throw new Error('اطلاعات حساب برای حذف کامل کافی نیست.');
-
-  const userRef = doc(db, 'users', uid);
-  const userSnapshot = await getDoc(userRef);
-  const profileSpaceId = userSnapshot.exists() && typeof userSnapshot.data().activeSpaceId === 'string'
-    ? userSnapshot.data().activeSpaceId as string
-    : '';
-
-  const spaces = new Map<string, DocumentSnapshot>();
-  const owned = await getDocs(query(collection(db, 'spaces'), where('ownerUid', '==', uid)));
-  owned.docs.forEach((item) => spaces.set(item.id, item));
-  if (email) {
-    const invited = await getDocs(query(collection(db, 'spaces'), where('partnerEmail', '==', email)));
-    invited.docs.forEach((item) => spaces.set(item.id, item));
-  }
-
-  for (const candidateId of [activeSpaceId, profileSpaceId].filter((value): value is string => Boolean(value))) {
-    if (!spaces.has(candidateId)) {
-      const candidate = await getDoc(doc(db, 'spaces', candidateId));
-      if (candidate.exists()) spaces.set(candidate.id, candidate);
-    }
-  }
-
-  for (const [spaceId, spaceSnapshot] of spaces) {
-    const spaceData = spaceSnapshot.data();
-    if (!spaceData) continue;
-    const isOwner = spaceData.ownerUid === uid;
-    const membersSnapshot = isOwner
-      ? await getDocs(collection(db, 'spaces', spaceId, 'members'))
-      : null;
-    const ownMembership = isOwner
-      ? null
-      : await getDoc(doc(db, 'spaces', spaceId, 'members', uid));
-    const memberUids = isOwner
-      ? Array.from(new Set([uid, ...(membersSnapshot?.docs ?? []).map((member) => member.id)]))
-      : ownMembership?.exists() ? [uid] : [];
-
-    for (const memberUid of memberUids) {
-      for (const collectionName of ACCOUNT_DATA_COLLECTIONS) {
-        await deleteQueryResults(
-          query(collection(db, 'spaces', spaceId, collectionName), where('authorUid', '==', memberUid))
-        );
-      }
-    }
-
-    if (isOwner) {
-      await deleteDoc(doc(db, 'spaces', spaceId, 'config', 'settings'));
-      for (const member of membersSnapshot?.docs ?? []) {
-        await deleteDoc(member.ref);
-      }
-      await deleteDoc(doc(db, 'spaces', spaceId));
-    } else {
-      if (spaceData.partnerEmail === email) {
-        await updateDoc(doc(db, 'spaces', spaceId), {
-          partnerEmail: '',
-          updatedAt: serverTimestamp(),
-        });
-      }
-      if (ownMembership?.exists()) {
-        await deleteDoc(doc(db, 'spaces', spaceId, 'members', uid));
-      }
-    }
-  }
-
-  if (userSnapshot.exists()) await deleteDoc(userRef);
-}
 export async function uploadLocalBundleToSpace(
   spaceId: string,
   bundle: {
@@ -1546,21 +1402,28 @@ export async function uploadLocalBundleToSpace(
     homeChores?: HomeChoreItem[];
   }
 ): Promise<void> {
-  await pushSettingsToCloud(spaceId, bundle.settings);
+  if (!getUidOrNull()) throw new Error('شناسه دستگاه معتبر نیست؛ دوباره اتصال را برقرار کنید.');
+  // First-time pairing is additive: never overwrite records already present in the shared space.
+  const settingsRef = doc(db, 'spaces', spaceId, 'config', 'settings');
+  const settingsSnapshot = await getDoc(settingsRef);
+  if (!settingsSnapshot.exists()) {
+    await pushSettingsToCloud(spaceId, bundle.settings);
+  }
+
   await Promise.all([
-    ...bundle.goals.map((g) => pushGoalToCloud(spaceId, g)),
-    ...bundle.habits.map((h) => pushHabitToCloud(spaceId, h)),
-    ...bundle.gratitudes.map((gr) => pushGratitudeToCloud(spaceId, gr)),
-    ...bundle.callers.map((c) => pushCallerToCloud(spaceId, c)),
-    ...bundle.schedules.map((s) => pushScheduleToCloud(spaceId, s)),
-    ...(bundle.shoppingItems ?? []).map((sh) => pushShoppingToCloud(spaceId, sh)),
-    ...(bundle.expenses ?? []).map((ex) => pushExpenseToCloud(spaceId, ex)),
-    ...(bundle.bills ?? []).map((bl) => pushBillToCloud(spaceId, bl)),
-    ...(bundle.meds ?? []).map((md) => pushMedicationToCloud(spaceId, md)),
-    ...(bundle.meals ?? []).filter((ml) => ml.lunch || ml.dinner || ml.ingredients).map((ml) => pushMealPlanToCloud(spaceId, ml)),
-    ...(bundle.vaultNotes ?? []).map((vn) => pushVaultNoteToCloud(spaceId, vn)),
-    ...(bundle.packingItems ?? []).map((pk) => pushPackingToCloud(spaceId, pk)),
-    ...(bundle.specialEvents ?? []).map((ev) => pushSpecialEventToCloud(spaceId, ev)),
-    ...(bundle.homeChores ?? []).map((ch) => pushHomeChoreToCloud(spaceId, ch)),
+    pushOnlyMissing(spaceId, 'goals', bundle.goals, pushGoalToCloud),
+    pushOnlyMissing(spaceId, 'habits', bundle.habits, pushHabitToCloud),
+    pushOnlyMissing(spaceId, 'gratitudes', bundle.gratitudes, pushGratitudeToCloud),
+    pushOnlyMissing(spaceId, 'callers', bundle.callers, pushCallerToCloud),
+    pushOnlyMissing(spaceId, 'schedules', bundle.schedules, pushScheduleToCloud),
+    pushOnlyMissing(spaceId, 'shopping', bundle.shoppingItems ?? [], pushShoppingToCloud),
+    pushOnlyMissing(spaceId, 'expenses', bundle.expenses ?? [], pushExpenseToCloud),
+    pushOnlyMissing(spaceId, 'bills', bundle.bills ?? [], pushBillToCloud),
+    pushOnlyMissing(spaceId, 'meds', bundle.meds ?? [], pushMedicationToCloud),
+    pushOnlyMissing(spaceId, 'meals', (bundle.meals ?? []).filter((item) => item.lunch || item.dinner || item.ingredients), pushMealPlanToCloud),
+    pushOnlyMissing(spaceId, 'vault', bundle.vaultNotes ?? [], pushVaultNoteToCloud),
+    pushOnlyMissing(spaceId, 'packing', bundle.packingItems ?? [], pushPackingToCloud),
+    pushOnlyMissing(spaceId, 'events', bundle.specialEvents ?? [], pushSpecialEventToCloud),
+    pushOnlyMissing(spaceId, 'chores', bundle.homeChores ?? [], pushHomeChoreToCloud),
   ]);
 }

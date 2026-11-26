@@ -10,8 +10,9 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isVerifiedUser() {
-      return isSignedIn() && request.auth.token.email_verified == true;
+    function isAuthenticatedDevice() {
+      // Device pairing uses Firebase anonymous auth; Google/email verification is not required.
+      return isSignedIn();
     }
 
     function isValidId(id) {
@@ -27,7 +28,7 @@ service cloud.firestore {
     }
 
     function isSpaceMember(spaceId) {
-      return isVerifiedUser()
+      return isAuthenticatedDevice()
         && (
           exists(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.auth.uid))
           || (exists(/databases/$(database)/documents/spaces/$(spaceId))
@@ -36,10 +37,9 @@ service cloud.firestore {
     }
 
     function isValidUserProfile(data, userId) {
-      return data.keys().hasAll(['uid', 'email', 'displayName', 'createdAt', 'updatedAt'])
+      return data.keys().hasAll(['uid', 'displayName', 'createdAt', 'updatedAt'])
         && data.keys().hasOnly(['uid', 'email', 'displayName', 'activeSpaceId', 'createdAt', 'updatedAt'])
         && data.uid is string && data.uid == userId && data.uid == request.auth.uid && isValidId(data.uid)
-        && data.email is string && data.email.size() <= 254 && data.email == request.auth.token.email
         && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100
         && (!('activeSpaceId' in data) || (data.activeSpaceId is string && isValidId(data.activeSpaceId)))
         && data.createdAt is timestamp
@@ -47,10 +47,9 @@ service cloud.firestore {
     }
 
     function isValidSpace(data) {
-      return data.keys().hasAll(['ownerUid', 'ownerEmail', 'title', 'createdAt', 'updatedAt'])
+      return data.keys().hasAll(['ownerUid', 'title', 'createdAt', 'updatedAt'])
         && data.keys().hasOnly(['ownerUid', 'ownerEmail', 'partnerEmail', 'title', 'createdAt', 'updatedAt'])
         && data.ownerUid is string && isValidId(data.ownerUid)
-        && data.ownerEmail is string && data.ownerEmail.size() >= 3 && data.ownerEmail.size() <= 254
         && (!('partnerEmail' in data) || (data.partnerEmail is string && data.partnerEmail.size() <= 254))
         && data.title is string && data.title.size() >= 1 && data.title.size() <= 120
         && data.createdAt is timestamp
@@ -58,10 +57,9 @@ service cloud.firestore {
     }
 
     function isValidMember(data, memberUid) {
-      return data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'joinedAt'])
+      return data.keys().hasAll(['uid', 'displayName', 'role', 'joinedAt'])
         && data.keys().hasOnly(['uid', 'email', 'displayName', 'role', 'joinedAt'])
         && data.uid is string && data.uid == memberUid && data.uid == request.auth.uid && isValidId(data.uid)
-        && data.email is string && data.email.size() <= 254 && data.email == request.auth.token.email
         && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100
         && data.role is string && data.role in ['owner', 'partner']
         && data.joinedAt is timestamp;
@@ -329,14 +327,14 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow get: if isVerifiedUser() && isValidId(userId) && request.auth.uid == userId;
-      allow create: if isVerifiedUser()
+      allow get: if isAuthenticatedDevice() && isValidId(userId) && request.auth.uid == userId;
+      allow create: if isAuthenticatedDevice()
         && isValidId(userId)
         && request.auth.uid == userId
         && isValidUserProfile(incoming(), userId)
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time;
-      allow update: if isVerifiedUser()
+      allow update: if isAuthenticatedDevice()
         && isValidId(userId)
         && request.auth.uid == userId
         && isValidUserProfile(incoming(), userId)
@@ -345,64 +343,42 @@ service cloud.firestore {
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'activeSpaceId', 'updatedAt']);
-      allow delete: if isVerifiedUser() && isValidId(userId) && request.auth.uid == userId;
+      allow delete: if isAuthenticatedDevice() && isValidId(userId) && request.auth.uid == userId;
     }
 
     match /spaces/{spaceId} {
-      allow get: if isVerifiedUser()
-        && isValidId(spaceId)
-        && (
-          existing().ownerUid == request.auth.uid
-          || (('partnerEmail' in existing()) && existing().partnerEmail == request.auth.token.email)
-          || isSpaceMember(spaceId)
-        );
-      allow list: if isVerifiedUser()
+      // Space IDs are random 192-bit bearer codes shared by the owner.
+      allow get: if isAuthenticatedDevice() && isValidId(spaceId);
+      allow list: if isAuthenticatedDevice()
         && (
           resource.data.ownerUid == request.auth.uid
-          || resource.data.partnerEmail == request.auth.token.email
         );
-      allow create: if isVerifiedUser()
+      allow create: if isAuthenticatedDevice()
         && isValidId(spaceId)
         && isValidSpace(incoming())
         && incoming().ownerUid == request.auth.uid
-        && incoming().ownerEmail == request.auth.token.email
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time;
-      allow update: if (
-        isVerifiedUser()
+      allow update: if isAuthenticatedDevice()
         && isValidId(spaceId)
         && isValidSpace(incoming())
         && existing().ownerUid == request.auth.uid
         && incoming().ownerUid == existing().ownerUid
-        && incoming().ownerEmail == existing().ownerEmail
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
-        && incoming().diff(existing()).affectedKeys().hasOnly(['partnerEmail', 'title', 'updatedAt'])
-      ) || (
-        isVerifiedUser()
-        && isValidId(spaceId)
-        && isValidSpace(incoming())
-        && existing().partnerEmail == request.auth.token.email
-        && incoming().partnerEmail == ''
-        && incoming().ownerUid == existing().ownerUid
-        && incoming().ownerEmail == existing().ownerEmail
-        && incoming().createdAt == existing().createdAt
-        && incoming().title == existing().title
-        && incoming().updatedAt == request.time
-        && incoming().diff(existing()).affectedKeys().hasOnly(['partnerEmail', 'updatedAt'])
-      );
-      allow delete: if isVerifiedUser() && isValidId(spaceId) && existing().ownerUid == request.auth.uid;
+        && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'updatedAt']);
+      allow delete: if isAuthenticatedDevice() && isValidId(spaceId) && existing().ownerUid == request.auth.uid;
 
       match /members/{memberUid} {
-        allow get: if isVerifiedUser()
+        allow get: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(memberUid)
           && (memberUid == request.auth.uid || isSpaceMember(spaceId));
-        allow list: if isVerifiedUser()
+        allow list: if isAuthenticatedDevice()
           && isSpaceMember(spaceId)
           && (get(/databases/$(database)/documents/spaces/$(spaceId)).data.ownerUid == request.auth.uid
             || resource.data.uid is string);
-        allow create: if isVerifiedUser()
+        allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(memberUid)
           && memberUid == request.auth.uid
@@ -413,19 +389,18 @@ service cloud.firestore {
             (incoming().role == 'owner'
               && get(/databases/$(database)/documents/spaces/$(spaceId)).data.ownerUid == request.auth.uid)
             || (incoming().role == 'partner'
-              && ('partnerEmail' in get(/databases/$(database)/documents/spaces/$(spaceId)).data)
-              && get(/databases/$(database)/documents/spaces/$(spaceId)).data.partnerEmail == request.auth.token.email)
+              && get(/databases/$(database)/documents/spaces/$(spaceId)).data.ownerUid != request.auth.uid)
           );
-        allow delete: if isVerifiedUser()
+        allow delete: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(memberUid)
           && (memberUid == request.auth.uid || get(/databases/$(database)/documents/spaces/$(spaceId)).data.ownerUid == request.auth.uid);
       }
 
       match /goals/{goalId} {
-        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(goalId) && isSpaceMember(spaceId);
-        allow list: if isVerifiedUser() && isSpaceMember(spaceId) && resource.data.authorUid is string;
-        allow create: if isVerifiedUser()
+        allow get: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(goalId) && isSpaceMember(spaceId);
+        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(goalId)
           && isSpaceMember(spaceId)
@@ -433,7 +408,7 @@ service cloud.firestore {
           && incoming().authorUid == request.auth.uid
           && incoming().createdAt == request.time
           && incoming().updatedAt == request.time;
-        allow update: if isVerifiedUser()
+        allow update: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(goalId)
           && isSpaceMember(spaceId)
@@ -443,13 +418,13 @@ service cloud.firestore {
           && incoming().createdAt == existing().createdAt
           && incoming().updatedAt == request.time
           && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'owner', 'scope', 'category', 'timeBlock', 'priority', 'completed', 'dateKey', 'reminderTime', 'reminderVoice', 'updatedByUid', 'updatedAt']);
-        allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(goalId) && isSpaceMember(spaceId);
+        allow delete: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(goalId) && isSpaceMember(spaceId);
       }
 
       match /habits/{habitId} {
-        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(habitId) && isSpaceMember(spaceId);
-        allow list: if isVerifiedUser() && isSpaceMember(spaceId) && resource.data.authorUid is string;
-        allow create: if isVerifiedUser()
+        allow get: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(habitId) && isSpaceMember(spaceId);
+        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(habitId)
           && isSpaceMember(spaceId)
@@ -457,7 +432,7 @@ service cloud.firestore {
           && incoming().authorUid == request.auth.uid
           && incoming().createdAt == request.time
           && incoming().updatedAt == request.time;
-        allow update: if isVerifiedUser()
+        allow update: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(habitId)
           && isSpaceMember(spaceId)
@@ -467,13 +442,13 @@ service cloud.firestore {
           && incoming().createdAt == existing().createdAt
           && incoming().updatedAt == request.time
           && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'owner', 'completedDates', 'updatedByUid', 'updatedAt']);
-        allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(habitId) && isSpaceMember(spaceId);
+        allow delete: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(habitId) && isSpaceMember(spaceId);
       }
 
       match /gratitudes/{entryId} {
-        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(entryId) && isSpaceMember(spaceId);
-        allow list: if isVerifiedUser() && isSpaceMember(spaceId) && resource.data.authorUid is string;
-        allow create: if isVerifiedUser()
+        allow get: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(entryId) && isSpaceMember(spaceId);
+        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(entryId)
           && isSpaceMember(spaceId)
@@ -481,13 +456,13 @@ service cloud.firestore {
           && incoming().authorUid == request.auth.uid
           && incoming().createdAt == request.time
           && incoming().updatedAt == request.time;
-        allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(entryId) && isSpaceMember(spaceId);
+        allow delete: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(entryId) && isSpaceMember(spaceId);
       }
 
       match /callers/{callerId} {
-        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(callerId) && isSpaceMember(spaceId);
-        allow list: if isVerifiedUser() && isSpaceMember(spaceId) && resource.data.authorUid is string;
-        allow create: if isVerifiedUser()
+        allow get: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(callerId) && isSpaceMember(spaceId);
+        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(callerId)
           && isSpaceMember(spaceId)
@@ -495,7 +470,7 @@ service cloud.firestore {
           && incoming().authorUid == request.auth.uid
           && incoming().createdAt == request.time
           && incoming().updatedAt == request.time;
-        allow update: if isVerifiedUser()
+        allow update: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(callerId)
           && isSpaceMember(spaceId)
@@ -505,13 +480,13 @@ service cloud.firestore {
           && incoming().createdAt == existing().createdAt
           && incoming().updatedAt == request.time
           && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'latinAlias', 'persianPhonetic', 'relation', 'template', 'repeatCount', 'chimeStyle', 'voiceName', 'favorite', 'updatedByUid', 'updatedAt']);
-        allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(callerId) && isSpaceMember(spaceId);
+        allow delete: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(callerId) && isSpaceMember(spaceId);
       }
 
       match /schedules/{scheduleId} {
-        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(scheduleId) && isSpaceMember(spaceId);
-        allow list: if isVerifiedUser() && isSpaceMember(spaceId) && resource.data.authorUid is string;
-        allow create: if isVerifiedUser()
+        allow get: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(scheduleId) && isSpaceMember(spaceId);
+        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(scheduleId)
           && isSpaceMember(spaceId)
@@ -519,7 +494,7 @@ service cloud.firestore {
           && incoming().authorUid == request.auth.uid
           && incoming().createdAt == request.time
           && incoming().updatedAt == request.time;
-        allow update: if isVerifiedUser()
+        allow update: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(scheduleId)
           && isSpaceMember(spaceId)
@@ -529,34 +504,34 @@ service cloud.firestore {
           && incoming().createdAt == existing().createdAt
           && incoming().updatedAt == request.time
           && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'topic', 'time', 'enabled', 'voiceName', 'customText', 'days', 'lastTriggeredDate', 'updatedByUid', 'updatedAt']);
-        allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(scheduleId) && isSpaceMember(spaceId);
+        allow delete: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(scheduleId) && isSpaceMember(spaceId);
       }
 
       match /config/{configId} {
-        allow get: if isVerifiedUser() && isValidId(spaceId) && configId == 'settings' && isSpaceMember(spaceId);
-        allow create: if isVerifiedUser()
+        allow get: if isAuthenticatedDevice() && isValidId(spaceId) && configId == 'settings' && isSpaceMember(spaceId);
+        allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && configId == 'settings'
           && isSpaceMember(spaceId)
           && isValidSpaceSettings(incoming())
           && incoming().updatedAt == request.time;
-        allow update: if isVerifiedUser()
+        allow update: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && configId == 'settings'
           && isSpaceMember(spaceId)
           && isValidSpaceSettings(incoming())
           && incoming().updatedAt == request.time
           && incoming().diff(existing()).affectedKeys().hasOnly(['theme', 'defaultVoice', 'speechRate', 'myName', 'partnerName', 'assistantName', 'assistantWakeWordEnabled', 'backgroundKeepAlive', 'announceCalls', 'announceSms', 'autoOpenMorning', 'nightMovieAutoCheck', 'nightMovieTime', 'updatedByUid', 'updatedAt']);
-        allow delete: if isVerifiedUser()
+        allow delete: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && configId == 'settings'
           && get(/databases/$(database)/documents/spaces/$(spaceId)).data.ownerUid == request.auth.uid;
       }
 
       match /shopping/{itemId} {
-        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(itemId) && isSpaceMember(spaceId);
-        allow list: if isVerifiedUser() && isSpaceMember(spaceId) && resource.data.authorUid is string;
-        allow create: if isVerifiedUser()
+        allow get: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(itemId) && isSpaceMember(spaceId);
+        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(itemId)
           && isSpaceMember(spaceId)
@@ -564,7 +539,7 @@ service cloud.firestore {
           && incoming().authorUid == request.auth.uid
           && incoming().createdAt == request.time
           && incoming().updatedAt == request.time;
-        allow update: if isVerifiedUser()
+        allow update: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(itemId)
           && isSpaceMember(spaceId)
@@ -574,13 +549,13 @@ service cloud.firestore {
           && incoming().createdAt == existing().createdAt
           && incoming().updatedAt == request.time
           && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'note', 'category', 'checked', 'updatedByUid', 'updatedAt']);
-        allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(itemId) && isSpaceMember(spaceId);
+        allow delete: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(itemId) && isSpaceMember(spaceId);
       }
 
       match /expenses/{expenseId} {
-        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(expenseId) && isSpaceMember(spaceId);
-        allow list: if isVerifiedUser() && isSpaceMember(spaceId) && resource.data.authorUid is string;
-        allow create: if isVerifiedUser()
+        allow get: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(expenseId) && isSpaceMember(spaceId);
+        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(expenseId)
           && isSpaceMember(spaceId)
@@ -588,7 +563,7 @@ service cloud.firestore {
           && incoming().authorUid == request.auth.uid
           && incoming().createdAt == request.time
           && incoming().updatedAt == request.time;
-        allow update: if isVerifiedUser()
+        allow update: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(expenseId)
           && isSpaceMember(spaceId)
@@ -598,13 +573,13 @@ service cloud.firestore {
           && incoming().createdAt == existing().createdAt
           && incoming().updatedAt == request.time
           && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'amount', 'category', 'payer', 'splitMode', 'dateKey', 'updatedByUid', 'updatedAt']);
-        allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(expenseId) && isSpaceMember(spaceId);
+        allow delete: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(expenseId) && isSpaceMember(spaceId);
       }
 
       match /bills/{billId} {
-        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(billId) && isSpaceMember(spaceId);
-        allow list: if isVerifiedUser() && isSpaceMember(spaceId) && resource.data.authorUid is string;
-        allow create: if isVerifiedUser()
+        allow get: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(billId) && isSpaceMember(spaceId);
+        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(billId)
           && isSpaceMember(spaceId)
@@ -612,7 +587,7 @@ service cloud.firestore {
           && incoming().authorUid == request.auth.uid
           && incoming().createdAt == request.time
           && incoming().updatedAt == request.time;
-        allow update: if isVerifiedUser()
+        allow update: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(billId)
           && isSpaceMember(spaceId)
@@ -622,13 +597,13 @@ service cloud.firestore {
           && incoming().createdAt == existing().createdAt
           && incoming().updatedAt == request.time
           && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'amount', 'kind', 'dueDateKey', 'cycle', 'paid', 'note', 'updatedByUid', 'updatedAt']);
-        allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(billId) && isSpaceMember(spaceId);
+        allow delete: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(billId) && isSpaceMember(spaceId);
       }
 
       match /meds/{medId} {
-        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(medId) && isSpaceMember(spaceId);
-        allow list: if isVerifiedUser() && isSpaceMember(spaceId) && resource.data.authorUid is string;
-        allow create: if isVerifiedUser()
+        allow get: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(medId) && isSpaceMember(spaceId);
+        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(medId)
           && isSpaceMember(spaceId)
@@ -636,7 +611,7 @@ service cloud.firestore {
           && incoming().authorUid == request.auth.uid
           && incoming().createdAt == request.time
           && incoming().updatedAt == request.time;
-        allow update: if isVerifiedUser()
+        allow update: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(medId)
           && isSpaceMember(spaceId)
@@ -646,13 +621,13 @@ service cloud.firestore {
           && incoming().createdAt == existing().createdAt
           && incoming().updatedAt == request.time
           && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'dosage', 'time', 'owner', 'kind', 'takenDates', 'voiceRemind', 'enabled', 'updatedByUid', 'updatedAt']);
-        allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(medId) && isSpaceMember(spaceId);
+        allow delete: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(medId) && isSpaceMember(spaceId);
       }
 
       match /meals/{mealId} {
-        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(mealId) && isSpaceMember(spaceId);
-        allow list: if isVerifiedUser() && isSpaceMember(spaceId) && resource.data.authorUid is string;
-        allow create: if isVerifiedUser()
+        allow get: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(mealId) && isSpaceMember(spaceId);
+        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(mealId)
           && isSpaceMember(spaceId)
@@ -660,7 +635,7 @@ service cloud.firestore {
           && incoming().authorUid == request.auth.uid
           && incoming().createdAt == request.time
           && incoming().updatedAt == request.time;
-        allow update: if isVerifiedUser()
+        allow update: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(mealId)
           && isSpaceMember(spaceId)
@@ -670,13 +645,13 @@ service cloud.firestore {
           && incoming().createdAt == existing().createdAt
           && incoming().updatedAt == request.time
           && incoming().diff(existing()).affectedKeys().hasOnly(['dayLabel', 'lunch', 'dinner', 'ingredients', 'updatedByUid', 'updatedAt']);
-        allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(mealId) && isSpaceMember(spaceId);
+        allow delete: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(mealId) && isSpaceMember(spaceId);
       }
 
       match /vault/{noteId} {
-        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(noteId) && isSpaceMember(spaceId);
-        allow list: if isVerifiedUser() && isSpaceMember(spaceId) && resource.data.authorUid is string;
-        allow create: if isVerifiedUser()
+        allow get: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(noteId) && isSpaceMember(spaceId);
+        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(noteId)
           && isSpaceMember(spaceId)
@@ -684,7 +659,7 @@ service cloud.firestore {
           && incoming().authorUid == request.auth.uid
           && incoming().createdAt == request.time
           && incoming().updatedAt == request.time;
-        allow update: if isVerifiedUser()
+        allow update: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(noteId)
           && isSpaceMember(spaceId)
@@ -694,13 +669,13 @@ service cloud.firestore {
           && incoming().createdAt == existing().createdAt
           && incoming().updatedAt == request.time
           && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'value', 'category', 'owner', 'updatedByUid', 'updatedAt']);
-        allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(noteId) && isSpaceMember(spaceId);
+        allow delete: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(noteId) && isSpaceMember(spaceId);
       }
 
       match /packing/{itemId} {
-        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(itemId) && isSpaceMember(spaceId);
-        allow list: if isVerifiedUser() && isSpaceMember(spaceId) && resource.data.authorUid is string;
-        allow create: if isVerifiedUser()
+        allow get: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(itemId) && isSpaceMember(spaceId);
+        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(itemId)
           && isSpaceMember(spaceId)
@@ -708,7 +683,7 @@ service cloud.firestore {
           && incoming().authorUid == request.auth.uid
           && incoming().createdAt == request.time
           && incoming().updatedAt == request.time;
-        allow update: if isVerifiedUser()
+        allow update: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(itemId)
           && isSpaceMember(spaceId)
@@ -718,13 +693,13 @@ service cloud.firestore {
           && incoming().createdAt == existing().createdAt
           && incoming().updatedAt == request.time
           && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'template', 'checked', 'owner', 'updatedByUid', 'updatedAt']);
-        allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(itemId) && isSpaceMember(spaceId);
+        allow delete: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(itemId) && isSpaceMember(spaceId);
       }
 
       match /events/{eventId} {
-        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(eventId) && isSpaceMember(spaceId);
-        allow list: if isVerifiedUser() && isSpaceMember(spaceId) && resource.data.authorUid is string;
-        allow create: if isVerifiedUser()
+        allow get: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(eventId) && isSpaceMember(spaceId);
+        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(eventId)
           && isSpaceMember(spaceId)
@@ -732,7 +707,7 @@ service cloud.firestore {
           && incoming().authorUid == request.auth.uid
           && incoming().createdAt == request.time
           && incoming().updatedAt == request.time;
-        allow update: if isVerifiedUser()
+        allow update: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(eventId)
           && isSpaceMember(spaceId)
@@ -742,13 +717,13 @@ service cloud.firestore {
           && incoming().createdAt == existing().createdAt
           && incoming().updatedAt == request.time
           && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'kind', 'jalaliMonth', 'jalaliDay', 'jalaliYear', 'owner', 'note', 'updatedByUid', 'updatedAt']);
-        allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(eventId) && isSpaceMember(spaceId);
+        allow delete: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(eventId) && isSpaceMember(spaceId);
       }
 
       match /chores/{choreId} {
-        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(choreId) && isSpaceMember(spaceId);
-        allow list: if isVerifiedUser() && isSpaceMember(spaceId) && resource.data.authorUid is string;
-        allow create: if isVerifiedUser()
+        allow get: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(choreId) && isSpaceMember(spaceId);
+        allow list: if isAuthenticatedDevice() && isSpaceMember(spaceId) && resource.data.authorUid is string;
+        allow create: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(choreId)
           && isSpaceMember(spaceId)
@@ -756,7 +731,7 @@ service cloud.firestore {
           && incoming().authorUid == request.auth.uid
           && incoming().createdAt == request.time
           && incoming().updatedAt == request.time;
-        allow update: if isVerifiedUser()
+        allow update: if isAuthenticatedDevice()
           && isValidId(spaceId)
           && isValidId(choreId)
           && isSpaceMember(spaceId)
@@ -766,7 +741,7 @@ service cloud.firestore {
           && incoming().createdAt == existing().createdAt
           && incoming().updatedAt == request.time
           && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'area', 'intervalDays', 'lastDoneDateKey', 'nextDueDateKey', 'owner', 'updatedByUid', 'updatedAt']);
-        allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(choreId) && isSpaceMember(spaceId);
+        allow delete: if isAuthenticatedDevice() && isValidId(spaceId) && isValidId(choreId) && isSpaceMember(spaceId);
       }
     }
   }

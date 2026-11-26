@@ -1,14 +1,8 @@
-import {Capacitor} from '@capacitor/core';
 import {initializeApp} from 'firebase/app';
 import {
-  deleteUser,
   getAuth,
-  getRedirectResult,
-  GoogleAuthProvider,
   onAuthStateChanged,
-  signInWithPopup,
-  reauthenticateWithPopup,
-  signInWithRedirect,
+  signInAnonymously,
   signOut,
   type User,
 } from 'firebase/auth';
@@ -34,8 +28,6 @@ export const db: Firestore = (() => {
   }
 })();
 export const auth = getAuth(app);
-export const googleProvider = new GoogleAuthProvider();
-googleProvider.setCustomParameters({prompt: 'select_account'});
 
 export enum OperationType {
   CREATE = 'create',
@@ -142,71 +134,24 @@ async function testConnection(): Promise<void> {
 
 testConnection();
 
-export async function signInWithGoogleSmart(): Promise<User | null> {
-  if (Capacitor.isNativePlatform()) {
-    throw new Error(
-      'گوگل اجازه ورود OAuth را داخل WebView اپلیکیشن نمی‌دهد. برای همگام‌سازی ابری، سایت hamseda-app.ai.studio را در مرورگر کروم باز کنید یا از دکمه‌های پشتیبان JSON استفاده نمایید.'
-    );
-  }
-  try {
-    const result = await signInWithPopup(auth, googleProvider);
-    return result.user;
-  } catch (err) {
-    const code = (err as {code?: string})?.code ?? '';
-    if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
-      return null;
-    }
-    if (
-      code === 'auth/popup-blocked' ||
-      code === 'auth/operation-not-supported-in-this-environment'
-    ) {
-      await signInWithRedirect(auth, googleProvider);
-      return null;
-    }
-    if (code === 'auth/unauthorized-domain') {
-      const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-      throw new Error(
-        `دامنه «${host}» در Firebase Authorized Domains مجاز نشده است. در کنسول Firebase (بخش Authentication > Settings) دامنه‌های hamseda-app.ai.studio و localhost را اضافه کنید یا همگام‌سازی گوگل را در نسخه وب انجام دهید.`
-      );
-    }
-    throw err;
-  }
-}
+let anonymousIdentityPromise: Promise<User> | null = null;
 
-export async function checkRedirectSignIn(): Promise<User | null> {
-  if (Capacitor.isNativePlatform()) {
-    return null;
+/** Ensures this installation uses an anonymous device identity, never a Google/Gmail session. */
+export async function ensureAnonymousDeviceIdentity(): Promise<User> {
+  if (auth.currentUser?.isAnonymous) return auth.currentUser;
+  if (!anonymousIdentityPromise) {
+    anonymousIdentityPromise = (async () => {
+      if (auth.currentUser && !auth.currentUser.isAnonymous) {
+        await signOut(auth);
+      }
+      if (auth.currentUser?.isAnonymous) return auth.currentUser;
+      const result = await signInAnonymously(auth);
+      return result.user;
+    })().finally(() => {
+      anonymousIdentityPromise = null;
+    });
   }
-  try {
-    const res = await getRedirectResult(auth);
-    return res?.user ?? null;
-  } catch (err) {
-    console.warn('Redirect sign-in notice:', err);
-    return null;
-  }
-}
-
-export async function reauthenticateCloudUser(): Promise<User> {
-  if (Capacitor.isNativePlatform()) {
-    throw new Error('برای حذف حساب ابری، لطفاً سایت هم‌صدا را در مرورگر باز کنید.');
-  }
-  const user = auth.currentUser;
-  if (!user) throw new Error('ابتدا وارد حساب همگام‌سازی شوید.');
-  if (!user.providerData.some((provider) => provider.providerId === 'google.com')) {
-    throw new Error('روش ورود این حساب برای تأیید مجدد پشتیبانی نمی‌شود.');
-  }
-  await reauthenticateWithPopup(user, googleProvider);
-  return auth.currentUser ?? user;
-}
-
-export async function deleteCurrentCloudAuthUser(): Promise<void> {
-  const user = auth.currentUser;
-  if (!user) throw new Error('حساب فعالی برای حذف وجود ندارد.');
-  await deleteUser(user);
-}
-
-export async function signOutFirebase(): Promise<void> {
-  await signOut(auth);
+  return anonymousIdentityPromise;
 }
 
 export {onAuthStateChanged};

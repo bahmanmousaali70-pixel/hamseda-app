@@ -31,10 +31,8 @@ import {
 import {useBackgroundScheduler} from './hooks/useBackgroundScheduler';
 import {useOnlineStatus} from './hooks/usePWAInstall';
 import {apiUrl, getCloudApiBaseUrl, safeReadJsonResponse} from './services/apiConfig';
-import {clearCustomVoiceDb} from './services/clearCustomVoiceDb';
 import {
   buildCallerRingtoneWav,
-  clearAudioLibraryDb,
   getAudioClipBuffer,
   hashTextKey,
   listAudioClips,
@@ -54,7 +52,6 @@ import {
   deleteSpecialEventFromCloud,
   deleteVaultNoteFromCloud,
   ensureUserAndDiscoverSpace,
-  invitePartnerEmail,
   joinSpaceByCode,
   pushBillToCloud,
   pushCallerToCloud,
@@ -73,18 +70,13 @@ import {
   pushVaultNoteToCloud,
   subscribeToCoupleSpace,
   uploadLocalBundleToSpace,
-  deleteUserCloudData,
   type CoupleSpaceInfo,
 } from './services/coupleSyncService';
 import {buildDailyBriefingText, fetchQuickWeatherBrief} from './services/dailyBriefing';
 import {
   auth,
-  checkRedirectSignIn,
-  deleteCurrentCloudAuthUser,
   onAuthStateChanged,
-  reauthenticateCloudUser,
-  signInWithGoogleSmart,
-  signOutFirebase,
+  ensureAnonymousDeviceIdentity,
 } from './services/firebaseClient';
 import {
   setActiveOfflineEngineNative,
@@ -220,6 +212,20 @@ function readJsonStorage<T>(key: string, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+const CLOUD_SPACE_HYDRATED_PREFIX = 'hamseda_cloud_space_hydrated_v1:';
+
+function isCloudSpaceHydrated(spaceId: string): boolean {
+  try {
+    return localStorage.getItem(`${CLOUD_SPACE_HYDRATED_PREFIX}${spaceId}`) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function markCloudSpaceHydrated(spaceId: string): void {
+  localStorage.setItem(`${CLOUD_SPACE_HYDRATED_PREFIX}${spaceId}`, 'true');
 }
 
 export default function App() {
@@ -368,7 +374,7 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null);
 
   // Cloud Sync state
-  const [cloudUserEmail, setCloudUserEmail] = useState<string | null>(null);
+  const [deviceUid, setDeviceUid] = useState<string | null>(null);
   const [cloudBusy, setCloudBusy] = useState(false);
   const [spaceInfo, setSpaceInfo] = useState<CoupleSpaceInfo | null>(null);
 
@@ -679,7 +685,6 @@ export default function App() {
 
   // Firebase Auth listener + automatic space discovery & real-time sync
   useEffect(() => {
-    checkRedirectSignIn().catch(() => {});
     let unsubSpace: (() => void) | null = null;
 
     const unsubAuth = onAuthStateChanged(auth, async (user) => {
@@ -688,37 +693,40 @@ export default function App() {
         unsubSpace = null;
       }
 
-      if (!user) {
-        setCloudUserEmail(null);
+      if (!user || !user.isAnonymous) {
+        setDeviceUid(null);
         setSpaceInfo(null);
+        setCloudBusy(true);
+        void ensureAnonymousDeviceIdentity().catch((err) => {
+          console.warn('Anonymous device identity setup failed:', err);
+          showToast('اتصال همگام‌سازی آماده نشد؛ اطلاعات این گوشی محلی باقی می‌ماند.');
+          setCloudBusy(false);
+        });
         return;
       }
 
-      setCloudUserEmail(user.email ?? user.uid);
+      setDeviceUid(user.uid);
       setCloudBusy(true);
       try {
         const discovered = await ensureUserAndDiscoverSpace(user);
         setSpaceInfo(discovered);
         unsubSpace = subscribeToCoupleSpace(discovered.spaceId, {
-          onSpaceMeta: (partnerEmail) => {
-            setSpaceInfo((prev) => (prev ? {...prev, partnerEmail} : prev));
-          },
-          onGoals: (cloudGoals) => setGoals(cloudGoals),
-          onHabits: (cloudHabits) => setHabits(cloudHabits),
-          onGratitudes: (cloudGratitudes) => setGratitudes(cloudGratitudes),
-          onCallers: (cloudCallers) => setCallers(cloudCallers),
-          onSchedules: (cloudSchedules) => setSchedules(cloudSchedules),
-          onShopping: (cloudShopping) => setShoppingItems(cloudShopping),
-          onExpenses: (cloudExpenses) => setExpenses(cloudExpenses),
-          onBills: (cloudBills) => setBills(cloudBills),
-          onMeds: (cloudMeds) => setMeds(cloudMeds),
-          onMeals: (cloudMeals) =>
-            setMeals(DEFAULT_MEAL_PLAN.map((def) => cloudMeals.find((cm) => cm.id === def.id) ?? def)),
-          onVault: (cloudVault) => setVaultNotes(cloudVault),
-          onPacking: (cloudPacking) => setPackingItems(cloudPacking),
-          onEvents: (cloudEvents) => setSpecialEvents(cloudEvents),
-          onChores: (cloudChores) => setHomeChores(cloudChores),
-          onSettings: (cloudSettings) =>
+          onGoals: (cloudGoals) => { if (isCloudSpaceHydrated(discovered.spaceId)) setGoals(cloudGoals); },
+          onHabits: (cloudHabits) => { if (isCloudSpaceHydrated(discovered.spaceId)) setHabits(cloudHabits); },
+          onGratitudes: (cloudGratitudes) => { if (isCloudSpaceHydrated(discovered.spaceId)) setGratitudes(cloudGratitudes); },
+          onCallers: (cloudCallers) => { if (isCloudSpaceHydrated(discovered.spaceId)) setCallers(cloudCallers); },
+          onSchedules: (cloudSchedules) => { if (isCloudSpaceHydrated(discovered.spaceId)) setSchedules(cloudSchedules); },
+          onShopping: (cloudShopping) => { if (isCloudSpaceHydrated(discovered.spaceId)) setShoppingItems(cloudShopping); },
+          onExpenses: (cloudExpenses) => { if (isCloudSpaceHydrated(discovered.spaceId)) setExpenses(cloudExpenses); },
+          onBills: (cloudBills) => { if (isCloudSpaceHydrated(discovered.spaceId)) setBills(cloudBills); },
+          onMeds: (cloudMeds) => { if (isCloudSpaceHydrated(discovered.spaceId)) setMeds(cloudMeds); },
+          onMeals: (cloudMeals) => { if (isCloudSpaceHydrated(discovered.spaceId)) setMeals(cloudMeals); },
+          onVault: (cloudVault) => { if (isCloudSpaceHydrated(discovered.spaceId)) setVaultNotes(cloudVault); },
+          onPacking: (cloudPacking) => { if (isCloudSpaceHydrated(discovered.spaceId)) setPackingItems(cloudPacking); },
+          onEvents: (cloudEvents) => { if (isCloudSpaceHydrated(discovered.spaceId)) setSpecialEvents(cloudEvents); },
+          onChores: (cloudChores) => { if (isCloudSpaceHydrated(discovered.spaceId)) setHomeChores(cloudChores); },
+          onSettings: (cloudSettings) => {
+            if (!isCloudSpaceHydrated(discovered.spaceId)) return;
             setSettings((prev) => ({
               ...DEFAULT_SETTINGS,
               ...prev,
@@ -727,7 +735,8 @@ export default function App() {
               myName: cloudSettings.myName === 'مهدی' || cloudSettings.myName === 'بهمن' ? 'من' : cloudSettings.myName || 'من',
               partnerName: cloudSettings.partnerName === 'زری' ? 'همراه' : cloudSettings.partnerName || prev.partnerName || 'همراه',
               assistantName: cloudSettings.assistantName?.trim() && !['بهمن', 'زری', 'آوا'].includes(cloudSettings.assistantName.trim()) ? cloudSettings.assistantName.trim() : 'هم‌صدا',
-            })),
+            }));
+          },
           onError: (msg) => console.warn('Cloud sync listener notice:', msg),
         });
       } catch (err) {
@@ -938,7 +947,7 @@ export default function App() {
           s.id === scheduleId ? {...s, lastTriggeredDate: dateKey} : s
         );
         const target = updated.find((s) => s.id === scheduleId);
-        if (target && spaceInfo) {
+        if (target && spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
           pushScheduleToCloud(spaceInfo.spaceId, target).catch(() => {});
         }
         return updated;
@@ -1057,7 +1066,7 @@ export default function App() {
     (patch: Partial<AppSettings>) => {
       setSettings((prev) => {
         const next = {...prev, ...patch};
-        if (spaceInfo) {
+        if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
           pushSettingsToCloud(spaceInfo.spaceId, next).catch(() => {});
         }
         return next;
@@ -1087,7 +1096,7 @@ export default function App() {
     (item: Omit<ScheduledAnnouncement, 'id'>) => {
       const created: ScheduledAnnouncement = {...item, id: `sch-${Date.now()}`};
       setSchedules((prev) => [created, ...prev]);
-      if (spaceInfo) {
+      if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
         pushScheduleToCloud(spaceInfo.spaceId, created).catch(() => {});
       }
     },
@@ -1099,7 +1108,7 @@ export default function App() {
       setSchedules((prev) => {
         const next = prev.map((s) => (s.id === id ? {...s, enabled: !s.enabled} : s));
         const target = next.find((s) => s.id === id);
-        if (target && spaceInfo) {
+        if (target && spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
           pushScheduleToCloud(spaceInfo.spaceId, target).catch(() => {});
         }
         return next;
@@ -1113,7 +1122,7 @@ export default function App() {
       setSchedules((prev) => {
         const next = prev.map((s) => (s.id === id ? {...s, ...patch} : s));
         const target = next.find((s) => s.id === id);
-        if (target && spaceInfo) {
+        if (target && spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
           pushScheduleToCloud(spaceInfo.spaceId, target).catch(() => {});
         }
         return next;
@@ -1125,7 +1134,7 @@ export default function App() {
   const handleDeleteSchedule = useCallback(
     (id: string) => {
       setSchedules((prev) => prev.filter((s) => s.id !== id));
-      if (spaceInfo) {
+      if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
         deleteScheduleFromCloud(spaceInfo.spaceId, id).catch(() => {});
       }
     },
@@ -1175,81 +1184,6 @@ export default function App() {
     [buildScheduleText, isOnline, refreshClips, showToast]
   );
 
-  const handleCloudSignIn = async () => {
-    setCloudBusy(true);
-    try {
-      await signInWithGoogleSmart();
-      showToast('ورود انجام شد. فضای مشترک هم‌صدا همگام‌سازی می‌شود.');
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'خطا در ورود با گوگل');
-    } finally {
-      setCloudBusy(false);
-    }
-  };
-
-  const handleCloudSignOut = async () => {
-    setCloudBusy(true);
-    try {
-      await signOutFirebase();
-      showToast('از حساب همگام‌سازی خارج شدید. داده‌های محلی همچنان در گوشی باقی هستند.');
-    } finally {
-      setCloudBusy(false);
-    }
-  };
-
-  const handleDeleteCloudAccount = async () => {
-    const currentUser = auth.currentUser;
-    if (!currentUser) {
-      showToast('ابتدا وارد حساب همگام‌سازی شوید.');
-      return;
-    }
-    const confirmed = window.confirm(
-      'حذف حساب و داده‌های ابری برگشت‌پذیر نیست. اگر مالک فضای مشترک باشید، همه اطلاعات آن فضا برای شما و همراهتان حذف می‌شود. اگر عضو همراه باشید، فقط اطلاعات ثبت‌شده توسط حساب شما و عضویت شما حذف می‌شود. آیا مطمئن هستید؟'
-    );
-    if (!confirmed) return;
-
-    setCloudBusy(true);
-    try {
-      const verifiedUser = await reauthenticateCloudUser();
-      await deleteUserCloudData(verifiedUser, spaceInfo?.spaceId);
-      await deleteCurrentCloudAuthUser();
-      try {
-        await clearAudioLibraryDb();
-        await clearCustomVoiceDb();
-      } catch (cleanupError) {
-        console.warn('Local voice cache cleanup after account deletion failed:', cleanupError);
-      }
-      try {
-        Object.keys(localStorage).forEach((key) => {
-          if (key.startsWith('rmz_') || key.startsWith('hamseda_')) {
-            localStorage.removeItem(key);
-          }
-        });
-      } catch (cleanupError) {
-        console.warn('Local storage cleanup after account deletion failed:', cleanupError);
-      }
-      showToast('حساب ابری و داده‌های وابسته حذف شد.');
-      window.location.reload();
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'حذف حساب کامل نشد. دوباره تلاش کنید.');
-    } finally {
-      setCloudBusy(false);
-    }
-  };
-
-  const handleInvitePartner = async (email: string) => {
-    if (!spaceInfo) return;
-    setCloudBusy(true);
-    try {
-      await invitePartnerEmail(spaceInfo.spaceId, email);
-      showToast(`ایمیل ${email} به فضای مشترک اضافه شد. وقتی همراهتان با این جیمیل وارد شود، به‌صورت خودکار متصل می‌شوید.`);
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'خطا در ثبت ایمیل همراه');
-    } finally {
-      setCloudBusy(false);
-    }
-  };
-
   const handleJoinSpaceByCode = async (spaceCode: string) => {
     if (!auth.currentUser) return;
     setCloudBusy(true);
@@ -1257,6 +1191,8 @@ export default function App() {
       const joined = await joinSpaceByCode(spaceCode, auth.currentUser);
       setSpaceInfo(joined);
       showToast('به فضای مشترک متصل شدید! داده‌ها به‌صورت لحظه‌ای همگام می‌شوند.');
+      // Reboot the auth listener so it subscribes to the newly selected shared space.
+      window.setTimeout(() => window.location.reload(), 500);
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'امکان اتصال با این کد وجود نداشت.');
     } finally {
@@ -1285,7 +1221,9 @@ export default function App() {
         specialEvents,
         homeChores,
       });
-      showToast('تمام داده‌ها و تنظیمات این گوشی به فضای مشترک ارسال شد.');
+      markCloudSpaceHydrated(spaceInfo.spaceId);
+      showToast('اطلاعات محلی بدون بازنویسی داده‌های موجود به فضای مشترک اضافه شد. در حال بارگذاری همگام‌سازی…');
+      window.location.reload();
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'خطا در ارسال به ابر');
     } finally {
@@ -1394,7 +1332,7 @@ export default function App() {
       createdAt: Date.now(),
     };
     setGoals((prev) => [newGoal, ...prev]);
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       pushGoalToCloud(spaceInfo.spaceId, newGoal).catch(() => {});
     }
   };
@@ -1403,7 +1341,7 @@ export default function App() {
     setGoals((prev) => {
       const next = prev.map((g) => (g.id === id ? {...g, completed: !g.completed} : g));
       const target = next.find((g) => g.id === id);
-      if (target && spaceInfo) {
+      if (target && spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
         pushGoalToCloud(spaceInfo.spaceId, target).catch(() => {});
       }
       return next;
@@ -1412,7 +1350,7 @@ export default function App() {
 
   const handleDeleteGoal = (id: string) => {
     setGoals((prev) => prev.filter((g) => g.id !== id));
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       deleteGoalFromCloud(spaceInfo.spaceId, id).catch(() => {});
     }
   };
@@ -1433,7 +1371,7 @@ export default function App() {
       })
     );
     if (movedCount > 0) {
-      if (spaceInfo) {
+      if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
         movedGoals.forEach((g) => {
           pushGoalToCloud(spaceInfo.spaceId, g).catch(() => {});
         });
@@ -1455,7 +1393,7 @@ export default function App() {
         };
       });
       const target = next.find((h) => h.id === habitId);
-      if (target && spaceInfo) {
+      if (target && spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
         pushHabitToCloud(spaceInfo.spaceId, target).catch(() => {});
       }
       return next;
@@ -1470,14 +1408,14 @@ export default function App() {
       completedDates: [],
     };
     setHabits((prev) => [...prev, item]);
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       pushHabitToCloud(spaceInfo.spaceId, item).catch(() => {});
     }
   };
 
   const handleDeleteHabit = (id: string) => {
     setHabits((prev) => prev.filter((h) => h.id !== id));
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       deleteHabitFromCloud(spaceInfo.spaceId, id).catch(() => {});
     }
   };
@@ -1493,7 +1431,7 @@ export default function App() {
       createdAt: Date.now(),
     };
     setGratitudes((prev) => [entry, ...prev]);
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       pushGratitudeToCloud(spaceInfo.spaceId, entry).catch(() => {});
     }
     showToast('شکرگذاری امروز با موفقیت ثبت شد.');
@@ -1501,7 +1439,7 @@ export default function App() {
 
   const handleDeleteGratitude = (id: string) => {
     setGratitudes((prev) => prev.filter((g) => g.id !== id));
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       deleteGratitudeFromCloud(spaceInfo.spaceId, id).catch(() => {});
     }
   };
@@ -1509,14 +1447,14 @@ export default function App() {
   const handleAddCaller = (input: Omit<CallerContact, 'id'>) => {
     const created: CallerContact = {...input, id: `c-${Date.now()}`};
     setCallers((prev) => [created, ...prev]);
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       pushCallerToCloud(spaceInfo.spaceId, created).catch(() => {});
     }
   };
 
   const handleDeleteCaller = (id: string) => {
     setCallers((prev) => prev.filter((c) => c.id !== id));
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       deleteCallerFromCloud(spaceInfo.spaceId, id).catch(() => {});
     }
   };
@@ -1534,7 +1472,7 @@ export default function App() {
       createdAt: Date.now(),
     };
     setShoppingItems((prev) => [item, ...prev]);
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       pushShoppingToCloud(spaceInfo.spaceId, item).catch(() => {});
     }
   };
@@ -1555,7 +1493,7 @@ export default function App() {
     }
     if (created.length === 0) return;
     setShoppingItems((prev) => [...created, ...prev]);
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       created.forEach((it) => {
         pushShoppingToCloud(spaceInfo.spaceId, it).catch(() => {});
       });
@@ -1566,7 +1504,7 @@ export default function App() {
     setShoppingItems((prev) => {
       const next = prev.map((it) => (it.id === id ? {...it, checked: !it.checked} : it));
       const target = next.find((it) => it.id === id);
-      if (target && spaceInfo) {
+      if (target && spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
         pushShoppingToCloud(spaceInfo.spaceId, target).catch(() => {});
       }
       return next;
@@ -1575,7 +1513,7 @@ export default function App() {
 
   const handleDeleteShoppingItem = (id: string) => {
     setShoppingItems((prev) => prev.filter((it) => it.id !== id));
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       deleteShoppingFromCloud(spaceInfo.spaceId, id).catch(() => {});
     }
   };
@@ -1583,7 +1521,7 @@ export default function App() {
   const handleClearCheckedShopping = () => {
     const removedIds = shoppingItems.filter((it) => it.checked).map((it) => it.id);
     setShoppingItems((prev) => prev.filter((it) => !it.checked));
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       removedIds.forEach((id) => {
         deleteShoppingFromCloud(spaceInfo.spaceId, id).catch(() => {});
       });
@@ -1599,14 +1537,14 @@ export default function App() {
       createdAt: Date.now(),
     };
     setExpenses((prev) => [created, ...prev]);
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       pushExpenseToCloud(spaceInfo.spaceId, created).catch(() => {});
     }
   };
 
   const handleDeleteExpense = (id: string) => {
     setExpenses((prev) => prev.filter((e) => e.id !== id));
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       deleteExpenseFromCloud(spaceInfo.spaceId, id).catch(() => {});
     }
   };
@@ -1620,7 +1558,7 @@ export default function App() {
       createdAt: Date.now(),
     };
     setBills((prev) => [created, ...prev]);
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       pushBillToCloud(spaceInfo.spaceId, created).catch(() => {});
     }
   };
@@ -1647,7 +1585,7 @@ export default function App() {
         paid: false,
       };
       setBills((prev) => prev.map((b) => (b.id === id ? updatedBill : b)));
-      if (spaceInfo) {
+      if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
         pushBillToCloud(spaceInfo.spaceId, updatedBill).catch(() => {});
       }
       showToast(`«${targetBill.title}» پرداخت شد و سررسید بعدی (${nextDueDateKey}) تنظیم گردید.`);
@@ -1656,14 +1594,14 @@ export default function App() {
 
     const updatedBill: BillReminderItem = {...targetBill, paid: becomingPaid};
     setBills((prev) => prev.map((b) => (b.id === id ? updatedBill : b)));
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       pushBillToCloud(spaceInfo.spaceId, updatedBill).catch(() => {});
     }
   };
 
   const handleDeleteBill = (id: string) => {
     setBills((prev) => prev.filter((b) => b.id !== id));
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       deleteBillFromCloud(spaceInfo.spaceId, id).catch(() => {});
     }
   };
@@ -1677,7 +1615,7 @@ export default function App() {
       createdAt: Date.now(),
     };
     setMeds((prev) => [...prev, created]);
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       pushMedicationToCloud(spaceInfo.spaceId, created).catch(() => {});
     }
   };
@@ -1694,7 +1632,7 @@ export default function App() {
         };
       });
       const target = next.find((m) => m.id === id);
-      if (target && spaceInfo) {
+      if (target && spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
         pushMedicationToCloud(spaceInfo.spaceId, target).catch(() => {});
       }
       return next;
@@ -1705,7 +1643,7 @@ export default function App() {
     setMeds((prev) => {
       const next = prev.map((m) => (m.id === id ? {...m, enabled: !m.enabled} : m));
       const target = next.find((m) => m.id === id);
-      if (target && spaceInfo) {
+      if (target && spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
         pushMedicationToCloud(spaceInfo.spaceId, target).catch(() => {});
       }
       return next;
@@ -1714,7 +1652,7 @@ export default function App() {
 
   const handleDeleteMed = (id: string) => {
     setMeds((prev) => prev.filter((m) => m.id !== id));
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       deleteMedicationFromCloud(spaceInfo.spaceId, id).catch(() => {});
     }
   };
@@ -1722,7 +1660,7 @@ export default function App() {
   // Meal Planner Save
   const handleSaveMealDay = (entry: MealPlanEntry) => {
     setMeals((prev) => prev.map((m) => (m.id === entry.id ? entry : m)));
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       pushMealPlanToCloud(spaceInfo.spaceId, entry).catch(() => {});
     }
   };
@@ -1735,14 +1673,14 @@ export default function App() {
       createdAt: Date.now(),
     };
     setVaultNotes((prev) => [created, ...prev]);
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       pushVaultNoteToCloud(spaceInfo.spaceId, created).catch(() => {});
     }
   };
 
   const handleDeleteVaultNote = (id: string) => {
     setVaultNotes((prev) => prev.filter((v) => v.id !== id));
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       deleteVaultNoteFromCloud(spaceInfo.spaceId, id).catch(() => {});
     }
   };
@@ -1758,7 +1696,7 @@ export default function App() {
       createdAt: Date.now(),
     };
     setPackingItems((prev) => [created, ...prev]);
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       pushPackingToCloud(spaceInfo.spaceId, created).catch(() => {});
     }
   };
@@ -1786,7 +1724,7 @@ export default function App() {
       return;
     }
     setPackingItems((prev) => [...created, ...prev]);
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       created.forEach((item) => {
         pushPackingToCloud(spaceInfo.spaceId, item).catch(() => {});
       });
@@ -1798,7 +1736,7 @@ export default function App() {
     setPackingItems((prev) => {
       const next = prev.map((it) => (it.id === id ? {...it, checked: !it.checked} : it));
       const target = next.find((it) => it.id === id);
-      if (target && spaceInfo) {
+      if (target && spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
         pushPackingToCloud(spaceInfo.spaceId, target).catch(() => {});
       }
       return next;
@@ -1807,7 +1745,7 @@ export default function App() {
 
   const handleDeletePackingItem = (id: string) => {
     setPackingItems((prev) => prev.filter((it) => it.id !== id));
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       deletePackingFromCloud(spaceInfo.spaceId, id).catch(() => {});
     }
   };
@@ -1837,14 +1775,14 @@ export default function App() {
       createdAt: Date.now(),
     };
     setSpecialEvents((prev) => [created, ...prev]);
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       pushSpecialEventToCloud(spaceInfo.spaceId, created).catch(() => {});
     }
   };
 
   const handleDeleteSpecialEvent = (id: string) => {
     setSpecialEvents((prev) => prev.filter((ev) => ev.id !== id));
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       deleteSpecialEventFromCloud(spaceInfo.spaceId, id).catch(() => {});
     }
   };
@@ -1875,7 +1813,7 @@ export default function App() {
       createdAt: Date.now(),
     };
     setHomeChores((prev) => [created, ...prev]);
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       pushHomeChoreToCloud(spaceInfo.spaceId, created).catch(() => {});
     }
   };
@@ -1893,7 +1831,7 @@ export default function App() {
           : ch
       );
       const target = next.find((ch) => ch.id === id);
-      if (target && spaceInfo) {
+      if (target && spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
         pushHomeChoreToCloud(spaceInfo.spaceId, target).catch(() => {});
       }
       return next;
@@ -1903,7 +1841,7 @@ export default function App() {
 
   const handleDeleteChore = (id: string) => {
     setHomeChores((prev) => prev.filter((ch) => ch.id !== id));
-    if (spaceInfo) {
+    if (spaceInfo && isCloudSpaceHydrated(spaceInfo.spaceId)) {
       deleteHomeChoreFromCloud(spaceInfo.spaceId, id).catch(() => {});
     }
   };
@@ -2382,7 +2320,7 @@ export default function App() {
             keepAliveActive={keepAliveActive}
             isOnline={isOnline}
             cachedClipsCount={audioClips.length}
-            cloudUserEmail={cloudUserEmail}
+            deviceUid={deviceUid}
             cloudBusy={cloudBusy}
             spaceInfo={spaceInfo}
             nativeCaps={nativeCaps}
@@ -2396,10 +2334,6 @@ export default function App() {
             onDeleteSchedule={handleDeleteSchedule}
             onTestSchedule={(item) => handleTriggerSchedule(item, true)}
             onDownloadScheduleAlarm={handleDownloadScheduleAlarm}
-            onCloudSignIn={handleCloudSignIn}
-            onCloudSignOut={handleCloudSignOut}
-            onDeleteAccount={handleDeleteCloudAccount}
-            onInvitePartner={handleInvitePartner}
             onJoinSpaceByCode={handleJoinSpaceByCode}
             onPushLocalToCloud={handlePushLocalToCloud}
             onRequestNativePermissions={handleRequestNativePermissions}
