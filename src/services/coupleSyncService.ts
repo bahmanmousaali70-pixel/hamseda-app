@@ -60,7 +60,7 @@ function sanitizeId(raw: string): string {
 
 export async function ensureUserAndDiscoverSpace(user: User): Promise<CoupleSpaceInfo> {
   const uid = sanitizeId(user.uid);
-  const displayName = clampStr(user.displayName, 100, 'همراه');
+  const displayName = clampStr(user.displayName ?? undefined, 100, 'همراه');
   const userPath = `users/${uid}`;
 
   // 1. Ensure user profile exists
