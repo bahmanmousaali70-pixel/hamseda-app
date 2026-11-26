@@ -1402,6 +1402,7 @@ export async function uploadLocalBundleToSpace(
     homeChores?: HomeChoreItem[];
   }
 ): Promise<void> {
+  if (!getUidOrNull()) throw new Error('شناسه دستگاه معتبر نیست؛ دوباره اتصال را برقرار کنید.');
   // First-time pairing is additive: never overwrite records already present in the shared space.
   const settingsRef = doc(db, 'spaces', spaceId, 'config', 'settings');
   const settingsSnapshot = await getDoc(settingsRef);
