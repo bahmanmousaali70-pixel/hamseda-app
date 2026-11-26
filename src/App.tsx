@@ -1201,23 +1201,10 @@ export default function App() {
     if (!auth.currentUser) return;
     setCloudBusy(true);
     try {
+      // Pairing is a single operation: join, add any local-only records safely,
+      // then enable cloud snapshots before restarting the app's listeners.
       const joined = await joinSpaceByCode(spaceCode, auth.currentUser);
-      setSpaceInfo(joined);
-      showToast('به فضای مشترک متصل شدید! داده‌ها به‌صورت لحظه‌ای همگام می‌شوند.');
-      // Reboot the auth listener so it subscribes to the newly selected shared space.
-      window.setTimeout(() => window.location.reload(), 500);
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'امکان اتصال با این کد وجود نداشت.');
-    } finally {
-      setCloudBusy(false);
-    }
-  };
-
-  const handlePushLocalToCloud = async () => {
-    if (!spaceInfo) return;
-    setCloudBusy(true);
-    try {
-      await uploadLocalBundleToSpace(spaceInfo.spaceId, {
+      await uploadLocalBundleToSpace(joined.spaceId, {
         goals,
         habits,
         gratitudes,
@@ -1234,11 +1221,12 @@ export default function App() {
         specialEvents,
         homeChores,
       });
-      markCloudSpaceHydrated(spaceInfo.spaceId);
-      showToast('اطلاعات محلی بدون بازنویسی داده‌های موجود به فضای مشترک اضافه شد. در حال بارگذاری همگام‌سازی…');
-      window.location.reload();
+      markCloudSpaceHydrated(joined.spaceId);
+      setSpaceInfo(joined);
+      showToast('اتصال و ادغام اولیه انجام شد؛ همگام‌سازی خودکار فعال می‌شود.');
+      window.setTimeout(() => window.location.reload(), 500);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'خطا در ارسال به ابر');
+      showToast(err instanceof Error ? `اتصال یا ادغام کامل نشد: ${err.message}` : 'اتصال یا ادغام اطلاعات کامل نشد؛ اطلاعات گوشی حفظ شده‌اند.');
     } finally {
       setCloudBusy(false);
     }
@@ -2348,7 +2336,6 @@ export default function App() {
             onTestSchedule={(item) => handleTriggerSchedule(item, true)}
             onDownloadScheduleAlarm={handleDownloadScheduleAlarm}
             onJoinSpaceByCode={handleJoinSpaceByCode}
-            onPushLocalToCloud={handlePushLocalToCloud}
             onRequestNativePermissions={handleRequestNativePermissions}
             onOpenAppInfoSettings={handleOpenAppInfoSettings}
             onOpenXiaomiOtherPermissions={handleOpenXiaomiOtherPermissions}
