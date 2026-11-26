@@ -243,7 +243,7 @@ export function subscribeToCoupleSpace(
     onSnapshot(
       collection(db, 'spaces', spaceId, 'goals'),
       (snap) => {
-        if (snap.empty) return;
+        // Empty snapshots are meaningful: they propagate deletions to every paired device.
         const items: GoalItem[] = snap.docs
           .map((d) => {
             const data = d.data();
@@ -265,7 +265,7 @@ export function subscribeToCoupleSpace(
           })
           .filter((item): item is GoalItem => item !== null)
           .sort((a, b) => b.createdAt - a.createdAt);
-        if (items.length > 0) callbacks.onGoals(items);
+        callbacks.onGoals(items);
       },
       (err) => reportListenerError('goals', err)
     )
@@ -275,7 +275,7 @@ export function subscribeToCoupleSpace(
     onSnapshot(
       collection(db, 'spaces', spaceId, 'habits'),
       (snap) => {
-        if (snap.empty) return;
+        // Empty snapshots are meaningful: they propagate deletions to every paired device.
         const items: HabitItem[] = snap.docs
           .map((d) => {
             const data = d.data();
@@ -288,7 +288,7 @@ export function subscribeToCoupleSpace(
             } as HabitItem;
           })
           .filter((item): item is HabitItem => item !== null);
-        if (items.length > 0) callbacks.onHabits(items);
+        callbacks.onHabits(items);
       },
       (err) => reportListenerError('habits', err)
     )
@@ -298,7 +298,7 @@ export function subscribeToCoupleSpace(
     onSnapshot(
       collection(db, 'spaces', spaceId, 'gratitudes'),
       (snap) => {
-        if (snap.empty) return;
+        // Empty snapshots are meaningful: they propagate deletions to every paired device.
         const items: GratitudeEntry[] = snap.docs
           .map((d) => {
             const data = d.data();
@@ -317,7 +317,7 @@ export function subscribeToCoupleSpace(
           })
           .filter((item): item is GratitudeEntry => item !== null)
           .sort((a, b) => b.createdAt - a.createdAt);
-        if (items.length > 0) callbacks.onGratitudes(items);
+        callbacks.onGratitudes(items);
       },
       (err) => reportListenerError('gratitudes', err)
     )
@@ -327,7 +327,7 @@ export function subscribeToCoupleSpace(
     onSnapshot(
       collection(db, 'spaces', spaceId, 'callers'),
       (snap) => {
-        if (snap.empty) return;
+        // Empty snapshots are meaningful: they propagate deletions to every paired device.
         const items: CallerContact[] = snap.docs
           .map((d) => {
             const data = d.data();
@@ -346,7 +346,7 @@ export function subscribeToCoupleSpace(
             } as CallerContact;
           })
           .filter((item): item is CallerContact => item !== null);
-        if (items.length > 0) callbacks.onCallers(items);
+        callbacks.onCallers(items);
       },
       (err) => reportListenerError('callers', err)
     )
@@ -356,7 +356,7 @@ export function subscribeToCoupleSpace(
     onSnapshot(
       collection(db, 'spaces', spaceId, 'schedules'),
       (snap) => {
-        if (snap.empty) return;
+        // Empty snapshots are meaningful: they propagate deletions to every paired device.
         const items: ScheduledAnnouncement[] = snap.docs
           .map((d) => {
             const data = d.data();
@@ -374,7 +374,7 @@ export function subscribeToCoupleSpace(
             } as ScheduledAnnouncement;
           })
           .filter((item): item is ScheduledAnnouncement => item !== null);
-        if (items.length > 0) callbacks.onSchedules(items);
+        callbacks.onSchedules(items);
       },
       (err) => reportListenerError('schedules', err)
     )
@@ -414,7 +414,7 @@ export function subscribeToCoupleSpace(
       onSnapshot(
         collection(db, 'spaces', spaceId, 'shopping'),
         (snap) => {
-          if (snap.empty) return;
+          // Empty snapshots are meaningful: they propagate deletions to every paired device.
           const items: ShoppingItem[] = snap.docs
             .map((d) => {
               const data = d.data();
@@ -430,7 +430,7 @@ export function subscribeToCoupleSpace(
             })
             .filter((x): x is ShoppingItem => x !== null)
             .sort((a, b) => b.createdAt - a.createdAt);
-          if (items.length > 0) onShoppingCb(items);
+          onShoppingCb(items);
         },
         (err) => reportListenerError('shopping', err)
       )
@@ -443,7 +443,7 @@ export function subscribeToCoupleSpace(
       onSnapshot(
         collection(db, 'spaces', spaceId, 'expenses'),
         (snap) => {
-          if (snap.empty) return;
+          // Empty snapshots are meaningful: they propagate deletions to every paired device.
           const items: ExpenseEntry[] = snap.docs
             .map((d) => {
               const data = d.data();
@@ -467,7 +467,7 @@ export function subscribeToCoupleSpace(
             })
             .filter((x): x is ExpenseEntry => x !== null)
             .sort((a, b) => b.createdAt - a.createdAt);
-          if (items.length > 0) onExpensesCb(items);
+          onExpensesCb(items);
         },
         (err) => reportListenerError('expenses', err)
       )
@@ -480,7 +480,7 @@ export function subscribeToCoupleSpace(
       onSnapshot(
         collection(db, 'spaces', spaceId, 'bills'),
         (snap) => {
-          if (snap.empty) return;
+          // Empty snapshots are meaningful: they propagate deletions to every paired device.
           const items: BillReminderItem[] = snap.docs
             .map((d) => {
               const data = d.data();
@@ -499,7 +499,7 @@ export function subscribeToCoupleSpace(
             })
             .filter((x): x is BillReminderItem => x !== null)
             .sort((a, b) => a.dueDateKey.localeCompare(b.dueDateKey));
-          if (items.length > 0) onBillsCb(items);
+          onBillsCb(items);
         },
         (err) => reportListenerError('bills', err)
       )
@@ -512,7 +512,7 @@ export function subscribeToCoupleSpace(
       onSnapshot(
         collection(db, 'spaces', spaceId, 'meds'),
         (snap) => {
-          if (snap.empty) return;
+          // Empty snapshots are meaningful: they propagate deletions to every paired device.
           const items: MedicationItem[] = snap.docs
             .map((d) => {
               const data = d.data();
@@ -532,7 +532,7 @@ export function subscribeToCoupleSpace(
             })
             .filter((x): x is MedicationItem => x !== null)
             .sort((a, b) => a.time.localeCompare(b.time));
-          if (items.length > 0) onMedsCb(items);
+          onMedsCb(items);
         },
         (err) => reportListenerError('meds', err)
       )
@@ -545,7 +545,7 @@ export function subscribeToCoupleSpace(
       onSnapshot(
         collection(db, 'spaces', spaceId, 'meals'),
         (snap) => {
-          if (snap.empty) return;
+          // Empty snapshots are meaningful: they propagate deletions to every paired device.
           const items: MealPlanEntry[] = snap.docs
             .map((d) => {
               const data = d.data();
@@ -559,7 +559,7 @@ export function subscribeToCoupleSpace(
               } as MealPlanEntry;
             })
             .filter((x): x is MealPlanEntry => x !== null);
-          if (items.length > 0) onMealsCb(items);
+          onMealsCb(items);
         },
         (err) => reportListenerError('meals', err)
       )
@@ -572,7 +572,7 @@ export function subscribeToCoupleSpace(
       onSnapshot(
         collection(db, 'spaces', spaceId, 'vault'),
         (snap) => {
-          if (snap.empty) return;
+          // Empty snapshots are meaningful: they propagate deletions to every paired device.
           const items: QuickVaultNote[] = snap.docs
             .map((d) => {
               const data = d.data();
@@ -588,7 +588,7 @@ export function subscribeToCoupleSpace(
             })
             .filter((x): x is QuickVaultNote => x !== null)
             .sort((a, b) => b.createdAt - a.createdAt);
-          if (items.length > 0) onVaultCb(items);
+          onVaultCb(items);
         },
         (err) => reportListenerError('vault', err)
       )
@@ -601,7 +601,7 @@ export function subscribeToCoupleSpace(
       onSnapshot(
         collection(db, 'spaces', spaceId, 'packing'),
         (snap) => {
-          if (snap.empty) return;
+          // Empty snapshots are meaningful: they propagate deletions to every paired device.
           const items: PackingItem[] = snap.docs
             .map((d) => {
               const data = d.data();
@@ -623,7 +623,7 @@ export function subscribeToCoupleSpace(
             })
             .filter((x): x is PackingItem => x !== null)
             .sort((a, b) => b.createdAt - a.createdAt);
-          if (items.length > 0) onPackingCb(items);
+          onPackingCb(items);
         },
         (err) => reportListenerError('packing', err)
       )
@@ -636,7 +636,7 @@ export function subscribeToCoupleSpace(
       onSnapshot(
         collection(db, 'spaces', spaceId, 'events'),
         (snap) => {
-          if (snap.empty) return;
+          // Empty snapshots are meaningful: they propagate deletions to every paired device.
           const items: SpecialEventItem[] = snap.docs
             .map((d) => {
               const data = d.data();
@@ -658,7 +658,7 @@ export function subscribeToCoupleSpace(
             })
             .filter((x): x is SpecialEventItem => x !== null)
             .sort((a, b) => b.createdAt - a.createdAt);
-          if (items.length > 0) onEventsCb(items);
+          onEventsCb(items);
         },
         (err) => reportListenerError('events', err)
       )
@@ -671,7 +671,7 @@ export function subscribeToCoupleSpace(
       onSnapshot(
         collection(db, 'spaces', spaceId, 'chores'),
         (snap) => {
-          if (snap.empty) return;
+          // Empty snapshots are meaningful: they propagate deletions to every paired device.
           const items: HomeChoreItem[] = snap.docs
             .map((d) => {
               const data = d.data();
@@ -689,7 +689,7 @@ export function subscribeToCoupleSpace(
             })
             .filter((x): x is HomeChoreItem => x !== null)
             .sort((a, b) => a.nextDueDateKey.localeCompare(b.nextDueDateKey));
-          if (items.length > 0) onChoresCb(items);
+          onChoresCb(items);
         },
         (err) => reportListenerError('chores', err)
       )
@@ -1369,6 +1369,19 @@ export async function deleteHomeChoreFromCloud(spaceId: string, choreId: string)
 }
 
 
+async function pushOnlyMissing<T extends {id: string}>(
+  spaceId: string,
+  collectionName: string,
+  items: T[],
+  pushItem: (spaceId: string, item: T) => Promise<void>
+): Promise<void> {
+  if (items.length === 0) return;
+  const snapshot = await getDocs(collection(db, 'spaces', spaceId, collectionName));
+  const existingIds = new Set(snapshot.docs.map((item) => item.id));
+  const missingItems = items.filter((item) => !existingIds.has(sanitizeId(item.id)));
+  await Promise.all(missingItems.map((item) => pushItem(spaceId, item)));
+}
+
 export async function uploadLocalBundleToSpace(
   spaceId: string,
   bundle: {
@@ -1389,21 +1402,27 @@ export async function uploadLocalBundleToSpace(
     homeChores?: HomeChoreItem[];
   }
 ): Promise<void> {
-  await pushSettingsToCloud(spaceId, bundle.settings);
+  // First-time pairing is additive: never overwrite records already present in the shared space.
+  const settingsRef = doc(db, 'spaces', spaceId, 'config', 'settings');
+  const settingsSnapshot = await getDoc(settingsRef);
+  if (!settingsSnapshot.exists()) {
+    await pushSettingsToCloud(spaceId, bundle.settings);
+  }
+
   await Promise.all([
-    ...bundle.goals.map((g) => pushGoalToCloud(spaceId, g)),
-    ...bundle.habits.map((h) => pushHabitToCloud(spaceId, h)),
-    ...bundle.gratitudes.map((gr) => pushGratitudeToCloud(spaceId, gr)),
-    ...bundle.callers.map((c) => pushCallerToCloud(spaceId, c)),
-    ...bundle.schedules.map((s) => pushScheduleToCloud(spaceId, s)),
-    ...(bundle.shoppingItems ?? []).map((sh) => pushShoppingToCloud(spaceId, sh)),
-    ...(bundle.expenses ?? []).map((ex) => pushExpenseToCloud(spaceId, ex)),
-    ...(bundle.bills ?? []).map((bl) => pushBillToCloud(spaceId, bl)),
-    ...(bundle.meds ?? []).map((md) => pushMedicationToCloud(spaceId, md)),
-    ...(bundle.meals ?? []).filter((ml) => ml.lunch || ml.dinner || ml.ingredients).map((ml) => pushMealPlanToCloud(spaceId, ml)),
-    ...(bundle.vaultNotes ?? []).map((vn) => pushVaultNoteToCloud(spaceId, vn)),
-    ...(bundle.packingItems ?? []).map((pk) => pushPackingToCloud(spaceId, pk)),
-    ...(bundle.specialEvents ?? []).map((ev) => pushSpecialEventToCloud(spaceId, ev)),
-    ...(bundle.homeChores ?? []).map((ch) => pushHomeChoreToCloud(spaceId, ch)),
+    pushOnlyMissing(spaceId, 'goals', bundle.goals, pushGoalToCloud),
+    pushOnlyMissing(spaceId, 'habits', bundle.habits, pushHabitToCloud),
+    pushOnlyMissing(spaceId, 'gratitudes', bundle.gratitudes, pushGratitudeToCloud),
+    pushOnlyMissing(spaceId, 'callers', bundle.callers, pushCallerToCloud),
+    pushOnlyMissing(spaceId, 'schedules', bundle.schedules, pushScheduleToCloud),
+    pushOnlyMissing(spaceId, 'shopping', bundle.shoppingItems ?? [], pushShoppingToCloud),
+    pushOnlyMissing(spaceId, 'expenses', bundle.expenses ?? [], pushExpenseToCloud),
+    pushOnlyMissing(spaceId, 'bills', bundle.bills ?? [], pushBillToCloud),
+    pushOnlyMissing(spaceId, 'meds', bundle.meds ?? [], pushMedicationToCloud),
+    pushOnlyMissing(spaceId, 'meals', (bundle.meals ?? []).filter((item) => item.lunch || item.dinner || item.ingredients), pushMealPlanToCloud),
+    pushOnlyMissing(spaceId, 'vault', bundle.vaultNotes ?? [], pushVaultNoteToCloud),
+    pushOnlyMissing(spaceId, 'packing', bundle.packingItems ?? [], pushPackingToCloud),
+    pushOnlyMissing(spaceId, 'events', bundle.specialEvents ?? [], pushSpecialEventToCloud),
+    pushOnlyMissing(spaceId, 'chores', bundle.homeChores ?? [], pushHomeChoreToCloud),
   ]);
 }
