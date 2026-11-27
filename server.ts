@@ -2198,9 +2198,23 @@ const BLOCKED_RADIO_TERMS = [
   'اخبار سیاسی', 'سیاسی', 'مذهبی', 'دینی', 'منبر', 'مداحی', 'نوحه', 'قرآن', 'قرائت',
 ];
 
+function normalizeRadioFilterText(value: string): string {
+  return value
+    .toLocaleLowerCase('fa')
+    .replace(/[\u064A\u0649]/g, '\u06CC')
+    .replace(/[\u0643]/g, '\u06A9')
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
 function isBlockedRadioStation(station: Pick<ServerMusicTrack, 'title' | 'artist' | 'tags'>): boolean {
-  const haystack = `${station.title} ${station.artist} ${station.tags || ""}`.toLocaleLowerCase('fa');
-  return BLOCKED_RADIO_TERMS.some((term) => haystack.includes(term.toLocaleLowerCase('fa')));
+  const haystack = ` ${normalizeRadioFilterText(`${station.title} ${station.artist} ${station.tags || ''}`)} `;
+  return BLOCKED_RADIO_TERMS.some((term) => {
+    const normalizedTerm = normalizeRadioFilterText(term);
+    return normalizedTerm.length > 0 && haystack.includes(` ${normalizedTerm} `);
+  });
 }
 
 async function queryRadioBrowser(queryPathAndParams: string): Promise<RadioBrowserStation[]> {
