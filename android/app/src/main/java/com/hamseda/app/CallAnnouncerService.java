@@ -140,7 +140,7 @@ public class CallAnnouncerService extends Service {
         announceInternal(context, title, text, voiceName, isMale, repeatCount, isCall, isCall);
     }
 
-    /** Announces sensitive SMS content on-device without calling Hamseda's remote TTS endpoint. */
+    /** Announces sensitive SMS content on-device without calling Refigho's remote TTS endpoint. */
     public static void announcePrivate(Context context, String title, String text, String voiceName, boolean isMale, int repeatCount) {
         announceInternal(context, title, text, voiceName, isMale, repeatCount, false, true);
     }
@@ -419,7 +419,7 @@ public class CallAnnouncerService extends Service {
         boolean forceOffline = isCall || (intent != null && intent.getBooleanExtra(EXTRA_FORCE_OFFLINE, false));
 
         Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle(title != null ? title : "هم‌صدا")
+                .setContentTitle(title != null ? title : "رفیقو")
                 .setContentText(text)
                 .setSmallIcon(R.drawable.ic_stat_rmz)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -522,7 +522,7 @@ public class CallAnnouncerService extends Service {
         String spoken = repeat == 2 ? (singleText + " . " + singleText) : singleText;
         BilingualSpeechHelper.speak(this, spoken, isMale, 1.0f, false, success -> {
             if (!success && sessionId == activeSessionId) {
-                postDirectFallbackNotification(this, title != null ? title : "هم‌صدا", singleText);
+                postDirectFallbackNotification(this, title != null ? title : "رفیقو", singleText);
             }
             if (sessionId == activeSessionId) {
                 stopSelfSafely();
@@ -821,7 +821,7 @@ public class CallAnnouncerService extends Service {
             );
             Notification notif = new NotificationCompat.Builder(context, CHANNEL_ID)
                     .setSmallIcon(R.drawable.ic_stat_rmz)
-                    .setContentTitle(title != null ? title : "هم‌صدا")
+                    .setContentTitle(title != null ? title : "رفیقو")
                     .setContentText(body + " (برای صدای روان، اینترنت/فیلترشکن را بررسی کنید)")
                     .setStyle(new NotificationCompat.BigTextStyle().bigText(body))
                     .setPriority(NotificationCompat.PRIORITY_HIGH)
