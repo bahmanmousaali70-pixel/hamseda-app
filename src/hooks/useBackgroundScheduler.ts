@@ -128,9 +128,9 @@ export function useBackgroundScheduler(params: {
 
     if ('mediaSession' in navigator) {
       navigator.mediaSession.metadata = new MediaMetadata({
-        title: 'زمان‌بند هوشمند هم‌صدا',
+        title: 'زمان‌بند هوشمند رفیقو',
         artist: 'فعال در پس‌زمینه برای اعلام پیام صبحگاهی و اهداف',
-        album: 'هم‌صدا',
+        album: 'رفیقو',
         artwork: [{src: '/icon.svg', sizes: 'any', type: 'image/svg+xml'}],
       });
     }
