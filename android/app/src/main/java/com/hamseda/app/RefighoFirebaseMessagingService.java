@@ -71,6 +71,10 @@ public class RefighoFirebaseMessagingService extends FirebaseMessagingService {
             .setOnlyAlertOnce(true);
         if (pendingIntent != null) builder.setContentIntent(pendingIntent);
         if (inCall) builder.setSilent(true);
-        NotificationManagerCompat.from(this).notify((int) (System.currentTimeMillis() & 0x7fffffff), builder.build());
+        try {
+            NotificationManagerCompat.from(this).notify((int) (System.currentTimeMillis() & 0x7fffffff), builder.build());
+        } catch (SecurityException ignored) {
+            // Notifications may be disabled by the user or Android 13+ runtime permission.
+        }
     }
 }
