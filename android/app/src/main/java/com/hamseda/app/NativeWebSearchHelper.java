@@ -28,7 +28,7 @@ import java.util.regex.Pattern;
  * to fetch live Weather (Open-Meteo), Persian/English Wikipedia summaries, and DuckDuckGo web results.
  */
 public final class NativeWebSearchHelper {
-    private static final String USER_AGENT = "HamsedaAndroid/1.0 (+https://tapnfc.ir)";
+    private static final String USER_AGENT = "RefighoAndroid/1.0 (+https://tapnfc.ir)";
 
     private NativeWebSearchHelper() {}
 
