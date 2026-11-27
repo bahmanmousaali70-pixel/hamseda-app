@@ -88,7 +88,7 @@ public class ScheduleAlarmReceiver extends BroadcastReceiver {
                 if (voiceName != null && !voiceName.trim().isEmpty()) {
                     CallAnnouncerService.announce(
                             context,
-                            title != null ? title : "هم‌صدا",
+                            title != null ? title : "رفیقو",
                             spokenText,
                             voiceName.trim(),
                             isMale,
@@ -98,7 +98,7 @@ public class ScheduleAlarmReceiver extends BroadcastReceiver {
                 } else {
                     CallAnnouncerService.announce(
                             context,
-                            title != null ? title : "هم‌صدا",
+                            title != null ? title : "رفیقو",
                             spokenText,
                             isMale,
                             1,
@@ -129,7 +129,7 @@ public class ScheduleAlarmReceiver extends BroadcastReceiver {
                     "پیام‌های صبحگاهی و یادآورهای روزانه",
                     NotificationManager.IMPORTANCE_HIGH
             );
-            ch.setDescription("اعلان‌های خودکار پیام صبحگاهی و اهداف هم‌صدا");
+            ch.setDescription("اعلان‌های خودکار پیام صبحگاهی و اهداف رفیقو");
             nm.createNotificationChannel(ch);
         }
 
@@ -145,7 +145,7 @@ public class ScheduleAlarmReceiver extends BroadcastReceiver {
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_stat_rmz)
-                .setContentTitle(title != null ? title : "هم‌صدا")
+                .setContentTitle(title != null ? title : "رفیقو")
                 .setContentText(body != null ? body : "زمان یادآور روزانه فرا رسید")
                 .setStyle(new NotificationCompat.BigTextStyle().bigText(body))
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
