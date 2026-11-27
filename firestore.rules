@@ -872,5 +872,19 @@ service cloud.firestore {
         allow delete: if isAdmin() && isValidId(adId) && isValidId(metricUid);
       }
     }
+
+    // Each authenticated device may register only its own FCM token.
+    match /users/{userId}/pushTokens/{tokenId} {
+      allow get, list: if isAuthenticatedDevice() && request.auth.uid == userId;
+      allow create, update: if isAuthenticatedDevice()
+        && request.auth.uid == userId
+        && tokenId is string && tokenId.size() <= 512
+        && incoming().keys().hasOnly(['token', 'platform', 'updatedAt'])
+        && incoming().keys().hasAll(['token', 'platform', 'updatedAt'])
+        && incoming().token is string && incoming().token.size() >= 20 && incoming().token.size() <= 4096
+        && incoming().platform == 'android'
+        && incoming().updatedAt == request.time;
+      allow delete: if isAuthenticatedDevice() && request.auth.uid == userId;
+    }
   }
 }
