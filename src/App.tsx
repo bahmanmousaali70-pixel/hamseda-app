@@ -77,6 +77,7 @@ import {
   uploadLocalBundleToSpace,
   type CoupleSpaceInfo,
 } from './services/coupleSyncService';
+import {registerRefighoPushToken} from './services/pushNotificationService';
 import {
   COIN_COSTS,
   fetchActiveSponsorAds,
@@ -1071,8 +1072,8 @@ export default function App() {
           const diagnostics = await diagnoseFirebaseAuthNetwork();
           console.warn('Firebase Auth network diagnostics:', diagnostics);
           const diagSummary = `ورود ناشناس: ${errorCode} | WebView: ${diagnostics.identityToolkit} / ${diagnostics.secureToken} | Android: ${diagnostics.nativeIdentityToolkit} / ${diagnostics.nativeSecureToken}`;
-          setCloudAuthError(diagSummary);
-          showToast(diagSummary);
+          setCloudAuthError('ارتباط با سرویس همگام‌سازی برقرار نشد. لطفاً VPN را روشن کنید؛ اگر متصل است، لوکیشن یا سرور VPN را تغییر دهید و دوباره تلاش کنید.');
+          showToast('ارتباط با سرویس همگام‌سازی برقرار نشد. لطفاً VPN را روشن کنید؛ اگر متصل است، لوکیشن یا سرور VPN را تغییر دهید و دوباره تلاش کنید.');
           setCloudBusy(false);
         });
         return;
@@ -1097,6 +1098,8 @@ export default function App() {
       });
       try {
         const discovered = await ensureUserAndDiscoverSpace(user);
+        // Push token registration is best-effort and must never block existing couple sync.
+        void registerRefighoPushToken(user).catch((error) => console.warn('Refigho push registration failed:', error));
         if (!active) return;
         if (!isCloudSpaceHydrated(discovered.spaceId)) {
           await uploadLocalBundleToSpace(discovered.spaceId, latestLocalSyncBundleRef.current);
@@ -1155,8 +1158,8 @@ export default function App() {
         });
       } catch (err) {
         console.warn('Cloud discovery error:', err);
-        setCloudAuthError(err instanceof Error ? err.message : 'خطا در همگام‌سازی اولیه فضای مشترک');
-        showToast('ورود انجام شد، اما بارگذاری فضای مشترک ابری با تاخیر مواجه شد؛ داده‌های گوشی شما فعال هستند.');
+        setCloudAuthError('ارتباط با سرویس همگام‌سازی برقرار نشد. لطفاً VPN را روشن کنید؛ اگر متصل است، لوکیشن یا سرور VPN را تغییر دهید و دوباره تلاش کنید.');
+        showToast('ارتباط با سرویس همگام‌سازی برقرار نشد. لطفاً VPN را روشن کنید؛ اگر متصل است، لوکیشن یا سرور VPN را تغییر دهید و دوباره تلاش کنید.');
       } finally {
         if (active) setCloudBusy(false);
       }
@@ -1182,8 +1185,8 @@ export default function App() {
           const authError = err as {code?: string; message?: string};
           const diag = await diagnoseFirebaseAuthNetwork();
           const msg = `ورود ناشناس: ${authError?.code || 'unknown'} | WebView: ${diag.identityToolkit} / ${diag.secureToken} | Android: ${diag.nativeIdentityToolkit} / ${diag.nativeSecureToken}`;
-          setCloudAuthError(msg);
-          showToast(msg);
+          setCloudAuthError('ارتباط با سرویس همگام‌سازی برقرار نشد. لطفاً VPN را روشن کنید؛ اگر متصل است، لوکیشن یا سرور VPN را تغییر دهید و دوباره تلاش کنید.');
+          showToast('ارتباط با سرویس همگام‌سازی برقرار نشد. لطفاً VPN را روشن کنید؛ اگر متصل است، لوکیشن یا سرور VPN را تغییر دهید و دوباره تلاش کنید.');
           setCloudBusy(false);
         });
       return;

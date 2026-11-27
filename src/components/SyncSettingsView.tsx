@@ -693,15 +693,15 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
             </div>
           </div>
         ) : cloudAuthError ? (
-          <div className="rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 p-4 space-y-2.5">
-            <div className="text-xs font-bold text-rose-800 dark:text-rose-200">اتصال ابری هنوز برقرار نشده است</div>
-            <p className="text-xs leading-6 text-rose-700 dark:text-rose-300 break-words">{cloudAuthError}</p>
+          <div className="rounded-xl bg-amber-50 dark:bg-amber-950/25 border border-amber-200 dark:border-amber-900/70 p-4 space-y-2.5">
+            <div className="text-xs font-bold text-amber-900 dark:text-amber-200">نیاز به بررسی اتصال اینترنت</div>
+            <p className="text-xs leading-6 text-amber-800 dark:text-amber-200 break-words">{cloudAuthError}</p>
             {onRetryCloudAuth && (
               <button
                 type="button"
                 disabled={cloudBusy}
                 onClick={onRetryCloudAuth}
-                className="min-h-[40px] px-4 rounded-xl bg-rose-700 hover:bg-rose-800 disabled:opacity-50 text-white text-xs font-semibold flex items-center gap-2 cursor-pointer"
+                className="min-h-[40px] px-4 rounded-xl bg-amber-700 hover:bg-amber-800 disabled:opacity-50 text-white text-xs font-semibold flex items-center gap-2 cursor-pointer"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
                 <span>تلاش مجدد برای اتصال ابری</span>
