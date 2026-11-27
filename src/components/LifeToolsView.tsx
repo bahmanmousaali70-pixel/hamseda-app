@@ -572,7 +572,7 @@ export const MedicationTrackerPanel: React.FC<MedicationTrackerPanelProps> = ({
             onChange={(e) => setVoiceRemind(e.target.checked)}
             className="accent-emerald-700 w-4 h-4"
           />
-          <span>اعلام خودکار با صدای هم‌صدا در ساعت تنظیم‌شده</span>
+          <span>اعلام خودکار با صدای رفیقو در ساعت تنظیم‌شده</span>
         </label>
 
         <button
@@ -974,7 +974,7 @@ export const QuickVaultPanel: React.FC<QuickVaultPanelProps> = ({
     });
     setTitle('');
     setValue('');
-    onStatusToast?.('اطلاعات در کارت‌دان هم‌صدا ذخیره شد.');
+    onStatusToast?.('اطلاعات در کارت‌دان رفیقو ذخیره شد.');
   };
 
   const toggleReveal = (id: string) => {
