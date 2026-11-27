@@ -98,6 +98,10 @@
     var(--luxury-bg);
 }
 
+.dark {
+  color-scheme: dark;
+}
+
 .dark .app-shell {
   background:
     radial-gradient(ellipse at 10% 0%, color-mix(in srgb, var(--luxury-accent) 14%, transparent), transparent 34rem),
