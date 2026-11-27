@@ -1236,6 +1236,34 @@ export default function App() {
     [settings.defaultVoice, settings.speechRate, refreshClips, showToast]
   );
 
+  // One friendly, randomized spoken welcome per app session, using the user's current voice.
+  useEffect(() => {
+    if (!settings.autoOpenMorning) return;
+    try {
+      if (sessionStorage.getItem('refigho_welcome_played_v1') === '1') return;
+      sessionStorage.setItem('refigho_welcome_played_v1', '1');
+    } catch {
+      // Continue with the welcome even when session storage is unavailable.
+    }
+
+    const greetings = [
+      'سلام رفیق! خوش اومدی. امروز دوست داری با چه کار خوبی شروع کنیم؟',
+      'سلام به روی ماهت! من رفیقو هستم؛ آماده‌ام امروز کنارت باشم.',
+      'رفیق عزیز، خوش اومدی! چیزی هست که بخوای با هم برنامه‌ریزی کنیم؟',
+      'سلام! امیدوارم حالت عالی باشه. امروز چه هدف قشنگی توی ذهنته؟',
+      'چه خوب که برگشتی! من اینجام تا کارهای روزت رو ساده‌تر کنیم.',
+      'سلام رفیق جان! دوست داری اول یک یادآوری رو بررسی کنیم یا سراغ برنامه امروز بریم؟',
+      'خوش اومدی! هر قدم کوچیک امروز می‌تونه شروع یک اتفاق خوب باشه.',
+      'سلام! آماده‌ای امروز رو با انرژی و حال خوب شروع کنیم؟',
+    ];
+    const greeting = greetings[Math.floor(Math.random() * greetings.length)];
+    const timer = window.setTimeout(() => {
+      showToast(greeting);
+      void handleSpeakText(greeting, 'خوشامدگویی رفیقو', 'morning');
+    }, 1100);
+    return () => window.clearTimeout(timer);
+  }, [handleSpeakText, settings.autoOpenMorning, showToast]);
+
   const handleStopSpeech = useCallback(() => {
     stopAllSpeech();
     setIsSpeaking(false);
