@@ -78,7 +78,7 @@ public class NativeAuthDiagnosticsPlugin extends Plugin {
         } catch (java.net.SocketTimeoutException e) {
             return "NATIVE_TIMEOUT";
         } catch (Exception e) {
-            Log.w("HamsedaAuthDiag", "Native Firebase probe failed", e);
+            Log.w("RefighoAuthDiag", "Native Firebase probe failed", e);
             return "NATIVE_IO_ERROR " + e.getClass().getSimpleName();
         } finally {
             if (connection != null) connection.disconnect();
