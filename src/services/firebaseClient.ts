@@ -247,7 +247,7 @@ export async function signInAdminWithGoogle(): Promise<User> {
   if (!isVerifiedAdminUser(signedUser)) {
     await signOut(auth);
     await signInAnonymously(auth).catch(() => {});
-    throw new Error('این حساب گوگل به‌عنوان مالک اصلی هم‌صدا تایید نشده است.');
+    throw new Error('این حساب گوگل به‌عنوان مالک اصلی رفیقو تایید نشده است.');
   }
   return signedUser;
 }
