@@ -73,7 +73,7 @@ public class KeepAliveForegroundService extends Service {
         );
 
         Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("هم‌صدا · فعال در پس‌زمینه")
+                .setContentTitle("رفیقو · فعال در پس‌زمینه")
                 .setContentText("اعلام خودکار تماس، پیامک و زمان‌بندی صبحگاهی روشن است")
                 .setSmallIcon(R.drawable.ic_stat_rmz)
                 .setContentIntent(pendingIntent)
@@ -249,7 +249,7 @@ public class KeepAliveForegroundService extends Service {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(
                     CHANNEL_ID,
-                    "سرویس دائمی هم‌صدا",
+                    "سرویس دائمی رفیقو",
                     NotificationManager.IMPORTANCE_LOW
             );
             channel.setDescription("برای بیدار ماندن زمان‌بند و اعلام تماس ورودی در پس‌زمینه");
