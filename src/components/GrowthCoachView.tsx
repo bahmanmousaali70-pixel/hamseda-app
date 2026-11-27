@@ -263,7 +263,7 @@ export const TextSummarizerPanel: React.FC<TextSummarizerPanelProps> = ({
             خلاصه‌خوان صوتی متن‌ها و مقالات طولانی
           </h2>
           <p className="mt-1 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
-            هر خبر، مقاله یا پیام طولانی را اینجا بگذارید تا هم‌صدا در ۳ نکته کلیدی خلاصه‌اش کند و برایتان بخواند.
+            هر خبر، مقاله یا پیام طولانی را اینجا بگذارید تا رفیقو در ۳ نکته کلیدی خلاصه‌اش کند و برایتان بخواند.
           </p>
         </div>
 
