@@ -40,7 +40,7 @@ export const OnboardingGuideModal: React.FC<OnboardingGuideModalProps> = ({
       className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 backdrop-blur-sm p-3 sm:p-4"
       role="dialog"
       aria-modal="true"
-      aria-label="راهنمای شروع سریع هم‌صدا"
+      aria-label="راهنمای شروع سریع رفیقو"
     >
       <div className="w-full max-w-xl max-h-[92vh] flex flex-col rounded-3xl luxury-card overflow-hidden shadow-2xl border border-amber-400/35">
         {/* Header */}
@@ -48,7 +48,7 @@ export const OnboardingGuideModal: React.FC<OnboardingGuideModalProps> = ({
           <div className="flex items-center gap-3 min-w-0">
             <img
               src="/hamseda-icon.png"
-              alt="لوگوی هم‌صدا"
+              alt="لوگوی رفیقو"
               className="w-11 h-11 rounded-2xl object-cover shadow-sm shrink-0 border border-amber-400/30"
             />
             <div className="min-w-0">
@@ -57,7 +57,7 @@ export const OnboardingGuideModal: React.FC<OnboardingGuideModalProps> = ({
                 <span>راهنمای سریع شروع کار (نمایش فقط بار اول)</span>
               </div>
               <h2 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white truncate">
-                به هم‌صدا خوش آمدید
+                به رفیقو خوش آمدید
               </h2>
             </div>
           </div>
@@ -78,7 +78,7 @@ export const OnboardingGuideModal: React.FC<OnboardingGuideModalProps> = ({
           <div className="rounded-2xl border border-[var(--luxury-border)] bg-[var(--luxury-subtle)] p-3.5 sm:p-4 space-y-3">
             <div className="flex items-center gap-2 text-xs font-extrabold text-slate-900 dark:text-white">
               <UserRound className="w-4 h-4 text-emerald-700 dark:text-amber-300 shrink-0" />
-              <span>نام خودتان را وارد کنید تا هم‌صدا شما را با نام خودتان صدا بزند</span>
+              <span>نام خودتان را وارد کنید تا رفیقو شما را با نام خودتان صدا بزند</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <div>
@@ -136,7 +136,7 @@ export const OnboardingGuideModal: React.FC<OnboardingGuideModalProps> = ({
                   ۲. صدای طبیعی و غیررباتی (دانلود از کتابخانه صوتی)
                 </div>
                 <p className="text-xs leading-6 text-slate-700 dark:text-slate-300">
-                  برای اینکه صدای هم‌صدا گرم، روان و غیررباتی باشد و در حالت آفلاین هم بدون مشکل بخواند، حتماً در بخش{' '}
+                  برای اینکه صدای رفیقو گرم، روان و غیررباتی باشد و در حالت آفلاین هم بدون مشکل بخواند، حتماً در بخش{' '}
                   <strong>«کتابخانه صوتی»</strong> یکی از صداها یا بسته صوتی آفلاین را دانلود کنید.
                 </p>
               </div>
@@ -167,7 +167,7 @@ export const OnboardingGuideModal: React.FC<OnboardingGuideModalProps> = ({
             onClick={() => submit(false)}
             className="flex-1 min-h-[46px] px-4 rounded-xl bg-emerald-800 hover:bg-emerald-900 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white text-xs sm:text-sm font-extrabold cursor-pointer transition-colors"
           >
-            متوجه شدم، ورود به هم‌صدا
+            متوجه شدم، ورود به رفیقو
           </button>
           <button
             type="button"
