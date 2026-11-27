@@ -304,7 +304,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
       onImportBundle(parsed);
       onStatusToast(`فایل پشتیبان «${res.name || 'backup.json'}» با موفقیت بارگذاری و ادغام شد.`);
     } catch {
-      onStatusToast('فایل انتخاب‌شده JSON معتبر هم‌صدا نیست.');
+      onStatusToast('فایل انتخاب‌شده JSON معتبر رفیقو نیست.');
     }
   };
 
@@ -428,7 +428,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
         }
         if (probe.httpCode === 404) {
           const msg =
-            'اینترنت گوشی وصل است، اما سرور عمومی هم‌صدا روی این نشانی هنوز منتشر (Deploy) نشده است (خطای ۴۰۴). در AI Studio دکمه Deploy/Share را بزنید. جستجوی اینترنتی دستیار، رادیو و همگام‌سازی بدون این سرور هم روی APK فعال هستند.';
+            'اینترنت گوشی وصل است، اما سرور عمومی رفیقو روی این نشانی هنوز منتشر (Deploy) نشده است (خطای ۴۰۴). در AI Studio دکمه Deploy/Share را بزنید. جستجوی اینترنتی دستیار، رادیو و همگام‌سازی بدون این سرور هم روی APK فعال هستند.';
           setServerCheckStatus({ok: false, msg});
           onStatusToast(msg);
           return;
@@ -532,14 +532,14 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
               onChange={(e) => onUpdateSettings({assistantName: e.target.value})}
               onBlur={() =>
                 onUpdateSettings({
-                  assistantName: (settings.assistantName ?? '').trim() || 'هم‌صدا',
+                  assistantName: (settings.assistantName ?? '').trim() || 'رفیقو',
                 })
               }
-              placeholder="مثلاً: هم‌صدا، نگار، یاس، همدم..."
+              placeholder="مثلاً: رفیقو، نگار، یاس، همدم..."
               className="w-full min-h-[44px] px-3.5 rounded-xl border border-slate-200 dark:border-emerald-900 bg-white dark:bg-[#121E1C] text-sm font-semibold text-slate-900 dark:text-white"
             />
             <p className="text-[11px] leading-5 text-slate-500 dark:text-slate-400">
-              در تب <strong>دستیار صوتی</strong> وقتی با همین نام صدایش بزنید (مثلاً «{(settings.assistantName ?? '').trim() || 'هم‌صدا'} ساعت چنده؟») جواب می‌دهد و دستورها را اجرا می‌کند.
+              در تب <strong>دستیار صوتی</strong> وقتی با همین نام صدایش بزنید (مثلاً «{(settings.assistantName ?? '').trim() || 'رفیقو'} ساعت چنده؟») جواب می‌دهد و دستورها را اجرا می‌کند.
             </p>
           </div>
         </div>
@@ -623,7 +623,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
             {
               key: 'autoAssistantSpeak' as const,
               title: 'خواندن خودکار پاسخ دستیار',
-              desc: `پاسخ صوتی خودکار دستیار ${settings.assistantName || 'هم‌صدا'} روی گوشی ${selfName}`,
+              desc: `پاسخ صوتی خودکار دستیار ${settings.assistantName || 'رفیقو'} روی گوشی ${selfName}`,
             },
           ].map((item) => {
             const active = localVoiceControls.masterSpeakerEnabled && localVoiceControls[item.key];
@@ -677,7 +677,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
           همگام‌سازی دو گوشی با کد اتصال
         </h2>
         <p className="text-sm leading-7 text-slate-600 dark:text-slate-300">
-          هم‌صدا برای هر نصب یک شناسه امن و ناشناس می‌سازد. برای اتصال گوشی دوم، کد فضای مشترک را فقط با همراه مورداعتماد خود به اشتراک بگذارید؛ نیازی به Gmail یا ساخت حساب کاربری نیست. هنگام اتصال با کد، اطلاعات محلی این گوشی به‌صورت خودکار و امن بدون بازنویسی داده‌های موجود ادغام می‌شوند (تنظیمات دستگاه و لیست تماس‌گیرندگان روی هر گوشی محلی می‌مانند) و از آن لحظه تمام تغییرات و حذف‌ها در هر دو گوشی به‌صورت لحظه‌ای و آفلاین/آنلاین همگام می‌شوند.
+          رفیقو برای هر نصب یک شناسه امن و ناشناس می‌سازد. برای اتصال گوشی دوم، کد فضای مشترک را فقط با همراه مورداعتماد خود به اشتراک بگذارید؛ نیازی به Gmail یا ساخت حساب کاربری نیست. هنگام اتصال با کد، اطلاعات محلی این گوشی به‌صورت خودکار و امن بدون بازنویسی داده‌های موجود ادغام می‌شوند (تنظیمات دستگاه و لیست تماس‌گیرندگان روی هر گوشی محلی می‌مانند) و از آن لحظه تمام تغییرات و حذف‌ها در هر دو گوشی به‌صورت لحظه‌ای و آفلاین/آنلاین همگام می‌شوند.
         </p>
         {deviceUid && spaceInfo ? (
           <div className="rounded-xl bg-slate-50/80 dark:bg-[#0B1312] border border-slate-200 dark:border-emerald-900 p-4 space-y-3">
@@ -747,7 +747,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
               پروژه بومی اندروید (Capacitor + سرویس پس‌زمینه کاتلین + گیرنده تماس ورودی + آلارم دقیق بیدارباش) و گردش‌کار گیت‌هاب (<code dir="ltr">.github/workflows/build-apk.yml</code>) داخل کدهای این برنامه آماده شده است.
             </p>
             <p className="mt-2 text-xs leading-6 text-slate-600 dark:text-slate-300 max-w-3xl">
-              برای اعلام متن پیامک جدید و نام تماس‌گیرنده، اندروید باید هم‌صدا را با انتخاب صریح شما به‌عنوان دستیار پیش‌فرض ثبت کند. مجوزهای حساس فقط پس از این انتخاب درخواست می‌شوند. مجوز گزارش تماس فقط برای دریافت شماره تماس ورودی از اعلان سیستمی استفاده می‌شود و برنامه تاریخچه تماس‌ها را نمی‌خواند. با لغو نقش دستیار، پردازش پیامک و شماره تماس متوقف می‌شود. برای حفاظت از متن پیامک و اطلاعات تماس، اعلام این موارد از API گفتار ابری هم‌صدا عبور نمی‌کند و از موتور محلی استفاده می‌کند؛ اگر Android به موتور گفتار سیستمی برگردد، سیاست همان ارائه‌دهنده اعمال می‌شود. انتخاب نقش و مجوزها همیشه در کنترل شماست.
+              برای اعلام متن پیامک جدید و نام تماس‌گیرنده، اندروید باید رفیقو را با انتخاب صریح شما به‌عنوان دستیار پیش‌فرض ثبت کند. مجوزهای حساس فقط پس از این انتخاب درخواست می‌شوند. مجوز گزارش تماس فقط برای دریافت شماره تماس ورودی از اعلان سیستمی استفاده می‌شود و برنامه تاریخچه تماس‌ها را نمی‌خواند. با لغو نقش دستیار، پردازش پیامک و شماره تماس متوقف می‌شود. برای حفاظت از متن پیامک و اطلاعات تماس، اعلام این موارد از API گفتار ابری رفیقو عبور نمی‌کند و از موتور محلی استفاده می‌کند؛ اگر Android به موتور گفتار سیستمی برگردد، سیاست همان ارائه‌دهنده اعمال می‌شود. انتخاب نقش و مجوزها همیشه در کنترل شماست.
             </p>
           </div>
 
@@ -759,7 +759,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
                   onClick={async () => {
                     const result = await openAssistantSettingsNative();
                     onStatusToast(result.ok
-                      ? 'تنظیمات دستیار گوشی باز شد؛ در بخش دستیار دیجیتال، هم‌صدا را انتخاب کن.'
+                      ? 'تنظیمات دستیار گوشی باز شد؛ در بخش دستیار دیجیتال، رفیقو را انتخاب کن.'
                       : (result.message || 'تنظیمات دستیار باز نشد؛ از دکمه درخواست دستیار استفاده کن.'));
                   }}
                   className="min-h-[44px] px-4 py-2.5 rounded-xl border border-emerald-700 text-emerald-800 dark:text-emerald-300 dark:border-emerald-700 text-xs sm:text-sm font-semibold flex items-center gap-2 cursor-pointer"
@@ -1181,7 +1181,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
       <section className="rounded-2xl luxury-card p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-amber-300/60 dark:border-emerald-800/70">
         <div>
           <h2 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
-            نسخه رایگان هم‌صدا برای همه · با حمایت TapNFC.ir
+            نسخه رایگان رفیقو برای همه · با حمایت TapNFC.ir
           </h2>
           <p className="mt-1 text-xs sm:text-sm leading-6 text-slate-600 dark:text-slate-300">
             استفاده از امکانات برنامه‌ریزی، دستیار فارسی و همگام‌سازی برای تمامی زوج‌ها و کاربران به‌صورت رایگان با پشتیبانی TapNFC فراهم شده است.
