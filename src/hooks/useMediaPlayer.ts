@@ -431,6 +431,9 @@ export function useMediaPlayer(opts: {
               setIsRadioPlaying(false);
               setIsRadioLoading(false);
               onStatusToast(`پخش زنده «${activeRadioStation.title}» موقتاً برقرار نشد.`);
+            } else {
+              // Keep retrying after a failed reconnect attempt instead of remaining stuck in loading.
+              attemptLiveRadioReconnect('stalled');
             }
           });
       }, delayMs);
