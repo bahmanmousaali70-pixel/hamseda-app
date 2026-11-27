@@ -32,6 +32,8 @@ public class IncomingCallReceiver extends BroadcastReceiver {
 
         String state = intent.getStringExtra(TelephonyManager.EXTRA_STATE);
         if (TelephonyManager.EXTRA_STATE_OFFHOOK.equals(state)) {
+            context.getSharedPreferences("rmz_native_prefs", Context.MODE_PRIVATE)
+                    .edit().putBoolean("phone_call_active", true).apply();
             cancelPendingFallback();
             lastHandledRingAtMs = 0L;
             lastHandledNumber = "";
@@ -43,11 +45,15 @@ public class IncomingCallReceiver extends BroadcastReceiver {
             return;
         }
         if (TelephonyManager.EXTRA_STATE_IDLE.equals(state)) {
+            context.getSharedPreferences("rmz_native_prefs", Context.MODE_PRIVATE)
+                    .edit().putBoolean("phone_call_active", false).apply();
             cancelPendingFallback();
             lastHandledRingAtMs = 0L;
             lastHandledNumber = "";
             CallProxyController.onCallEnded(context);
             CallAnnouncerService.stopActive(context);
+            // Let the telephony audio route settle before replaying queued speech.
+            MAIN_HANDLER.postDelayed(() -> CallAnnouncerService.flushDeferredAnnouncements(context), 1200L);
             return;
         }
 
