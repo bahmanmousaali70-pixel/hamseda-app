@@ -141,7 +141,9 @@ jobs:
           "$AAPT2" dump badging "$APK" | head -n 25
           SIGNATURE_OUTPUT="$("$APKSIGNER" verify --verbose --print-certs "$APK")"
           printf '%s\\n' "$SIGNATURE_OUTPUT"
-          printf '%s\\n' "$SIGNATURE_OUTPUT" | grep -Fqi "$EXPECTED" || { echo "APK certificate fingerprint does not match the saved Refigho upload key"; exit 1; }
+          NORMALIZED_EXPECTED="$(printf '%s' "$EXPECTED" | tr -d ':')"
+          NORMALIZED_ACTUAL="$(printf '%s\\n' "$SIGNATURE_OUTPUT" | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          printf '%s\\n' "$NORMALIZED_ACTUAL" | grep -Fqi "$NORMALIZED_EXPECTED" || { echo "APK certificate fingerprint does not match the saved Refigho upload key"; exit 1; }
           ls -lh "$APK"
 
       - name: Rename APK for easy installation
