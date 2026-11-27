@@ -1,6 +1,6 @@
 {
-	"appId": "com.hamseda.app",
-	"appName": "هم صدا",
+	"appId": "com.refigho.app",
+	"appName": "رفیقو",
 	"webDir": "dist",
 	"server": {
 		"androidScheme": "https",
