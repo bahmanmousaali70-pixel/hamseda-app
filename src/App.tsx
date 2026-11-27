@@ -218,7 +218,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   speechRate: 1,
   myName: 'من',
   partnerName: 'همراه',
-  assistantName: 'هم‌صدا',
+  assistantName: 'رفیقو',
   assistantWakeWordEnabled: false,
   backgroundKeepAlive: false,
   announceCalls: true,
@@ -328,7 +328,7 @@ export default function App() {
     const normalizedAssistantName =
       rawAssistantName && (alreadyMigrated || !['بهمن', 'زری', 'آوا'].includes(rawAssistantName))
         ? rawAssistantName
-        : 'هم‌صدا';
+        : 'رفیقو';
     return {
       ...DEFAULT_SETTINGS,
       ...saved,
@@ -571,7 +571,7 @@ export default function App() {
 
       const pending = pendingCoinRequestRef.current;
       if (!pending) {
-        showToast(`+${toPersianDigits(result.earnedCoins)} سکه هدیه به کیف پول هم‌صدا اضافه شد.`);
+        showToast(`+${toPersianDigits(result.earnedCoins)} سکه هدیه به کیف پول رفیقو اضافه شد.`);
         return;
       }
 
