@@ -2186,6 +2186,23 @@ const CURATED_WORLD_CHILL_STATIONS: ServerMusicTrack[] = [
   },
 ];
 
+const BLOCKED_RADIO_TERMS = [
+  'ایران اینترنشنال', 'iran international', 'iranintl',
+  'رادیو پارسا', 'radio parsa', 'parsa radio',
+  'رادیو فردا', 'radio farda', 'radiofarda',
+  'رادیو مجاهد', 'radio mojahed', 'radio mujahed',
+  'زن زندگی آزادی', 'زن، زندگی، آزادی', 'woman life freedom',
+  'رادیو زن زندگی آزادی', 'radio zan zendegi azadi',
+  'رادیو بی‌بی‌سی', 'bbc persian', 'رادیو زمانه', 'radio zamaneh',
+  'politics', 'political', 'politics talk', 'religion', 'religious', 'sermon', 'preaching',
+  'اخبار سیاسی', 'سیاسی', 'مذهبی', 'دینی', 'منبر', 'مداحی', 'نوحه', 'قرآن', 'قرائت',
+];
+
+function isBlockedRadioStation(station: Pick<ServerMusicTrack, 'title' | 'artist' | 'tags'>): boolean {
+  const haystack = `${station.title} ${station.artist} ${station.tags || ""}`.toLocaleLowerCase('fa');
+  return BLOCKED_RADIO_TERMS.some((term) => haystack.includes(term.toLocaleLowerCase('fa')));
+}
+
 async function queryRadioBrowser(queryPathAndParams: string): Promise<RadioBrowserStation[]> {
   const hosts = ['https://de1.api.radio-browser.info', 'https://all.api.radio-browser.info'];
   for (const host of hosts) {
@@ -2780,6 +2797,8 @@ app.post('/api/radio-stations', async (req, res) => {
       tracks = mapped.length > 0 ? mapped : CURATED_WORLD_CHILL_STATIONS;
     }
 
+    tracks = tracks.filter((station) => !isBlockedRadioStation(station));
+
     res.json({
       category,
       stations: tracks,
@@ -2789,7 +2808,7 @@ app.post('/api/radio-stations', async (req, res) => {
     console.error('Radio stations lookup error:', err);
     res.json({
       category,
-      stations: category === 'iran' || category === 'persian_music' ? CURATED_IRAN_STATIONS : CURATED_WORLD_CHILL_STATIONS,
+      stations: (category === 'iran' || category === 'persian_music' ? CURATED_IRAN_STATIONS : CURATED_WORLD_CHILL_STATIONS).filter((station) => !isBlockedRadioStation(station)),
     });
   }
 });
