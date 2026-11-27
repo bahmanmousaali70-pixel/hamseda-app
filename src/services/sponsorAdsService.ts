@@ -553,7 +553,7 @@ export async function claimSocialMissionSession(missionToken: string): Promise<{
 
 export const HOUSE_SPONSOR_AD: SponsorAdItem = {
   id: 'house-tapnfc',
-  title: 'حمایت ویژه هم‌صدا · TapNFC.ir',
+  title: 'حمایت ویژه رفیقو · TapNFC.ir',
   description: 'کارت ویزیت هوشمند، منوی دیجیتال و تگ‌های NFC اختصاصی برای معرفی حرفه‌ای کسب‌وکار شما.',
   imageUrl: '',
   linkUrl: 'https://tapnfc.ir',
@@ -581,7 +581,7 @@ function mapDocToSponsorAd(id: string, data: Record<string, unknown>): SponsorAd
   const defaultPriority = SPONSOR_PACKAGE_PRESETS[packageTier].priority;
   return {
     id: typeof data.id === 'string' ? data.id : id,
-    title: String(data.title || 'آگهی حامی هم‌صدا'),
+    title: String(data.title || 'آگهی حامی رفیقو'),
     description: String(data.description || ''),
     imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : '',
     linkUrl: String(data.linkUrl || 'https://tapnfc.ir'),
