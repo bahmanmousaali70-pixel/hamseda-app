@@ -36,7 +36,7 @@ public class IncomingSmsReceiver extends BroadcastReceiver {
         if (intent == null || !Telephony.Sms.Intents.SMS_RECEIVED_ACTION.equals(intent.getAction())) {
             return;
         }
-        // Stop processing SMS immediately if the user removes Hamseda as Assistant.
+        // Stop processing SMS immediately if the user removes Refigho as Assistant.
         if (!RoozhayeNativePlugin.isAssistantRoleHeld(context)) return;
 
         SharedPreferences prefs = context.getSharedPreferences("rmz_native_prefs", Context.MODE_PRIVATE);
@@ -100,7 +100,7 @@ public class IncomingSmsReceiver extends BroadcastReceiver {
     }
 
 
-    // Sender lookup and risk checks run on-device. SMS announcements bypass Hamseda's remote TTS endpoint.
+    // Sender lookup and risk checks run on-device. SMS announcements bypass Refigho's remote TTS endpoint.
     private String detectSmsRisk(String body) {
         if (body == null || body.trim().isEmpty()) return "";
         String text = body.toLowerCase();
