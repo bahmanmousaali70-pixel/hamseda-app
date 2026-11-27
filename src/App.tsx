@@ -218,7 +218,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   speechRate: 1,
   myName: 'من',
   partnerName: 'همراه',
-  assistantName: 'هم‌صدا',
+  assistantName: 'رفیقو',
   assistantWakeWordEnabled: false,
   backgroundKeepAlive: false,
   announceCalls: true,
@@ -2988,13 +2988,13 @@ export default function App() {
 
       <footer className="border-t border-[var(--luxury-border)] py-4 pb-[calc(68px+env(safe-area-inset-bottom)+8px)] lg:pb-4 px-4 text-center text-xs text-slate-500 dark:text-slate-400 space-y-1.5">
         <div>
-          هم‌صدا · برنامه‌ریزی روزانه، لیست خرید و غذا، مالی و تسویه، دارو، مناسبت‌ها، سفر، حالت رانندگی و دستیار صوتی فارسی
+          رفیقو · برنامه‌ریزی روزانه، لیست خرید و غذا، مالی و تسویه، دارو، مناسبت‌ها، سفر، حالت رانندگی و دستیار صوتی فارسی
         </div>
         <div className="flex flex-wrap items-center justify-center gap-3">
           <span>
             {exclusiveFooterSponsor
-              ? 'نسخه رایگان هم‌صدا برای همه · اسپانسر انحصاری: '
-              : 'نسخه رایگان هم‌صدا برای همه · با حمایت '}
+              ? 'نسخه رایگان رفیقو برای همه · اسپانسر انحصاری: '
+              : 'نسخه رایگان رفیقو برای همه · با حمایت '}
             <a
               href={exclusiveFooterSponsor ? exclusiveFooterSponsor.url : 'https://tapnfc.ir'}
               target="_blank"
