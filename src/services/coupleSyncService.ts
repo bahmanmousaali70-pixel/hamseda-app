@@ -1401,6 +1401,31 @@ export async function pushPartnerAlertToCloud(
 }
 
 
+function canonicalSyncValue(value: Record<string, unknown>): string {
+  const normalized: Record<string, unknown> = {};
+  for (const key of Object.keys(value).sort()) {
+    if (['id', 'authorUid', 'updatedByUid', 'createdAt', 'updatedAt'].includes(key)) continue;
+    if (key === 'clientCreatedAt') {
+      normalized.createdAt = Number(value.clientCreatedAt || 0);
+      continue;
+    }
+    if (value[key] !== undefined) normalized[key] = value[key];
+  }
+  if (normalized.createdAt === undefined && value.createdAt !== undefined) {
+    normalized.createdAt = Number(value.createdAt || 0);
+  }
+  return JSON.stringify(normalized);
+}
+
+function stableConflictHash(value: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
 async function pushOnlyMissing<T extends {id: string}>(
   spaceId: string,
   collectionName: string,
@@ -1409,15 +1434,35 @@ async function pushOnlyMissing<T extends {id: string}>(
 ): Promise<void> {
   if (items.length === 0) return;
   const path = `spaces/${spaceId}/${collectionName}`;
-  let existingIds: Set<string>;
+  let existingDocs: Map<string, Record<string, unknown>>;
   try {
     const snapshot = await getDocs(collection(db, 'spaces', spaceId, collectionName));
-    existingIds = new Set(snapshot.docs.map((item) => item.id));
+    existingDocs = new Map(snapshot.docs.map((item) => [item.id, item.data()]));
   } catch (err) {
     handleFirestoreError(err, OperationType.LIST, path);
   }
-  const missingItems = items.filter((item) => !existingIds.has(sanitizeId(item.id)));
-  await Promise.all(missingItems.map((item) => pushItem(spaceId, item)));
+
+  const uid = getUidOrNull();
+  const writes: Promise<void>[] = [];
+  for (const item of items) {
+    const id = sanitizeId(item.id);
+    const cloudItem = existingDocs.get(id);
+    if (!cloudItem) {
+      writes.push(pushItem(spaceId, item));
+      continue;
+    }
+
+    // Same ID with different content must not silently discard this device's version.
+    // Keep the cloud record intact and store the local variant under a deterministic ID.
+    const localValue = canonicalSyncValue(item as unknown as Record<string, unknown>);
+    const cloudValue = canonicalSyncValue(cloudItem);
+    if (localValue === cloudValue) continue;
+
+    const conflictId = sanitizeId(`merge_${stableConflictHash(`${id}|${uid || 'device'}|${localValue}`)}`);
+    if (existingDocs.has(conflictId)) continue;
+    writes.push(pushItem(spaceId, {...item, id: conflictId}));
+  }
+  await Promise.all(writes);
 }
 
 export async function uploadLocalBundleToSpace(
