@@ -99,7 +99,7 @@ export async function ensureUserAndDiscoverSpace(user: User): Promise<CoupleSpac
         await ensureMembership(activeSpaceId, uid, displayName, role);
         return {
           spaceId: activeSpaceId,
-          title: sdata.title ?? 'فضای مشترک هم‌صدا',
+          title: sdata.title ?? 'فضای مشترک رفیقو',
           ownerUid: sdata.ownerUid,
           role,
         };
@@ -124,7 +124,7 @@ export async function ensureUserAndDiscoverSpace(user: User): Promise<CoupleSpac
       });
       return {
         spaceId: foundId,
-        title: sdata.title ?? 'فضای مشترک هم‌صدا',
+        title: sdata.title ?? 'فضای مشترک رفیقو',
         ownerUid: sdata.ownerUid,
         role: 'owner',
       };
@@ -138,7 +138,7 @@ export async function ensureUserAndDiscoverSpace(user: User): Promise<CoupleSpac
   try {
     await setDoc(doc(db, 'spaces', newSpaceId), {
       ownerUid: uid,
-      title: 'فضای مشترک هم‌صدا',
+      title: 'فضای مشترک رفیقو',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
@@ -153,7 +153,7 @@ export async function ensureUserAndDiscoverSpace(user: User): Promise<CoupleSpac
 
   return {
     spaceId: newSpaceId,
-    title: 'فضای مشترک هم‌صدا',
+    title: 'فضای مشترک رفیقو',
     ownerUid: uid,
     role: 'owner',
   };
@@ -206,7 +206,7 @@ export async function joinSpaceByCode(spaceIdRaw: string, user: User): Promise<C
     });
     return {
       spaceId,
-      title: sdata.title ?? 'فضای مشترک هم‌صدا',
+      title: sdata.title ?? 'فضای مشترک رفیقو',
       ownerUid: sdata.ownerUid,
       role,
     };
@@ -953,7 +953,7 @@ export async function pushSettingsToCloud(spaceId: string, settings: AppSettings
     speechRate: Math.max(0.5, Math.min(2, Number(settings.speechRate || 1))),
     myName: clampStr(settings.myName, 60, 'من'),
     partnerName: clampStr(settings.partnerName, 60, 'همراه'),
-    assistantName: clampStr(settings.assistantName, 40, 'هم‌صدا'),
+    assistantName: clampStr(settings.assistantName, 40, 'رفیقو'),
     assistantWakeWordEnabled: Boolean(settings.assistantWakeWordEnabled ?? false),
     backgroundKeepAlive: Boolean(settings.backgroundKeepAlive),
     announceCalls: Boolean(settings.announceCalls ?? true),
