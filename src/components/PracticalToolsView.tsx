@@ -164,7 +164,7 @@ export const ShoppingChecklistPanel: React.FC<ShoppingChecklistPanelProps> = ({
             لیست خرید و یادداشت‌های فوری
           </h2>
           <p className="mt-1 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
-            اقلام خرید سوپرمارکت، دارو، قبوض و کارهای فوری خانه را سریع بنویسید، کپی کنید یا با صدای هم‌صدا بشنوید.
+            اقلام خرید سوپرمارکت، دارو، قبوض و کارهای فوری خانه را سریع بنویسید، کپی کنید یا با صدای رفیقو بشنوید.
           </p>
         </div>
 
@@ -546,7 +546,7 @@ export const ExpenseTrackerPanel: React.FC<ExpenseTrackerPanelProps> = ({
 
   const handleCopySummary = async () => {
     const lines = [
-      `گزارش مخارج روزانه هم‌صدا`,
+      `گزارش مخارج روزانه رفیقو`,
       `جمع هزینه امروز: ${formatToman(todayTotal)} تومان`,
       `جمع هزینه این ماه: ${formatToman(monthTotal)} تومان`,
       ...(monthlyBudget > 0 ? [`سقف بودجه ماهانه: ${formatToman(monthlyBudget)} تومان (${toPersianDigits(budgetPct)}٪ مصرف)`] : []),
