@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicLong
  *  - amir_piper : Piper Amir male/formal Persian (MIT, ~60.6 MB) downloadable on-demand into filesDir
  */
 object OfflinePersianTts {
-    private const val TAG = "HamsedaOfflineTTS"
+    private const val TAG = "RefighoOfflineTTS"
     private const val PREFS_NAME = "rmz_native_prefs"
     private const val KEY_ACTIVE_ENGINE = "active_offline_tts_engine"
     private const val BASE_DIR = "hamseda_offline_tts"
@@ -502,7 +502,7 @@ object OfflinePersianTts {
                 instanceFollowRedirects = true
                 connectTimeout = 15000
                 readTimeout = 30000
-                setRequestProperty("User-Agent", "Hamseda-Android/1.0")
+                setRequestProperty("User-Agent", "Refigho-Android/1.0")
             }
             val code = conn.responseCode
             if (code in 301..308 && redirects < 6) {
