@@ -466,7 +466,7 @@ export function useMediaPlayer(opts: {
       if (selectedTrack && !selectedTrack.streamUrl) {
         if (selectedTrack.externalUrl) {
           openExternalSafe(selectedTrack.externalUrl);
-          onStatusToast('این سایت پخش مستقیم داخل هم‌صدا ارائه نمی‌کند؛ صفحه اثر در سایت منبع باز شد.');
+          onStatusToast('این سایت پخش مستقیم داخل رفیقو ارائه نمی‌کند؛ صفحه اثر در سایت منبع باز شد.');
         } else {
           onStatusToast('برای این نتیجه لینک پخش مستقیم در دسترس نیست.');
         }
@@ -658,8 +658,8 @@ export function useMediaPlayer(opts: {
       if (typeof MediaMetadata !== 'undefined') {
         ms.metadata = new MediaMetadata({
           title: activeItem.title,
-          artist: activeItem.artist || (mode === 'radio' ? 'رادیو زنده هم‌صدا' : 'موزیک شبانه هم‌صدا'),
-          album: mode === 'radio' ? 'رادیوهای ایران و جهان' : 'پلی‌لیست هم‌صدا',
+          artist: activeItem.artist || (mode === 'radio' ? 'رادیو زنده رفیقو' : 'موزیک شبانه رفیقو'),
+          album: mode === 'radio' ? 'رادیوهای ایران و جهان' : 'پلی‌لیست رفیقو',
           artwork: activeItem.artworkUrl ? [{src: activeItem.artworkUrl, sizes: '256x256', type: 'image/png'}] : undefined,
         });
       }
