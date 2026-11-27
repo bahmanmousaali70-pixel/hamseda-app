@@ -55,7 +55,7 @@ public class ScheduleAlarmHelper {
 
                 Intent intent = new Intent(context, ScheduleAlarmReceiver.class);
                 intent.putExtra("schedule_id", id);
-                intent.putExtra("title", item.optString("title", "هم‌صدا"));
+                intent.putExtra("title", item.optString("title", "رفیقو"));
                 intent.putExtra("spoken_text", item.optString("spokenText", ""));
                 intent.putExtra("days", item.optString("days", "daily"));
                 intent.putExtra("is_male", "male".equals(item.optString("voiceGender", "female")));
