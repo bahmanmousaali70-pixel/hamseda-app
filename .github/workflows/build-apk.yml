@@ -3,7 +3,7 @@ name: Build Android APK
 
 concurrency:
   group: refigho-android-apk-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 on:
   push:
