@@ -33,7 +33,6 @@ exports.notifyCoupleSpaceChange = onDocumentWritten(
     document: "spaces/{spaceId}/{collectionId}/{documentId}",
     database: DATABASE_ID,
     region: "us-central1",
-    retry: true,
   },
   async (event) => {
     const collectionId = event.params.collectionId;
