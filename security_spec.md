@@ -20,3 +20,5 @@
 10. **Client-forged timestamp** (`createdAt` or `updatedAt` != `request.time`).
 11. **Immortal field mutation** (`authorUid` or `createdAt` modified during `update`).
 12. **Unbounded/malformed array injection** (`habits.completedDates.size() > 365` or `gratitudes.items.size() != 3`).
+13. **SponsorAd write/flooding bypass** (`sponsorAds` create/delete by non-Google-verified admin, or `impressions`/`clicks` increment without atomic 10-second cooldown `userMetrics` receipt).
+

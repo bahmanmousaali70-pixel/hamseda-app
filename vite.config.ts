@@ -9,6 +9,64 @@ import {VitePWA} from 'vite-plugin-pwa';
 // to the same default UpdateCenter uses, so index.html never keeps a literal placeholder.
 process.env.VITE_APP_VERSION ||= '0.0.0';
 
+const PWA_MANIFEST = {
+  id: '/',
+  name: 'هم‌صدا',
+  short_name: 'هم‌صدا',
+  description: 'برنامه‌ریزی هدفمند روزانه، شکرگذاری، پیام‌های صبحگاهی با صدای روان فارسی و اعلام دوزبانه تماس‌گیرنده',
+  theme_color: '#01124B',
+  background_color: '#01124B',
+  display: 'standalone' as const,
+  dir: 'rtl' as const,
+  lang: 'fa',
+  start_url: '/',
+  scope: '/',
+  icons: [
+    {
+      src: '/pwa-192x192.png',
+      sizes: '192x192',
+      type: 'image/png',
+      purpose: 'any',
+    },
+    {
+      src: '/pwa-512x512.png',
+      sizes: '512x512',
+      type: 'image/png',
+      purpose: 'any',
+    },
+    {
+      src: '/pwa-maskable-512x512.png',
+      sizes: '512x512',
+      type: 'image/png',
+      purpose: 'maskable',
+    },
+  ],
+};
+
+const DEV_CLEAN_SW_SCRIPT = `
+importScripts('/sw-notifications.js');
+self.addEventListener('install', function () {
+  self.skipWaiting();
+});
+self.addEventListener('activate', function (event) {
+  event.waitUntil(
+    caches.keys().then(function (keys) {
+      return Promise.all(
+        keys
+          .filter(function (k) {
+            return k.indexOf('workbox-') === 0 || k.indexOf('precache') !== -1;
+          })
+          .map(function (k) {
+            return caches.delete(k);
+          })
+      );
+    }).then(function () {
+      return self.clients.claim();
+    })
+  );
+});
+`.trimStart();
+
 export default defineConfig(() => {
   return {
     plugins: [
@@ -17,41 +75,11 @@ export default defineConfig(() => {
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: ['hamseda-icon.png', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png', 'pwa-maskable-512x512.png', 'sw-notifications.js'],
-        manifest: {
-          id: '/',
-          name: 'هم‌صدا',
-          short_name: 'هم‌صدا',
-          description: 'برنامه‌ریزی هدفمند روزانه، شکرگذاری، پیام‌های صبحگاهی با صدای روان فارسی و اعلام دوزبانه تماس‌گیرنده',
-          theme_color: '#01124B',
-          background_color: '#01124B',
-          display: 'standalone',
-          dir: 'rtl',
-          lang: 'fa',
-          start_url: '/',
-          scope: '/',
-          icons: [
-            {
-              src: '/pwa-192x192.png',
-              sizes: '192x192',
-              type: 'image/png',
-              purpose: 'any',
-            },
-            {
-              src: '/pwa-512x512.png',
-              sizes: '512x512',
-              type: 'image/png',
-              purpose: 'any',
-            },
-            {
-              src: '/pwa-maskable-512x512.png',
-              sizes: '512x512',
-              type: 'image/png',
-              purpose: 'maskable',
-            },
-          ],
-        },
+        manifest: PWA_MANIFEST,
         workbox: {
           importScripts: ['/sw-notifications.js'],
+          skipWaiting: true,
+          clientsClaim: true,
           cleanupOutdatedCaches: true,
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
@@ -90,10 +118,40 @@ export default defineConfig(() => {
           ],
         },
         devOptions: {
-          enabled: true,
-          type: 'module',
+          enabled: false,
         },
       }),
+      {
+        name: 'dev-pwa-manifest-sw',
+        apply: 'serve',
+        transformIndexHtml() {
+          return [
+            {
+              tag: 'link',
+              attrs: {rel: 'manifest', href: '/manifest.webmanifest'},
+              injectTo: 'head',
+            },
+          ];
+        },
+        configureServer(server) {
+          server.middlewares.use((req, res, next) => {
+            const cleanPath = (req.url || '').split('?')[0];
+            if (cleanPath === '/manifest.webmanifest') {
+              res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+              res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+              res.end(JSON.stringify(PWA_MANIFEST));
+              return;
+            }
+            if (cleanPath === '/sw.js' || cleanPath === '/dev-sw.js') {
+              res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+              res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+              res.end(DEV_CLEAN_SW_SCRIPT);
+              return;
+            }
+            next();
+          });
+        },
+      },
       // Copies src/assets into dist/ and serves/copies onnxruntime-web WASM runtime
       // into /ort/ so Pocket TTS Farsi ONNX runs 100% offline inside Capacitor APK.
       {

@@ -6,21 +6,25 @@
     --font-sans: "Vazirmatn", "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
     --font-latin: "Plus Jakarta Sans", "Vazirmatn", system-ui, sans-serif;
     --font-mono: "JetBrains Mono", monospace;
-    --luxury-bg: #F7F6F2;
+    --luxury-bg: #F4F7F5;
     --luxury-surface: #FFFFFF;
-    --luxury-subtle: #F0EEE8;
-    --luxury-border: #E6E2D8;
+    --luxury-subtle: #E8F0EC;
+    --luxury-border: #D2DFD8;
+    --luxury-header: rgba(249, 251, 249, 0.94);
+    --luxury-dock: rgba(249, 251, 249, 0.96);
     --luxury-accent: #0B6B53;
-    --luxury-gold: #B0883B;
+    --luxury-gold: #B48A3E;
   }
 
   .dark {
-    --luxury-bg: #070D0C;
-    --luxury-surface: #0E1816;
-    --luxury-subtle: #0A1311;
-    --luxury-border: rgba(20, 62, 52, 0.72);
-    --luxury-accent: #34D399;
-    --luxury-gold: #D4AF37;
+    --luxury-bg: #081118;
+    --luxury-surface: #101D27;
+    --luxury-subtle: #162735;
+    --luxury-border: rgba(45, 212, 191, 0.24);
+    --luxury-header: rgba(11, 21, 29, 0.94);
+    --luxury-dock: rgba(11, 21, 29, 0.96);
+    --luxury-accent: #2DD4BF;
+    --luxury-gold: #FBBF24;
   }
 
   html {
@@ -48,15 +52,25 @@
   }
 }
 
+.luxury-header {
+  background-color: var(--luxury-header);
+  border-color: var(--luxury-border);
+}
+
+.luxury-dock {
+  background-color: var(--luxury-dock);
+  border-color: var(--luxury-border);
+}
+
 .luxury-card {
   background-color: var(--luxury-surface);
   border: 1px solid var(--luxury-border);
-  border-radius: 1.25rem;
-  box-shadow: 0 1px 2px rgba(15, 23, 20, 0.04), 0 10px 28px -16px rgba(11, 107, 83, 0.09);
+  border-radius: 1.5rem;
+  box-shadow: 0 2px 5px rgba(15, 23, 20, 0.03), 0 14px 42px -28px color-mix(in srgb, var(--luxury-accent) 32%, transparent);
 }
 
 .dark .luxury-card {
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 12px 30px -16px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.26), 0 20px 48px -30px rgba(0, 0, 0, 0.72);
 }
 
 .luxury-surface-subtle {
@@ -76,94 +90,215 @@
   }
 }
 
-
-/* Refined Hamseda premium shell */
 .app-shell {
   min-height: 100dvh;
   background:
-    radial-gradient(ellipse at 12% 0%, rgba(176, 136, 59, .075), transparent 32rem),
-    radial-gradient(ellipse at 88% 12%, rgba(11, 107, 83, .07), transparent 36rem),
+    radial-gradient(ellipse at 12% 0%, color-mix(in srgb, var(--luxury-accent) 10%, transparent), transparent 34rem),
+    radial-gradient(ellipse at 88% 12%, color-mix(in srgb, var(--luxury-gold) 8%, transparent), transparent 36rem),
     var(--luxury-bg);
-}
-.dark .app-shell {
-  background:
-    radial-gradient(ellipse at 12% 0%, rgba(212, 175, 55, .055), transparent 34rem),
-    radial-gradient(ellipse at 88% 10%, rgba(16, 185, 129, .075), transparent 38rem),
-    var(--luxury-bg);
-}
-.luxury-card {
-  border-radius: 1.5rem;
-  box-shadow: 0 2px 5px rgba(15, 23, 20, .025), 0 18px 42px -28px rgba(11, 67, 52, .18);
-}
-.dark .luxury-card {
-  box-shadow: 0 2px 6px rgba(0, 0, 0, .24), 0 20px 48px -30px rgba(0, 0, 0, .72);
-}
-button, a, input, textarea, select {
-  -webkit-tap-highlight-color: transparent;
 }
 
-/* Curated Hamseda 5-theme palette — persisted in app settings & cloud sync */
-:root[data-theme="emerald-pearl"] {
-  --luxury-bg: #F6F7F4;
-  --luxury-surface: #FFFFFF;
-  --luxury-subtle: #ECEFE9;
-  --luxury-border: #D9E2D7;
-  --luxury-accent: #0B6B53;
-  --luxury-gold: #B48A3E;
-}
-:root[data-theme="nordic-linen"] {
-  --luxury-bg: #F1F5F8;
-  --luxury-surface: #FFFFFF;
-  --luxury-subtle: #E6EDF3;
-  --luxury-border: #CFDCE6;
-  --luxury-accent: #1D4ED8;
-  --luxury-gold: #0F766E;
-}
-:root[data-theme="espresso-sand"] {
-  --luxury-bg: #F6F1EA;
-  --luxury-surface: #FFFDF9;
-  --luxury-subtle: #EFE6DA;
-  --luxury-border: #DFD2C0;
-  --luxury-accent: #7C4A2D;
-  --luxury-gold: #B45309;
-}
-:root[data-theme="velvet-night"] {
-  --luxury-bg: #0B1117;
-  --luxury-surface: #121C26;
-  --luxury-subtle: #192634;
-  --luxury-border: rgba(45, 212, 191, 0.22);
-  --luxury-accent: #2DD4BF;
-  --luxury-gold: #FBBF24;
-}
-:root[data-theme="plum-noir"] {
-  --luxury-bg: #110D16;
-  --luxury-surface: #1B1424;
-  --luxury-subtle: #251B31;
-  --luxury-border: rgba(244, 114, 182, 0.24);
-  --luxury-accent: #F472B6;
-  --luxury-gold: #FBBF24;
-}
-:root[data-theme="velvet-night"] .app-shell,
-:root[data-theme="plum-noir"] .app-shell {
+.dark .app-shell {
   background:
     radial-gradient(ellipse at 10% 0%, color-mix(in srgb, var(--luxury-accent) 14%, transparent), transparent 34rem),
     radial-gradient(ellipse at 90% 8%, color-mix(in srgb, var(--luxury-gold) 10%, transparent), transparent 38rem),
     var(--luxury-bg);
 }
-:root[data-theme="emerald-pearl"] .app-shell,
-:root[data-theme="nordic-linen"] .app-shell,
-:root[data-theme="espresso-sand"] .app-shell {
-  background:
-    radial-gradient(ellipse at 12% 0%, color-mix(in srgb, var(--luxury-accent) 9%, transparent), transparent 34rem),
-    linear-gradient(160deg, var(--luxury-bg), var(--luxury-subtle));
-}
-.luxury-card {
-  background: var(--luxury-surface);
-  border-color: var(--luxury-border);
-  box-shadow: 0 14px 42px -28px color-mix(in srgb, var(--luxury-accent) 32%, transparent);
-}
-.luxury-surface-subtle {
-  background: var(--luxury-subtle);
-  border-color: var(--luxury-border);
+
+button, a, input, textarea, select {
+  -webkit-tap-highlight-color: transparent;
 }
 
+/* =====================================================================
+   Full Mobile-Style Theme System (transforms backgrounds, buttons,
+   headers, docks, cards, inputs, badges, and borders across every tab)
+   ===================================================================== */
+
+/* 1. زمرد سلطنتی (Light Emerald & Brass) */
+:root[data-theme="emerald-pearl"] {
+  --luxury-bg: #F4F7F5;
+  --luxury-surface: #FFFFFF;
+  --luxury-subtle: #E8F0EC;
+  --luxury-border: #D2DFD8;
+  --luxury-header: rgba(249, 251, 249, 0.94);
+  --luxury-dock: rgba(249, 251, 249, 0.96);
+  --luxury-accent: #0B6B53;
+  --luxury-gold: #B48A3E;
+}
+
+/* 2. اقیانوس آبی (Light Cobalt & Sky Ocean) */
+:root[data-theme="nordic-linen"] {
+  --luxury-bg: #EFF5FB;
+  --luxury-surface: #FFFFFF;
+  --luxury-subtle: #E2ECF7;
+  --luxury-border: #CBD9EA;
+  --luxury-header: rgba(246, 250, 255, 0.94);
+  --luxury-dock: rgba(246, 250, 255, 0.96);
+  --luxury-accent: #1D4ED8;
+  --luxury-gold: #0284C7;
+  --color-emerald-50: #eff6ff;
+  --color-emerald-100: #dbeafe;
+  --color-emerald-200: #bfdbfe;
+  --color-emerald-300: #93c5fd;
+  --color-emerald-400: #60a5fa;
+  --color-emerald-500: #3b82f6;
+  --color-emerald-600: #2563eb;
+  --color-emerald-700: #1d4ed8;
+  --color-emerald-800: #1e40af;
+  --color-emerald-900: #1e3a8a;
+  --color-emerald-950: #172554;
+  --color-amber-50: #f0f9ff;
+  --color-amber-100: #e0f2fe;
+  --color-amber-200: #bae6fd;
+  --color-amber-300: #7dd3fc;
+  --color-amber-400: #38bdf8;
+  --color-amber-500: #0ea5e9;
+  --color-amber-600: #0284c7;
+  --color-amber-700: #0369a1;
+  --color-amber-800: #075985;
+  --color-amber-900: #0c4a6e;
+  --color-amber-950: #082f49;
+}
+
+/* 3. کارامل و قهوه (Warm Espresso & Amber) */
+:root[data-theme="espresso-sand"] {
+  --luxury-bg: #F8F2EA;
+  --luxury-surface: #FFFDF9;
+  --luxury-subtle: #EFE4D6;
+  --luxury-border: #DFCEBA;
+  --luxury-header: rgba(251, 247, 241, 0.94);
+  --luxury-dock: rgba(251, 247, 241, 0.96);
+  --luxury-accent: #7C4A2D;
+  --luxury-gold: #B45309;
+  --color-emerald-50: #fdf8f3;
+  --color-emerald-100: #f7e9da;
+  --color-emerald-200: #eed2b5;
+  --color-emerald-300: #dfb184;
+  --color-emerald-400: #c8844b;
+  --color-emerald-500: #a65d2e;
+  --color-emerald-600: #8c4820;
+  --color-emerald-700: #743a19;
+  --color-emerald-800: #5d2e14;
+  --color-emerald-900: #46220f;
+  --color-emerald-950: #2c1408;
+}
+
+/* 4. یاقوت و رزگلد (Light Rose Sakura & Warm Gold) */
+:root[data-theme="rose-sakura"] {
+  --luxury-bg: #FDF4F6;
+  --luxury-surface: #FFFFFF;
+  --luxury-subtle: #F9E8EC;
+  --luxury-border: #EED2DA;
+  --luxury-header: rgba(255, 249, 250, 0.94);
+  --luxury-dock: rgba(255, 249, 250, 0.96);
+  --luxury-accent: #9D174D;
+  --luxury-gold: #D97706;
+  --color-emerald-50: #fff1f4;
+  --color-emerald-100: #ffe1e8;
+  --color-emerald-200: #fec6d4;
+  --color-emerald-300: #faa0b8;
+  --color-emerald-400: #f4688e;
+  --color-emerald-500: #df3668;
+  --color-emerald-600: #be185d;
+  --color-emerald-700: #9d174d;
+  --color-emerald-800: #831843;
+  --color-emerald-900: #631133;
+  --color-emerald-950: #3b0419;
+}
+
+/* 5. شب فیروزه‌ای (Dark Midnight Teal & Amber Gold) */
+:root[data-theme="velvet-night"] {
+  --luxury-bg: #081118;
+  --luxury-surface: #101D27;
+  --luxury-subtle: #162735;
+  --luxury-border: rgba(45, 212, 191, 0.24);
+  --luxury-header: rgba(11, 21, 29, 0.94);
+  --luxury-dock: rgba(11, 21, 29, 0.96);
+  --luxury-accent: #2DD4BF;
+  --luxury-gold: #FBBF24;
+  --color-emerald-50: #f0fdfa;
+  --color-emerald-100: #ccfbf1;
+  --color-emerald-200: #99f6e4;
+  --color-emerald-300: #5eead4;
+  --color-emerald-400: #2dd4bf;
+  --color-emerald-500: #14b8a6;
+  --color-emerald-600: #0d9488;
+  --color-emerald-700: #0f766e;
+  --color-emerald-800: #115e59;
+  --color-emerald-900: #134e4a;
+  --color-emerald-950: #0a2b2e;
+}
+
+/* 6. کهکشان بنفش (Dark Amethyst & Orchid Gold) */
+:root[data-theme="plum-noir"] {
+  --luxury-bg: #100B18;
+  --luxury-surface: #1A1226;
+  --luxury-subtle: #241935;
+  --luxury-border: rgba(192, 132, 252, 0.26);
+  --luxury-header: rgba(20, 13, 30, 0.94);
+  --luxury-dock: rgba(20, 13, 30, 0.96);
+  --luxury-accent: #C084FC;
+  --luxury-gold: #F472B6;
+  --color-emerald-50: #faf5ff;
+  --color-emerald-100: #f3e8ff;
+  --color-emerald-200: #e9d5ff;
+  --color-emerald-300: #d8b4fe;
+  --color-emerald-400: #c084fc;
+  --color-emerald-500: #a855f7;
+  --color-emerald-600: #9333ea;
+  --color-emerald-700: #7e22ce;
+  --color-emerald-800: #6b21a8;
+  --color-emerald-900: #581c87;
+  --color-emerald-950: #2e1065;
+  --color-amber-50: #fdf2f8;
+  --color-amber-100: #fce7f3;
+  --color-amber-200: #fbcfe8;
+  --color-amber-300: #f9a8d4;
+  --color-amber-400: #f472b6;
+  --color-amber-500: #ec4899;
+  --color-amber-600: #db2777;
+  --color-amber-700: #be185d;
+  --color-amber-800: #9d174d;
+  --color-amber-900: #831843;
+  --color-amber-950: #500724;
+}
+
+/* Dynamically re-skin hardcoded surface cards/inputs/headers across all views */
+:root[data-theme="nordic-linen"] .bg-white,
+:root[data-theme="espresso-sand"] .bg-white,
+:root[data-theme="rose-sakura"] .bg-white {
+  background-color: var(--luxury-surface);
+}
+
+:root[data-theme="nordic-linen"] .bg-\[\#FAF9F6\],
+:root[data-theme="espresso-sand"] .bg-\[\#FAF9F6\],
+:root[data-theme="rose-sakura"] .bg-\[\#FAF9F6\] {
+  background-color: var(--luxury-bg);
+}
+
+:root[data-theme="velvet-night"] .dark\:bg-\[\#121E1C\],
+:root[data-theme="plum-noir"] .dark\:bg-\[\#121E1C\],
+:root[data-theme="velvet-night"] .dark\:bg-\[\#0E1816\],
+:root[data-theme="plum-noir"] .dark\:bg-\[\#0E1816\] {
+  background-color: var(--luxury-surface);
+}
+
+:root[data-theme="velvet-night"] .dark\:bg-\[\#0B1312\],
+:root[data-theme="plum-noir"] .dark\:bg-\[\#0B1312\],
+:root[data-theme="velvet-night"] .dark\:bg-\[\#0B1412\],
+:root[data-theme="plum-noir"] .dark\:bg-\[\#0B1412\],
+:root[data-theme="velvet-night"] .dark\:bg-\[\#172724\],
+:root[data-theme="plum-noir"] .dark\:bg-\[\#172724\],
+:root[data-theme="velvet-night"] .dark\:bg-\[\#12201D\],
+:root[data-theme="plum-noir"] .dark\:bg-\[\#12201D\] {
+  background-color: var(--luxury-subtle);
+}
+
+:root[data-theme="velvet-night"] .dark\:border-emerald-950\/70,
+:root[data-theme="plum-noir"] .dark\:border-emerald-950\/70,
+:root[data-theme="velvet-night"] .dark\:border-emerald-950\/80,
+:root[data-theme="plum-noir"] .dark\:border-emerald-950\/80,
+:root[data-theme="velvet-night"] .dark\:border-emerald-900,
+:root[data-theme="plum-noir"] .dark\:border-emerald-900 {
+  border-color: var(--luxury-border);
+}

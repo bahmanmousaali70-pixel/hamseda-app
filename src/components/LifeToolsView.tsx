@@ -1027,7 +1027,7 @@ export const QuickVaultPanel: React.FC<QuickVaultPanelProps> = ({
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="عنوان (مثلاً کارت ملت بهمن، کد پستی خانه، رمز وای‌فای)"
+          placeholder="عنوان (مثلاً کارت بانک ملت، کد پستی خانه، رمز وای‌فای)"
           className="sm:col-span-4 min-h-[44px] px-4 rounded-xl border border-[#DFDBD0] dark:border-emerald-900 bg-[#FAF9F6] dark:bg-[#0B1312] text-sm text-slate-900 dark:text-white"
         />
         <input

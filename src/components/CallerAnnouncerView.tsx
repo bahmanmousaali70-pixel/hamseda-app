@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import {toPersianDigits, VOICE_PERSONAS} from '../data/persianLibrary';
 import {apiUrl, safeReadJsonResponse} from '../services/apiConfig';
+import {getCoinProtectedHeaders} from '../services/sponsorAdsService';
 import {
   buildCallerRingtoneWav,
   getAudioClipBuffer,
@@ -232,7 +233,7 @@ export const CallerAnnouncerView: React.FC<CallerAnnouncerViewProps> = ({
   const partnerOther = getPartnerNameForDevice(settings, deviceOwner);
   // Quick Bilingual Tester
   const [testName, setTestName] = useState(
-    deviceOwner === 'zari' ? 'Bahman جان · همسر' : 'Zari جان · مدیر پروژه'
+    deviceOwner === 'zari' ? 'Ali جان · همکار' : 'Sara جان · مدیر پروژه'
   );
   const [testTemplate, setTestTemplate] = useState(TEMPLATES[0]);
   const [testVoice, setTestVoice] = useState<VoiceName>(defaultVoice);
@@ -617,7 +618,7 @@ export const CallerAnnouncerView: React.FC<CallerAnnouncerViewProps> = ({
     try {
       const res = await fetch(apiUrl('/api/caller-pronounce'), {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: await getCoinProtectedHeaders('ai_phonetic'),
         body: JSON.stringify({name: testName.trim(), template: testTemplate}),
       });
       const parsed = await safeReadJsonResponse<{spokenScript?: string; persianPhonetic?: string; error?: string}>(res);

@@ -1,10 +1,10 @@
-name: Build signed Android App Bundle
+name: Build signed Release APK & AAB (Myket / Bazaar / Play)
 
 on:
   workflow_dispatch:
     inputs:
       confirm_release_build:
-        description: Build a signed release AAB from main (does not publish it)
+        description: Build signed Release APK (Myket/Bazaar) and AAB (Google Play) from main
         required: true
         type: boolean
         default: false
@@ -13,8 +13,8 @@ permissions:
   contents: read
 
 jobs:
-  build-release-aab:
-    if: github.ref == 'refs/heads/main' && inputs.confirm_release_build == true
+  build-release-stores:
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && inputs.confirm_release_build == true
     runs-on: ubuntu-latest
     env:
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -42,7 +42,7 @@ jobs:
           keytool -list -keystore "$KEYSTORE_PATH" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" >/dev/null
           echo "ANDROID_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
 
-      - name: Set up Node.js 22
+      - name: Set up Node.js 24
         uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -75,24 +75,40 @@ jobs:
           VITE_APP_VERSION="1.0.${GITHUB_RUN_NUMBER}" npm run build
           npx cap sync android
 
-      - name: Build signed Release AAB
+      - name: Build signed Release APK & AAB
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew bundleRelease --no-daemon
+          ./gradlew assembleRelease bundleRelease --no-daemon
 
-      - name: Verify AAB and upload certificate
+      - name: Verify Release APK, Release AAB, and signing certificate
         shell: bash
         run: |
           set -euo pipefail
+          APK="android/app/build/outputs/apk/release/app-release.apk"
           AAB="android/app/build/outputs/bundle/release/app-release.aab"
+          APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          AAPT2="$ANDROID_HOME/build-tools/36.0.0/aapt2"
+          test -s "$APK"
           test -s "$AAB"
+          unzip -t "$APK" >/dev/null
           unzip -t "$AAB" >/dev/null
+          "$AAPT2" dump badging "$APK" | head -n 25
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
           jarsigner -verify -verbose -certs "$AAB" >/dev/null
           keytool -list -v -keystore "$ANDROID_KEYSTORE_PATH" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" | grep -E "SHA256:|SHA1:"
-          ls -lh "$AAB"
+          cp "$APK" hamseda-release.apk
+          ls -lh "$APK" "$AAB"
 
-      - name: Upload signed AAB artifact
+      - name: Upload signed Release APK (Myket & Cafe Bazaar)
+        uses: actions/upload-artifact@v4
+        with:
+          name: hamseda-release-apk
+          path: hamseda-release.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload signed Release AAB (Google Play & Cafe Bazaar)
         uses: actions/upload-artifact@v4
         with:
           name: hamseda-release-aab

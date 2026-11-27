@@ -30,6 +30,7 @@ import {
 import {toPersianDigits, VOICE_PERSONAS} from '../data/persianLibrary';
 import type {PersistentMediaPlayer, RadioCategory} from '../hooks/useMediaPlayer';
 import {apiUrl, safeReadJsonResponse} from '../services/apiConfig';
+import {getCoinProtectedHeaders} from '../services/sponsorAdsService';
 import type {
   AppSettings,
   CoinGatedFeatureKey,
@@ -294,7 +295,7 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
     try {
       const res = await fetch(apiUrl('/api/special-message'), {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: await getCoinProtectedHeaders('ai_special_message'),
         body: JSON.stringify({
           occasion: chosenOccasion,
           recipient: targetPerson,
@@ -351,7 +352,7 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
     try {
       const res = await fetch(apiUrl('/api/night-discover'), {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: await getCoinProtectedHeaders(feature),
         body: JSON.stringify({
           mode,
           moodOrGenre: queryText,

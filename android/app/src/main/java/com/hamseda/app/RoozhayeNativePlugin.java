@@ -310,8 +310,8 @@ public class RoozhayeNativePlugin extends Plugin {
     @PluginMethod
     public void setDeviceIdentity(PluginCall call) {
         String deviceOwner = call.getString("deviceOwner", "man");
-        String selfName = call.getString("selfName", "بهمن");
-        String partnerName = call.getString("partnerName", "زری");
+        String selfName = call.getString("selfName", "من");
+        String partnerName = call.getString("partnerName", "همراه");
         String assistantName = call.getString("assistantName", "هم‌صدا");
 
         SharedPreferences prefs = getContext().getSharedPreferences("rmz_native_prefs", Context.MODE_PRIVATE);
@@ -2086,8 +2086,8 @@ public class RoozhayeNativePlugin extends Plugin {
 
     @PluginMethod
     public void testNativeCallAnnouncement(PluginCall call) {
-        String name = call.getString("name", "زری جان");
-        String script = call.getString("script", "تماس ورودی از طرف زری جان");
+        String name = call.getString("name", "همراه جان");
+        String script = call.getString("script", "تماس ورودی از طرف همراه جان");
         String gender = call.getString("gender", "female");
         String voiceName = call.getString("voiceName", "male".equals(gender) ? "Charon" : "Kore");
 
@@ -2099,7 +2099,7 @@ public class RoozhayeNativePlugin extends Plugin {
 
     @PluginMethod
     public void testNativeSmsAnnouncement(PluginCall call) {
-        String sender = call.getString("sender", "زری جان");
+        String sender = call.getString("sender", "همراه جان");
         String body = call.getString("body", "سلام، یادت نره امروز استراحت کنی");
         String gender = call.getString("gender", "female");
         String voiceName = call.getString("voiceName", "male".equals(gender) ? "Charon" : "Kore");

@@ -3,7 +3,6 @@ import {initializeApp} from 'firebase/app';
 import {
   getAuth,
   GoogleAuthProvider,
-  linkWithPopup,
   onAuthStateChanged,
   signInAnonymously,
   signInWithPopup,
@@ -242,28 +241,8 @@ export async function signInAdminWithGoogle(): Promise<User> {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({prompt: 'select_account'});
 
-  let signedUser: User;
-  if (auth.currentUser?.isAnonymous) {
-    try {
-      const linked = await linkWithPopup(auth.currentUser, provider);
-      signedUser = linked.user;
-    } catch (err) {
-      const code = (err as {code?: string})?.code || '';
-      if (
-        code === 'auth/credential-already-in-use' ||
-        code === 'auth/email-already-in-use' ||
-        code === 'auth/provider-already-linked'
-      ) {
-        const res = await signInWithPopup(auth, provider);
-        signedUser = res.user;
-      } else {
-        throw err;
-      }
-    }
-  } else {
-    const res = await signInWithPopup(auth, provider);
-    signedUser = res.user;
-  }
+  const res = await signInWithPopup(auth, provider);
+  const signedUser = res.user;
 
   if (!isVerifiedAdminUser(signedUser)) {
     await signOut(auth);

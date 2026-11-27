@@ -18,7 +18,8 @@ service cloud.firestore {
     function isAdmin() {
       return isSignedIn()
         && request.auth.token.email == 'mehdi.secret7@gmail.com'
-        && request.auth.token.email_verified == true;
+        && request.auth.token.email_verified == true
+        && request.auth.token.firebase.sign_in_provider == 'google.com';
     }
 
     function isValidId(id) {
@@ -166,7 +167,7 @@ service cloud.firestore {
     function isValidSpaceSettings(data) {
       return data.keys().hasAll(['theme', 'defaultVoice', 'speechRate', 'myName', 'partnerName', 'backgroundKeepAlive', 'updatedByUid', 'updatedAt'])
         && data.keys().hasOnly(['theme', 'defaultVoice', 'speechRate', 'myName', 'partnerName', 'assistantName', 'assistantWakeWordEnabled', 'backgroundKeepAlive', 'announceCalls', 'announceSms', 'autoOpenMorning', 'nightMovieAutoCheck', 'nightMovieTime', 'updatedByUid', 'updatedAt'])
-        && data.theme is string && data.theme in ['emerald-pearl', 'nordic-linen', 'espresso-sand', 'velvet-night', 'plum-noir', 'light', 'dark']
+        && data.theme is string && data.theme in ['emerald-pearl', 'nordic-linen', 'espresso-sand', 'rose-sakura', 'velvet-night', 'plum-noir', 'light', 'dark']
         && data.defaultVoice is string && data.defaultVoice in ['Kore', 'Zephyr', 'Puck', 'Charon', 'Fenrir']
         && data.speechRate is number && data.speechRate >= 0.5 && data.speechRate <= 2.0
         && data.myName is string && data.myName.size() >= 1 && data.myName.size() <= 60
@@ -352,7 +353,7 @@ service cloud.firestore {
 
     function isValidSponsorAd(data, adId) {
       return data.keys().hasAll(['id', 'title', 'description', 'imageUrl', 'linkUrl', 'rewardCoins', 'durationSeconds', 'active', 'impressions', 'clicks', 'createdByUid', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['id', 'title', 'description', 'imageUrl', 'linkUrl', 'rewardCoins', 'durationSeconds', 'active', 'impressions', 'clicks', 'createdByUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'title', 'description', 'imageUrl', 'linkUrl', 'rewardCoins', 'durationSeconds', 'active', 'packageTier', 'priority', 'durationDays', 'expiresAt', 'brandLabel', 'impressions', 'clicks', 'createdByUid', 'createdAt', 'updatedAt'])
         && data.id is string && data.id == adId && isValidId(data.id)
         && data.title is string && data.title.size() >= 2 && data.title.size() <= 120
         && data.description is string && data.description.size() >= 2 && data.description.size() <= 300
@@ -361,6 +362,11 @@ service cloud.firestore {
         && data.rewardCoins is number && data.rewardCoins >= 5 && data.rewardCoins <= 500
         && data.durationSeconds is number && data.durationSeconds >= 5 && data.durationSeconds <= 60
         && data.active is bool
+        && (!('packageTier' in data) || (data.packageTier is string && data.packageTier in ['starter', 'standard', 'featured', 'exclusive']))
+        && (!('priority' in data) || (data.priority is number && data.priority >= 1 && data.priority <= 10))
+        && (!('durationDays' in data) || (data.durationDays is number && data.durationDays >= 0 && data.durationDays <= 365))
+        && (!('expiresAt' in data) || (data.expiresAt is number && data.expiresAt >= 0 && data.expiresAt <= 9999999999999))
+        && (!('brandLabel' in data) || (data.brandLabel is string && data.brandLabel.size() <= 60))
         && data.impressions is number && data.impressions >= 0 && data.impressions <= 100000000
         && data.clicks is number && data.clicks >= 0 && data.clicks <= 100000000
         && data.createdByUid is string && isValidId(data.createdByUid)
@@ -814,16 +820,57 @@ service cloud.firestore {
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
-          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'imageUrl', 'linkUrl', 'rewardCoins', 'durationSeconds', 'active', 'impressions', 'clicks', 'updatedAt']))
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'imageUrl', 'linkUrl', 'rewardCoins', 'durationSeconds', 'active', 'packageTier', 'priority', 'durationDays', 'expiresAt', 'brandLabel', 'impressions', 'clicks', 'updatedAt']))
           || (isAuthenticatedDevice()
             && existing().active == true
-            && incoming().diff(existing()).affectedKeys().hasOnly(['impressions', 'clicks', 'updatedAt'])
-            && incoming().impressions >= existing().impressions
-            && incoming().impressions <= existing().impressions + 1
-            && incoming().clicks >= existing().clicks
-            && incoming().clicks <= existing().clicks + 1)
+            && incoming().diff(existing()).affectedKeys().hasOnly(['impressions', 'updatedAt'])
+            && incoming().impressions == existing().impressions + 1
+            && incoming().clicks == existing().clicks
+            && getAfter(/databases/$(database)/documents/sponsorAds/$(adId)/userMetrics/$(request.auth.uid)).data.lastImpressionAt == request.time)
+          || (isAuthenticatedDevice()
+            && existing().active == true
+            && incoming().diff(existing()).affectedKeys().hasOnly(['clicks', 'updatedAt'])
+            && incoming().clicks == existing().clicks + 1
+            && incoming().impressions == existing().impressions
+            && getAfter(/databases/$(database)/documents/sponsorAds/$(adId)/userMetrics/$(request.auth.uid)).data.lastClickAt == request.time)
         );
       allow delete: if isAdmin() && isValidId(adId);
+
+      match /userMetrics/{metricUid} {
+        allow get: if isAuthenticatedDevice()
+          && isValidId(adId)
+          && isValidId(metricUid)
+          && (metricUid == request.auth.uid || isAdmin());
+        allow create: if isAuthenticatedDevice()
+          && isValidId(adId)
+          && isValidId(metricUid)
+          && metricUid == request.auth.uid
+          && incoming().keys().hasOnly(['uid', 'lastImpressionAt', 'lastClickAt'])
+          && incoming().uid is string && incoming().uid == request.auth.uid && isValidId(incoming().uid)
+          && (
+            (incoming().keys().hasAll(['uid', 'lastImpressionAt'])
+              && !('lastClickAt' in incoming())
+              && incoming().lastImpressionAt == request.time)
+            || (incoming().keys().hasAll(['uid', 'lastClickAt'])
+              && !('lastImpressionAt' in incoming())
+              && incoming().lastClickAt == request.time)
+          );
+        allow update: if isAuthenticatedDevice()
+          && isValidId(adId)
+          && isValidId(metricUid)
+          && metricUid == request.auth.uid
+          && incoming().keys().hasOnly(['uid', 'lastImpressionAt', 'lastClickAt'])
+          && incoming().uid is string && incoming().uid == existing().uid
+          && (
+            (incoming().diff(existing()).affectedKeys().hasOnly(['lastImpressionAt'])
+              && incoming().lastImpressionAt == request.time
+              && (!('lastImpressionAt' in existing()) || request.time >= existing().lastImpressionAt + duration.value(10, 's')))
+            || (incoming().diff(existing()).affectedKeys().hasOnly(['lastClickAt'])
+              && incoming().lastClickAt == request.time
+              && (!('lastClickAt' in existing()) || request.time >= existing().lastClickAt + duration.value(10, 's')))
+          );
+        allow delete: if isAdmin() && isValidId(adId) && isValidId(metricUid);
+      }
     }
   }
 }

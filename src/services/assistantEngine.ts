@@ -17,6 +17,7 @@ import {
 } from '../utils/deviceIdentity';
 import {apiUrl, safeReadJsonResponse} from './apiConfig';
 import {isNativeAndroid, searchWebNative} from './nativeAndroidBridge';
+import {getAuthenticatedHeaders, getCoinProtectedHeaders} from './sponsorAdsService';
 
 export interface PendingAssistantIntent {
   type:
@@ -80,16 +81,11 @@ export function findBestContactMatch(
   const partnerNorm = normalizeAssistantText(partnerName);
 
   // Keep the spoken alias as a candidate. A saved contact may literally be
-  // named «خانومی» even when the configured partner name is «زری».
+  // named by nickname even when a different partner name is configured.
   const isPartnerShortcut = getPartnerKeywords().includes(effectiveQuery);
   if (isPartnerShortcut) effectiveQuery = partnerNorm;
 
   const candidateNames = Array.from(new Set([rawQueryNorm, effectiveQuery].filter(Boolean)));
-  if (effectiveQuery === 'زری' || effectiveQuery === 'زهرا') {
-    candidateNames.push('zari', 'zahra', 'زری', 'زهرا');
-  } else if (effectiveQuery === 'بهمن') {
-    candidateNames.push('bahman', 'بهمن');
-  }
 
   let bestScore = 0;
   let bestContact: {name: string; phone: string} | null = null;
@@ -934,7 +930,7 @@ export async function processAssistantUtterance(
     try {
       res = await fetch(apiUrl('/api/assistant-command'), {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: await getCoinProtectedHeaders('ai_assistant_online'),
         signal: commandController.signal,
         body: JSON.stringify({
           utterance: effectiveUtterance,
@@ -1000,7 +996,7 @@ export async function processAssistantUtterance(
       try {
         const chatRes = await fetch(apiUrl('/api/assistant-chat'), {
           method: 'POST',
-          headers: {'Content-Type': 'application/json'},
+          headers: await getAuthenticatedHeaders(),
           signal: chatController.signal,
           body: JSON.stringify({
             assistantName,

@@ -470,7 +470,7 @@ export const VoiceLibraryView: React.FC<VoiceLibraryViewProps> = ({
                 type="text"
                 value={customTitle}
                 onChange={(e) => setCustomTitle(e.target.value)}
-                placeholder="مثلاً: پیام صبح بخیر ویژه زری"
+                placeholder="مثلاً: پیام صبح بخیر یا یادآور روزانه"
                 className="w-full min-h-[44px] px-3.5 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50/70 dark:bg-[#0B1312] text-sm text-slate-900 dark:text-white"
               />
             </div>
@@ -483,7 +483,7 @@ export const VoiceLibraryView: React.FC<VoiceLibraryViewProps> = ({
                 rows={4}
                 value={customText}
                 onChange={(e) => setCustomText(e.target.value)}
-                placeholder="متن دلخواه خود را بنویسید. مثلاً: زری جان صبح بخیر! جلسه امروز ساعت ده با تیم Project Alpha برگزار می‌شود."
+                placeholder="متن دلخواه خود را بنویسید. مثلاً: سلام! جلسه امروز ساعت ده با تیم Project Alpha برگزار می‌شود."
                 className="w-full px-3.5 py-3 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50/70 dark:bg-[#0B1312] text-sm leading-7 text-slate-900 dark:text-white"
               />
             </div>

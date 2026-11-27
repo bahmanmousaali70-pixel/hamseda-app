@@ -6,7 +6,9 @@ import {
   Coins,
   Download,
   HeartHandshake,
+  HelpCircle,
   LayoutGrid,
+  Megaphone,
   Mic,
   Moon,
   Music2,
@@ -39,6 +41,8 @@ interface TopBarProps {
   onSelectTab: (tab: AppTab) => void;
   onQuickPlayMorning: () => void;
   onOpenDriveMode: () => void;
+  onOpenOnboarding?: () => void;
+  onSecretLogoTap?: () => void;
 }
 
 const DESKTOP_NAV_ITEMS: {id: AppTab; label: string; subtitle: string; icon: React.FC<{className?: string}>}[] = [
@@ -49,10 +53,11 @@ const DESKTOP_NAV_ITEMS: {id: AppTab; label: string; subtitle: string; icon: Rea
   {id: 'gratitude', label: 'شکرگذاری', subtitle: 'دفتر قدردانی و یادداشت مهر', icon: HeartHandshake},
   {id: 'voice', label: 'کتابخانه صوتی', subtitle: 'صداهای آفلاین، کلون صدا و دانلود', icon: AudioLines},
   {id: 'caller', label: 'تماس و پیامک', subtitle: 'اعلام نام تماس‌گیرنده و پیامک', icon: PhoneCall},
+  {id: 'tariffs', label: 'تعرفه تبلیغات', subtitle: 'تعرفه‌های حمایت و ثبت تبلیغ غیرمزاحم', icon: Megaphone},
   {id: 'sync', label: 'تنظیمات', subtitle: 'همگام‌سازی ابری، زمان‌بندی و نصب', icon: Settings},
 ];
 
-const MOBILE_PRIMARY_TABS: {id: Exclude<AppTab, 'gratitude' | 'voice'>; label: string; icon: React.FC<{className?: string}>}[] = [
+const MOBILE_PRIMARY_TABS: {id: Exclude<AppTab, 'gratitude' | 'voice' | 'tariffs' | 'admin'>; label: string; icon: React.FC<{className?: string}>}[] = [
   {id: 'today', label: 'امروز', icon: Sun},
   {id: 'assistant', label: 'دستیار', icon: Mic},
   {id: 'night', label: 'رسانه', icon: Music2},
@@ -61,6 +66,7 @@ const MOBILE_PRIMARY_TABS: {id: Exclude<AppTab, 'gratitude' | 'voice'>; label: s
 ];
 
 const MORE_DRAWER_TABS: {id: AppTab; label: string; subtitle: string; icon: React.FC<{className?: string}>}[] = [
+  {id: 'tariffs', label: 'تعرفه تبلیغات و حمایت', subtitle: 'تعرفه درج بنر غیرمزاحم، مدل ۳ ساعته و شفافیت سکه', icon: Megaphone},
   {id: 'family', label: 'سلامت خانواده', subtitle: 'پرونده سلامت و یادداشت‌های مراقبتی', icon: Users},
   {id: 'gratitude', label: 'شکرگذاری و انرژی', subtitle: 'ثبت شکرگذاری روزانه و پیام انرژی‌بخش', icon: HeartHandshake},
   {id: 'voice', label: 'کتابخانه صوتی', subtitle: 'صداهای ذخیره‌شده، حذف نویز و کلون صدا', icon: AudioLines},
@@ -81,6 +87,8 @@ export const TopBar: React.FC<TopBarProps> = ({
   onSelectTab,
   onQuickPlayMorning,
   onOpenDriveMode,
+  onOpenOnboarding,
+  onSecretLogoTap,
 }) => {
   const {isInstallable, isInstalled, isIOS, install} = usePWAInstall();
   const [showIOSGuide, setShowIOSGuide] = useState(false);
@@ -88,18 +96,37 @@ export const TopBar: React.FC<TopBarProps> = ({
   const [showThemeMenu, setShowThemeMenu] = useState(false);
 
   const activeThemeMeta = getThemeMeta(theme);
-  const isDrawerTabActive = activeTab === 'gratitude' || activeTab === 'voice' || activeTab === 'sync' || activeTab === 'family';
+  const isDrawerTabActive =
+    activeTab === 'gratitude' ||
+    activeTab === 'voice' ||
+    activeTab === 'sync' ||
+    activeTab === 'family' ||
+    activeTab === 'tariffs' ||
+    activeTab === 'admin';
   const drawerActiveShortLabel =
-    activeTab === 'gratitude' ? 'شکر' : activeTab === 'voice' ? 'صوت' : activeTab === 'sync' ? 'تنظیم' : activeTab === 'family' ? 'خانواده' : 'بخش‌ها';
+    activeTab === 'tariffs' || activeTab === 'admin'
+      ? 'تعرفه'
+      : activeTab === 'gratitude'
+        ? 'شکر'
+        : activeTab === 'voice'
+          ? 'صوت'
+          : activeTab === 'sync'
+            ? 'تنظیم'
+            : activeTab === 'family'
+              ? 'خانواده'
+              : 'بخش‌ها';
 
   return (
     <>
-      <header className="sticky top-0 z-30 border-b border-[#E6E2D8] dark:border-emerald-950/80 bg-[#FAF9F6]/92 dark:bg-[#0B1412]/92 backdrop-blur-xl">
+      <header className="sticky top-0 z-30 border-b luxury-header backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 md:h-16 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2.5 min-w-0 shrink-0">
             <button
               type="button"
-              onClick={() => onSelectTab('today')}
+              onClick={() => {
+                onSelectTab('today');
+                onSecretLogoTap?.();
+              }}
               className="flex items-center gap-2 text-base md:text-lg font-extrabold tracking-tight text-slate-900 dark:text-slate-50 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-emerald-600 rounded-lg px-1"
             >
               <img
@@ -113,7 +140,7 @@ export const TopBar: React.FC<TopBarProps> = ({
               type="button"
               onClick={() => onSelectTab('sync')}
               title="تغییر هویت گوشی"
-              className="text-[11px] font-semibold text-emerald-800 dark:text-amber-300 hover:underline whitespace-nowrap cursor-pointer"
+              className="hidden sm:inline text-[11px] font-semibold text-emerald-800 dark:text-amber-300 hover:underline whitespace-nowrap cursor-pointer"
             >
               · گوشی {selfName}
             </button>
@@ -146,11 +173,14 @@ export const TopBar: React.FC<TopBarProps> = ({
             <button
               type="button"
               onClick={onOpenSponsorReward}
-              title="موجودی سکه هوش مصنوعی · مشاهده حامی ۱۰ ثانیه‌ای برای دریافت +۳۰ سکه"
-              className="min-h-[40px] px-2.5 sm:px-3 rounded-xl border border-amber-400/45 bg-amber-50/90 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 flex items-center gap-1.5 text-xs font-extrabold cursor-pointer shrink-0 shadow-xs"
+              title="افزایش سکه رایگان · مشاهده حامی (+۳۰) یا عضویت در اینستاگرام و بله (+۳۰۰ سکه)"
+              className="min-h-[40px] px-2.5 sm:px-3 rounded-xl border border-amber-400/55 bg-amber-50/95 dark:bg-amber-950/45 text-amber-800 dark:text-amber-200 flex items-center gap-1.5 text-xs font-extrabold cursor-pointer shrink-0 shadow-xs hover:brightness-95 transition-all"
             >
               <Coins className="w-4 h-4 text-amber-600 dark:text-amber-300 shrink-0" />
               <span className="font-mono-num tabular-nums">{toPersianDigits(coins)}</span>
+              <span className="text-[10px] sm:text-[11px] font-extrabold text-emerald-800 dark:text-amber-100 border-r border-amber-400/45 pr-1.5 whitespace-nowrap">
+                افزایش سکه +
+              </span>
             </button>
 
             <div className="relative">
@@ -167,8 +197,10 @@ export const TopBar: React.FC<TopBarProps> = ({
                 <Moon className="w-4 h-4" />
               </button>
               {showThemeMenu && (
-                <div className="absolute left-0 top-[calc(100%+10px)] z-[70] w-68 rounded-2xl border border-[#DFDBD0] dark:border-amber-800/50 bg-white dark:bg-[#151411] p-2.5 shadow-2xl">
-                  <div className="px-2 pb-2 text-xs font-extrabold text-slate-700 dark:text-amber-100">انتخاب ظاهر هم‌صدا (۵ پوسته)</div>
+                <div className="absolute left-0 top-[calc(100%+10px)] z-[70] w-72 rounded-2xl border border-[var(--luxury-border)] bg-[var(--luxury-surface)] p-2.5 shadow-2xl">
+                  <div className="px-2 pb-2 text-xs font-extrabold text-slate-700 dark:text-amber-100">
+                    انتخاب پوسته هم‌صدا (۶ تم کامل)
+                  </div>
                   {APP_THEMES.map((t) => (
                     <button
                       key={t.id}
@@ -214,11 +246,23 @@ export const TopBar: React.FC<TopBarProps> = ({
               type="button"
               onClick={onRefreshApp}
               title="بروزرسانی برنامه (رفرش و دریافت آخرین تغییرات)"
-              className="min-h-[40px] px-2.5 py-2 rounded-xl border border-[#DFDBD0] dark:border-emerald-900/70 bg-white/80 dark:bg-[#111E1B] text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-emerald-950/40 text-xs font-semibold flex items-center gap-1 transition-colors whitespace-nowrap cursor-pointer"
+              className="min-h-[40px] px-2.5 py-2 rounded-xl border border-[var(--luxury-border)] bg-[var(--luxury-surface)] text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-emerald-950/40 text-xs font-semibold flex items-center gap-1 transition-colors whitespace-nowrap cursor-pointer"
             >
               <RefreshCw className="w-4 h-4 shrink-0" />
               <span className="hidden xl:inline">بروزرسانی</span>
             </button>
+
+            {onOpenOnboarding && (
+              <button
+                type="button"
+                onClick={onOpenOnboarding}
+                aria-label="راهنمای شروع سریع هم‌صدا"
+                title="راهنمای شروع سریع هم‌صدا"
+                className="min-h-[40px] min-w-[40px] px-2 py-2 rounded-xl border border-[var(--luxury-border)] bg-[var(--luxury-surface)] text-emerald-800 dark:text-amber-300 hover:bg-slate-50 dark:hover:bg-emerald-950/40 flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <HelpCircle className="w-4 h-4 shrink-0" />
+              </button>
+            )}
 
             <button
               type="button"
@@ -269,7 +313,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 
       {/* Mobile Clear 5-Slot Thumb Dock */}
       <nav
-        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#FAF9F6]/95 dark:bg-[#0B1412]/95 backdrop-blur-xl border-t border-[#DFDBD0] dark:border-emerald-950/90 shadow-[0_-10px_30px_rgba(0,0,0,0.08)] pb-safe"
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 luxury-dock backdrop-blur-xl border-t shadow-[0_-10px_30px_rgba(0,0,0,0.08)] pb-safe"
         aria-label="ناوبری پایین"
       >
         <div className="grid grid-cols-6 items-center h-[68px] px-0.5">
@@ -338,7 +382,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           onClick={() => setShowMoreSheet(false)}
         >
           <div
-            className="w-full rounded-t-3xl bg-[#FAF9F6] dark:bg-[#0E1816] border-t border-[#E6E2D8] dark:border-emerald-900/80 p-5 pb-8 space-y-4 shadow-2xl"
+            className="w-full rounded-t-3xl bg-[var(--luxury-bg)] border-t border-[var(--luxury-border)] p-5 pb-8 space-y-4 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="w-10 h-1.5 rounded-full bg-slate-300 dark:bg-emerald-900 mx-auto" />
@@ -353,7 +397,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                 type="button"
                 onClick={() => setShowMoreSheet(false)}
                 aria-label="بستن فهرست"
-                className="min-h-[40px] min-w-[40px] rounded-xl border border-[#E6E2D8] dark:border-emerald-900/70 flex items-center justify-center text-slate-600 dark:text-slate-300 cursor-pointer"
+                className="min-h-[40px] min-w-[40px] rounded-xl border border-[var(--luxury-border)] flex items-center justify-center text-slate-600 dark:text-slate-300 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -374,7 +418,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                     className={`w-full min-h-[60px] px-4 py-3 rounded-2xl border flex items-center gap-3.5 text-right transition-all cursor-pointer ${
                       active
                         ? 'border-emerald-700 bg-emerald-800/10 dark:border-amber-400/50 dark:bg-emerald-950/80'
-                        : 'border-[#E6E2D8] dark:border-emerald-900/60 bg-white dark:bg-[#12201D]'
+                        : 'border-[var(--luxury-border)] bg-[var(--luxury-surface)]'
                     }`}
                   >
                     <div

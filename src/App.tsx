@@ -7,8 +7,10 @@ import {GratitudeView} from './components/GratitudeView';
 import {FamilyLifeSuite} from './components/FamilyLifeSuite';
 import {advanceDateKey} from './components/LifeToolsView';
 import {NightAndMessagesView} from './components/NightAndMessagesView';
+import {OnboardingGuideModal} from './components/OnboardingGuideModal';
 import {PersistentMiniPlayer} from './components/PersistentMiniPlayer';
 import {SponsorRewardModal} from './components/SponsorRewardModal';
+import {SponsorTariffView} from './components/SponsorTariffView';
 import {SyncSettingsView} from './components/SyncSettingsView';
 import {TodayView} from './components/TodayView';
 import {TopBar} from './components/TopBar';
@@ -78,9 +80,15 @@ import {
 import {
   COIN_COSTS,
   fetchActiveSponsorAds,
+  getCoinProtectedHeaders,
+  getExclusiveFooterSponsor,
   pickSponsorAdForUser,
   readWalletSnapshot,
+  spendCoinsOnServer,
+  subscribeActiveSponsorAds,
+  syncWalletWithServer,
   writeWalletSnapshot,
+  type SocialSponsorMissionId,
   type WalletSnapshot,
 } from './services/sponsorAdsService';
 import {buildDailyBriefingText, fetchQuickWeatherBrief} from './services/dailyBriefing';
@@ -89,6 +97,7 @@ import {
   onAuthStateChanged,
   ensureAnonymousDeviceIdentity,
   diagnoseFirebaseAuthNetwork,
+  isVerifiedAdminUser,
 } from './services/firebaseClient';
 import {
   setActiveOfflineEngineNative,
@@ -253,7 +262,25 @@ function markCloudSpaceHydrated(spaceId: string): void {
 
 export default function App() {
   const isOnline = useOnlineStatus();
-  const [activeTab, setActiveTab] = useState<AppTab>('today');
+  const [adminUnlocked, setAdminUnlocked] = useState<boolean>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('panel') === 'admin' || window.location.hash === '#admin';
+    } catch {
+      return false;
+    }
+  });
+  const [activeTab, setActiveTab] = useState<AppTab>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('panel') === 'admin' || window.location.hash === '#admin') {
+        return 'tariffs';
+      }
+    } catch {
+      // ignore URL parsing errors
+    }
+    return 'today';
+  });
   const [todaySubSection, setTodaySubSection] = useState<TodaySubSection>('planner');
   const [driveModeOpen, setDriveModeOpen] = useState(false);
   const [pendingAssistantQuery, setPendingAssistantQuery] = useState<{text: string; nonce: number} | null>(null);
@@ -264,19 +291,43 @@ export default function App() {
     nonce: number;
   } | null>(null);
 
+  const [onboardingOpen, setOnboardingOpen] = useState<boolean>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('panel') === 'admin' || window.location.hash === '#admin') {
+        return false;
+      }
+      return localStorage.getItem('hamseda_onboarding_seen_v1') !== '1';
+    } catch {
+      return false;
+    }
+  });
+
   const [settings, setSettings] = useState<AppSettings>(() => {
     const saved = readJsonStorage<Partial<AppSettings>>(STORAGE_KEYS.settings, {});
+    let alreadyMigrated = false;
+    try {
+      alreadyMigrated = localStorage.getItem('hamseda_names_migrated_v2') === '1';
+      if (!alreadyMigrated) {
+        localStorage.setItem('hamseda_names_migrated_v2', '1');
+      }
+    } catch {
+      // ignore storage errors
+    }
+    const rawMyName = typeof saved.myName === 'string' ? saved.myName.trim() : '';
+    const rawPartnerName = typeof saved.partnerName === 'string' ? saved.partnerName.trim() : '';
+    const rawAssistantName = typeof saved.assistantName === 'string' ? saved.assistantName.trim() : '';
     const normalizedMyName =
-      typeof saved.myName === 'string' && saved.myName.trim() && saved.myName.trim() !== 'مهدی' && saved.myName.trim() !== 'بهمن'
-        ? saved.myName.trim()
+      rawMyName && (alreadyMigrated || (rawMyName !== 'مهدی' && rawMyName !== 'بهمن'))
+        ? rawMyName
         : 'من';
     const normalizedPartnerName =
-      typeof saved.partnerName === 'string' && saved.partnerName.trim() && saved.partnerName.trim() !== 'زری'
-        ? saved.partnerName.trim()
+      rawPartnerName && (alreadyMigrated || rawPartnerName !== 'زری')
+        ? rawPartnerName
         : 'همراه';
     const normalizedAssistantName =
-      typeof saved.assistantName === 'string' && saved.assistantName.trim() && !['بهمن', 'زری', 'آوا'].includes(saved.assistantName.trim())
-        ? saved.assistantName.trim()
+      rawAssistantName && (alreadyMigrated || !['بهمن', 'زری', 'آوا'].includes(rawAssistantName))
+        ? rawAssistantName
         : 'هم‌صدا';
     return {
       ...DEFAULT_SETTINGS,
@@ -458,14 +509,20 @@ export default function App() {
   walletRef.current = wallet;
 
   const [activeSponsorAds, setActiveSponsorAds] = useState<SponsorAdItem[]>([]);
+  const exclusiveFooterSponsor = useMemo(
+    () => getExclusiveFooterSponsor(activeSponsorAds),
+    [activeSponsorAds]
+  );
   const [sponsorModalState, setSponsorModalState] = useState<{
     open: boolean;
     ad: SponsorAdItem | null;
     reasonLabel?: string;
     requiredCoins?: number;
+    previewOnly?: boolean;
   }>({open: false, ad: null});
 
   const pendingCoinRequestRef = useRef<{
+    feature: CoinGatedFeatureKey;
     cost: number;
     label: string;
     resolve: (granted: boolean) => void;
@@ -476,13 +533,22 @@ export default function App() {
   }, [wallet]);
 
   const openSponsorRewardModal = useCallback(
-    (reasonLabel?: string, requiredCoins?: number) => {
-      const ad = pickSponsorAdForUser(activeSponsorAds, walletRef.current.totalAdsWatched);
+    async (reasonLabel?: string, requiredCoins?: number) => {
+      let pool = activeSponsorAds;
+      if (pool.length === 0) {
+        const fresh = await fetchActiveSponsorAds().catch(() => []);
+        if (fresh.length > 0) {
+          pool = fresh;
+          setActiveSponsorAds(fresh);
+        }
+      }
+      const ad = pickSponsorAdForUser(pool, walletRef.current.totalAdsWatched);
       setSponsorModalState({
         open: true,
         ad,
         reasonLabel,
         requiredCoins,
+        previewOnly: false,
       });
     },
     [activeSponsorAds]
@@ -498,52 +564,85 @@ export default function App() {
   }, []);
 
   const handleClaimSponsorReward = useCallback(
-    (earnedCoins: number) => {
-      const pending = pendingCoinRequestRef.current;
-      let nextCoins = walletRef.current.coins + earnedCoins;
-      let grantedPending = false;
-
-      if (pending && nextCoins >= pending.cost) {
-        nextCoins -= pending.cost;
-        grantedPending = true;
-      }
-
-      const nextWallet: WalletSnapshot = {
-        ...walletRef.current,
-        coins: nextCoins,
-        totalAdsWatched: walletRef.current.totalAdsWatched + 1,
-      };
-      walletRef.current = nextWallet;
-      setWallet(nextWallet);
+    async (result: {earnedCoins: number; adId: string; wallet: WalletSnapshot}) => {
+      walletRef.current = result.wallet;
+      setWallet(result.wallet);
       setSponsorModalState((prev) => ({...prev, open: false}));
 
-      if (pending) {
-        pendingCoinRequestRef.current = null;
+      const pending = pendingCoinRequestRef.current;
+      if (!pending) {
+        showToast(`+${toPersianDigits(result.earnedCoins)} سکه هدیه به کیف پول هم‌صدا اضافه شد.`);
+        return;
+      }
+
+      pendingCoinRequestRef.current = null;
+      if (result.wallet.coins < pending.cost) {
         showToast(
-          grantedPending
-            ? `+${toPersianDigits(earnedCoins)} سکه دریافت شد و ${toPersianDigits(pending.cost)} سکه برای «${pending.label}» استفاده گردید.`
-            : `+${toPersianDigits(earnedCoins)} سکه هدیه اضافه شد.`
+          `+${toPersianDigits(result.earnedCoins)} سکه دریافت شد (برای «${pending.label}» به ${toPersianDigits(pending.cost)} سکه نیاز است).`
         );
-        pending.resolve(grantedPending);
-      } else {
-        showToast(`+${toPersianDigits(earnedCoins)} سکه هدیه به کیف پول هم‌صدا اضافه شد.`);
+        pending.resolve(false);
+        return;
+      }
+
+      try {
+        const spendRes = await spendCoinsOnServer(pending.feature);
+        if (spendRes.wallet) {
+          walletRef.current = spendRes.wallet;
+          setWallet(spendRes.wallet);
+        }
+        if (spendRes.ok) {
+          showToast(
+            `+${toPersianDigits(result.earnedCoins)} سکه دریافت شد و ${toPersianDigits(pending.cost)} سکه برای «${pending.label}» استفاده گردید.`
+          );
+          pending.resolve(true);
+        } else {
+          showToast(spendRes.error || `+${toPersianDigits(result.earnedCoins)} سکه هدیه اضافه شد.`);
+          pending.resolve(false);
+        }
+      } catch {
+        showToast('ارتباط با سرور کیف پول برقرار نشد؛ سکه شما ذخیره شده است.');
+        pending.resolve(false);
       }
     },
     [showToast]
   );
 
+  const handleSocialRewardClaimed = useCallback(
+    async (result: {earnedCoins: number; missionId: SocialSponsorMissionId; wallet: WalletSnapshot}) => {
+      walletRef.current = result.wallet;
+      setWallet(result.wallet);
+      if (pendingCoinRequestRef.current) {
+        await handleClaimSponsorReward({
+          earnedCoins: result.earnedCoins,
+          adId: `social:${result.missionId}`,
+          wallet: result.wallet,
+        });
+        return;
+      }
+      showToast(`+${toPersianDigits(result.earnedCoins)} سکه هدیه عضویت در شبکه اجتماعی اسپانسر اضافه شد.`);
+    },
+    [handleClaimSponsorReward, showToast]
+  );
+
   const consumeCoinsForFeature = useCallback(
-    (feature: CoinGatedFeatureKey): Promise<boolean> => {
+    async (feature: CoinGatedFeatureKey): Promise<boolean> => {
       const meta = COIN_COSTS[feature];
-      const current = walletRef.current;
-      if (current.coins >= meta.cost) {
-        const nextWallet: WalletSnapshot = {
-          ...current,
-          coins: current.coins - meta.cost,
-        };
-        walletRef.current = nextWallet;
-        setWallet(nextWallet);
-        return Promise.resolve(true);
+      try {
+        const res = await spendCoinsOnServer(feature);
+        if (res.wallet) {
+          walletRef.current = res.wallet;
+          setWallet(res.wallet);
+        }
+        if (res.ok) {
+          return true;
+        }
+      } catch (err) {
+        showToast(
+          err instanceof Error
+            ? err.message
+            : 'ارتباط با سرور کیف پول برقرار نشد؛ لطفاً اتصال اینترنت را بررسی کنید.'
+        );
+        return false;
       }
 
       if (pendingCoinRequestRef.current) {
@@ -553,6 +652,7 @@ export default function App() {
 
       return new Promise<boolean>((resolve) => {
         pendingCoinRequestRef.current = {
+          feature,
           cost: meta.cost,
           label: meta.label,
           resolve,
@@ -560,7 +660,7 @@ export default function App() {
         openSponsorRewardModal(meta.label, meta.cost);
       });
     },
-    [openSponsorRewardModal]
+    [openSponsorRewardModal, showToast]
   );
 
   // Persistent root media player (lives across tabs so live radio & music never cut off on navigation)
@@ -647,11 +747,63 @@ export default function App() {
     }
   }, []);
 
+  const secretLogoTapCountRef = useRef(0);
+  const secretLogoTapTimerRef = useRef<number | null>(null);
+
+  const handleSecretLogoTap = useCallback(() => {
+    secretLogoTapCountRef.current += 1;
+    if (secretLogoTapTimerRef.current !== null) {
+      window.clearTimeout(secretLogoTapTimerRef.current);
+    }
+    if (secretLogoTapCountRef.current >= 5) {
+      secretLogoTapCountRef.current = 0;
+      setAdminUnlocked(true);
+      setActiveTab('tariffs');
+      showToast('بخش مدیریت اسپانسر باز شد؛ با حساب گوگل مجاز وارد شوید.');
+      return;
+    }
+    secretLogoTapTimerRef.current = window.setTimeout(() => {
+      secretLogoTapCountRef.current = 0;
+    }, 2600);
+  }, [showToast]);
+
+  const handleSelectTab = useCallback((tab: AppTab) => {
+    if (tab === 'admin') {
+      setAdminUnlocked(true);
+      setActiveTab('tariffs');
+      return;
+    }
+    setActiveTab(tab);
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && (e.key === 'A' || e.key === 'a' || e.code === 'KeyA')) {
+        e.preventDefault();
+        setAdminUnlocked(true);
+        setActiveTab('tariffs');
+        showToast('بخش مدیریت اسپانسر فعال شد.');
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      if (secretLogoTapTimerRef.current !== null) {
+        window.clearTimeout(secretLogoTapTimerRef.current);
+      }
+    };
+  }, [showToast]);
+
   useEffect(() => {
     const root = document.documentElement;
     const normalizedTheme = normalizeThemeId(settings.theme);
+    const themeMeta = getThemeMeta(normalizedTheme);
     root.dataset.theme = normalizedTheme;
     root.classList.toggle('dark', DARK_THEME_IDS.has(normalizedTheme));
+    const themeColorTag = document.querySelector('meta[name="theme-color"]');
+    if (themeColorTag) {
+      themeColorTag.setAttribute('content', themeMeta.themeColorMeta);
+    }
     localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(settings));
     syncAnnounceTogglesToNative({
       announceCalls:
@@ -888,12 +1040,17 @@ export default function App() {
   // Firebase Auth listener + automatic space discovery & real-time sync
   useEffect(() => {
     let unsubSpace: (() => void) | null = null;
+    let unsubSponsorAds: (() => void) | null = null;
     let active = true;
 
     const unsubAuth = onAuthStateChanged(auth, async (user) => {
       if (unsubSpace) {
         unsubSpace();
         unsubSpace = null;
+      }
+      if (unsubSponsorAds) {
+        unsubSponsorAds();
+        unsubSponsorAds = null;
       }
 
       if (!user) {
@@ -923,10 +1080,19 @@ export default function App() {
 
       setCloudAuthError(null);
       setDeviceUid(user.uid);
+      if (isVerifiedAdminUser(user)) {
+        setAdminUnlocked(true);
+      }
       setCloudBusy(true);
-      void fetchActiveSponsorAds().then((ads) => {
-        if (active && ads.length > 0) {
+      unsubSponsorAds = subscribeActiveSponsorAds((ads) => {
+        if (active) {
           setActiveSponsorAds(ads);
+        }
+      });
+      void syncWalletWithServer().then((srvWallet) => {
+        if (active && srvWallet) {
+          walletRef.current = srvWallet;
+          setWallet(srvWallet);
         }
       });
       try {
@@ -1000,6 +1166,7 @@ export default function App() {
       active = false;
       unsubAuth();
       if (unsubSpace) unsubSpace();
+      if (unsubSponsorAds) unsubSponsorAds();
     };
   }, [showToast, cloudRetryNonce]);
 
@@ -1237,21 +1404,30 @@ export default function App() {
 
       if (schedule.topic === 'night_movies' && isOnline) {
         try {
-          const res = await fetch(apiUrl('/api/night-discover'), {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-              mode: 'movies',
-              mediaType: 'both',
-              moodOrGenre: 'پیشنهادهای برتر امشب با امتیاز IMDb بالای ۷.۵ و دوبله فارسی',
-            }),
-          });
-          if (res.ok) {
-            const parsed = await safeReadJsonResponse<NightDiscoveryResponse>(res);
-            if (!parsed.isHtml && parsed.data) {
-              setNightMoviesResult(parsed.data);
-              if (parsed.data.spokenSummary) {
-                text = `پیشنهاد فیلم و سریال دوبله امشب: ${parsed.data.spokenSummary}`;
+          if (walletRef.current.coins >= COIN_COSTS.ai_movies_discover.cost) {
+            const spendRes = await spendCoinsOnServer('ai_movies_discover');
+            if (spendRes.wallet) {
+              walletRef.current = spendRes.wallet;
+              setWallet(spendRes.wallet);
+            }
+            if (spendRes.ok) {
+              const res = await fetch(apiUrl('/api/night-discover'), {
+                method: 'POST',
+                headers: await getCoinProtectedHeaders('ai_movies_discover'),
+                body: JSON.stringify({
+                  mode: 'movies',
+                  mediaType: 'both',
+                  moodOrGenre: 'پیشنهادهای برتر امشب با امتیاز IMDb بالای ۷.۵ و دوبله فارسی',
+                }),
+              });
+              if (res.ok) {
+                const parsed = await safeReadJsonResponse<NightDiscoveryResponse>(res);
+                if (!parsed.isHtml && parsed.data) {
+                  setNightMoviesResult(parsed.data);
+                  if (parsed.data.spokenSummary) {
+                    text = `پیشنهاد فیلم و سریال دوبله امشب: ${parsed.data.spokenSummary}`;
+                  }
+                }
               }
             }
           }
@@ -1550,7 +1726,7 @@ export default function App() {
 
       const res = await fetch(apiUrl('/api/morning-message'), {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: await getCoinProtectedHeaders('ai_morning_message'),
         body: JSON.stringify({
           dayPart: getDayPart(),
           mood: 'هدفمند، سپاسگزار و پرانرژی',
@@ -2414,9 +2590,11 @@ export default function App() {
         onOpenSponsorReward={() => openSponsorRewardModal()}
         onToggleMasterSpeaker={handleToggleMasterSpeaker}
         onRefreshApp={handleRefreshApp}
-        onSelectTab={setActiveTab}
+        onSelectTab={handleSelectTab}
         onQuickPlayMorning={quickPlayMorning}
         onOpenDriveMode={() => setDriveModeOpen(true)}
+        onOpenOnboarding={() => setOnboardingOpen(true)}
+        onSecretLogoTap={handleSecretLogoTap}
       />
 
       <main className="relative flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-24 lg:pb-10">
@@ -2763,6 +2941,27 @@ export default function App() {
             onStatusToast={showToast}
           />
         )}
+
+        {(activeTab === 'tariffs' || activeTab === 'admin') && (
+          <SponsorTariffView
+            adminUnlocked={adminUnlocked}
+            onUnlockAdmin={() => setAdminUnlocked(true)}
+            onHideAdmin={() => {
+              setAdminUnlocked(false);
+              showToast('پنل مدیریت دوباره مخفی شد.');
+            }}
+            onOpenRewardModal={() => openSponsorRewardModal()}
+            onPreviewAd={(ad) =>
+              setSponsorModalState({
+                open: true,
+                ad,
+                reasonLabel: 'پیش‌نمایش بنر اسپانسر',
+                previewOnly: true,
+              })
+            }
+            onStatusToast={showToast}
+          />
+        )}
       </main>
 
       <DriveModeModal
@@ -2787,21 +2986,33 @@ export default function App() {
         onStatusToast={showToast}
       />
 
-      <footer className="border-t border-[#E6E2D8] dark:border-emerald-950/60 py-4 pb-[calc(68px+env(safe-area-inset-bottom)+8px)] lg:pb-4 px-4 text-center text-xs text-slate-500 dark:text-slate-400 space-y-1.5">
+      <footer className="border-t border-[var(--luxury-border)] py-4 pb-[calc(68px+env(safe-area-inset-bottom)+8px)] lg:pb-4 px-4 text-center text-xs text-slate-500 dark:text-slate-400 space-y-1.5">
         <div>
           هم‌صدا · برنامه‌ریزی روزانه، لیست خرید و غذا، مالی و تسویه، دارو، مناسبت‌ها، سفر، حالت رانندگی و دستیار صوتی فارسی
         </div>
-        <div>
-          نسخه رایگان هم‌صدا برای همه · با حمایت{' '}
-          <a
-            href="https://tapnfc.ir"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-bold text-emerald-800 dark:text-amber-300 underline underline-offset-4 hover:text-emerald-600"
-            dir="ltr"
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <span>
+            {exclusiveFooterSponsor
+              ? 'نسخه رایگان هم‌صدا برای همه · اسپانسر انحصاری: '
+              : 'نسخه رایگان هم‌صدا برای همه · با حمایت '}
+            <a
+              href={exclusiveFooterSponsor ? exclusiveFooterSponsor.url : 'https://tapnfc.ir'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-bold text-emerald-800 dark:text-amber-300 underline underline-offset-4 hover:text-emerald-600"
+              dir="auto"
+            >
+              {exclusiveFooterSponsor ? exclusiveFooterSponsor.label : 'tapnfc.ir'}
+            </a>
+          </span>
+          <span aria-hidden="true">·</span>
+          <button
+            type="button"
+            onClick={() => setActiveTab('tariffs')}
+            className="font-bold text-emerald-800 dark:text-amber-300 underline underline-offset-4 hover:text-emerald-600 cursor-pointer"
           >
-            tapnfc.ir
-          </a>
+            تعرفه تبلیغات و حمایت
+          </button>
         </div>
       </footer>
 
@@ -2817,8 +3028,37 @@ export default function App() {
         reasonLabel={sponsorModalState.reasonLabel}
         currentCoins={wallet.coins}
         requiredCoins={sponsorModalState.requiredCoins}
+        adQuota={wallet.adQuota}
+        claimedSocialMissions={wallet.claimedSocialMissions ?? []}
+        previewOnly={Boolean(sponsorModalState.previewOnly)}
+        onOpenTariffs={() => setActiveTab('tariffs')}
         onClose={handleCloseSponsorModal}
         onClaimReward={handleClaimSponsorReward}
+        onSocialRewardClaimed={handleSocialRewardClaimed}
+      />
+
+      <OnboardingGuideModal
+        open={onboardingOpen}
+        initialMyName={settings.myName}
+        initialPartnerName={settings.partnerName}
+        onComplete={(names, openVoiceLibrary) => {
+          try {
+            localStorage.setItem('hamseda_onboarding_seen_v1', '1');
+            localStorage.setItem('hamseda_names_migrated_v2', '1');
+          } catch {
+            // ignore storage errors
+          }
+          const nextUpdates: Partial<AppSettings> = {};
+          if (names.myName) nextUpdates.myName = names.myName;
+          if (names.partnerName) nextUpdates.partnerName = names.partnerName;
+          if (Object.keys(nextUpdates).length > 0) {
+            handleUpdateSettings(nextUpdates);
+          }
+          setOnboardingOpen(false);
+          if (openVoiceLibrary) {
+            setActiveTab('voice');
+          }
+        }}
       />
 
       {!isOnline && (

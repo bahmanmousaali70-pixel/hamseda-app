@@ -5,7 +5,58 @@ import App from './App.tsx';
 import './index.css';
 
 try {
-  registerSW({immediate: true});
+  if ('caches' in window) {
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter((k) => k.startsWith('workbox-') || k.includes('precache'))
+            .map((k) => caches.delete(k).catch(() => false))
+        )
+      )
+      .catch(() => {});
+  }
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      try {
+        const reloadKey = 'hamseda_sw_reloaded_v1';
+        if (sessionStorage.getItem(reloadKey)) return;
+        sessionStorage.setItem(reloadKey, '1');
+      } catch {
+        // ignore storage errors
+      }
+      window.location.reload();
+    });
+
+    const checkAllRegistrations = () => {
+      navigator.serviceWorker
+        .getRegistrations()
+        .then((regs) => Promise.all(regs.map((r) => r.update().catch(() => {}))))
+        .catch(() => {});
+    };
+
+    checkAllRegistrations();
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        checkAllRegistrations();
+      }
+    });
+
+    if (import.meta.env.DEV) {
+      navigator.serviceWorker.register('/sw.js', {updateViaCache: 'none'}).catch(() => {});
+    } else {
+      registerSW({
+        immediate: true,
+        onRegisteredSW(_swUrl, reg) {
+          if (reg) {
+            reg.update().catch(() => {});
+          }
+        },
+      });
+    }
+  }
 } catch {
   // Service worker registration skipped in unsupported WebView environments
 }

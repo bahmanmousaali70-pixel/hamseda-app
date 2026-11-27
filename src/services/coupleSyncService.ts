@@ -99,7 +99,7 @@ export async function ensureUserAndDiscoverSpace(user: User): Promise<CoupleSpac
         await ensureMembership(activeSpaceId, uid, displayName, role);
         return {
           spaceId: activeSpaceId,
-          title: sdata.title ?? 'فضای مشترک من و زری',
+          title: sdata.title ?? 'فضای مشترک هم‌صدا',
           ownerUid: sdata.ownerUid,
           role,
         };
@@ -124,7 +124,7 @@ export async function ensureUserAndDiscoverSpace(user: User): Promise<CoupleSpac
       });
       return {
         spaceId: foundId,
-        title: sdata.title ?? 'فضای مشترک من و زری',
+        title: sdata.title ?? 'فضای مشترک هم‌صدا',
         ownerUid: sdata.ownerUid,
         role: 'owner',
       };
@@ -138,7 +138,7 @@ export async function ensureUserAndDiscoverSpace(user: User): Promise<CoupleSpac
   try {
     await setDoc(doc(db, 'spaces', newSpaceId), {
       ownerUid: uid,
-      title: 'فضای مشترک روزهای من و زری',
+      title: 'فضای مشترک هم‌صدا',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
@@ -153,7 +153,7 @@ export async function ensureUserAndDiscoverSpace(user: User): Promise<CoupleSpac
 
   return {
     spaceId: newSpaceId,
-    title: 'فضای مشترک روزهای من و زری',
+    title: 'فضای مشترک هم‌صدا',
     ownerUid: uid,
     role: 'owner',
   };
@@ -951,8 +951,8 @@ export async function pushSettingsToCloud(spaceId: string, settings: AppSettings
     theme: validThemes.has(settings.theme) ? settings.theme : 'emerald-pearl',
     defaultVoice: settings.defaultVoice,
     speechRate: Math.max(0.5, Math.min(2, Number(settings.speechRate || 1))),
-    myName: clampStr(settings.myName, 60, 'بهمن'),
-    partnerName: clampStr(settings.partnerName, 60, 'زری'),
+    myName: clampStr(settings.myName, 60, 'من'),
+    partnerName: clampStr(settings.partnerName, 60, 'همراه'),
     assistantName: clampStr(settings.assistantName, 40, 'هم‌صدا'),
     assistantWakeWordEnabled: Boolean(settings.assistantWakeWordEnabled ?? false),
     backgroundKeepAlive: Boolean(settings.backgroundKeepAlive),

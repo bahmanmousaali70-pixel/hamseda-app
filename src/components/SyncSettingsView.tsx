@@ -28,7 +28,6 @@ import {
 } from 'lucide-react';
 import {APP_THEMES} from '../data/themes';
 import {toPersianDigits, VOICE_PERSONAS} from '../data/persianLibrary';
-import {SponsorAdminPanel} from './SponsorAdminPanel';
 import {usePWAInstall} from '../hooks/usePWAInstall';
 import {apiUrl, getCloudApiBaseUrl, safeReadJsonResponse, setCloudApiBaseUrl} from '../services/apiConfig';
 import type {CoupleSpaceInfo} from '../services/coupleSyncService';
@@ -1164,7 +1163,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
               value={importText}
               onChange={(e) => setImportText(e.target.value)}
               dir="ltr"
-              placeholder='{"app":"roozhaye-man-o-zari", ...}'
+              placeholder='{"app":"hamseda", ...}'
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50/70 dark:bg-[#0B1312] text-xs font-mono-num text-slate-800 dark:text-slate-200"
             />
             <button
@@ -1177,9 +1176,6 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
           </form>
         </section>
       </div>
-
-      {/* Admin-only Google-Auth Sponsor Ads Manager */}
-      <SponsorAdminPanel onStatusToast={onStatusToast} />
 
       {/* Free Public Sponsorship Card */}
       <section className="rounded-2xl luxury-card p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-amber-300/60 dark:border-emerald-800/70">

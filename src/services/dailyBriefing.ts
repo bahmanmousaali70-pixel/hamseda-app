@@ -44,19 +44,14 @@ export async function fetchQuickWeatherBrief(): Promise<string> {
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 3500);
     try {
-      const res = await fetch(apiUrl('/api/assistant-command'), {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+      const res = await fetch(apiUrl('/api/quick-weather'), {
+        method: 'GET',
         signal: controller.signal,
-        body: JSON.stringify({
-          utterance: 'آب و هوای امروز چطوره؟',
-          assistantName: 'هم‌صدا',
-        }),
       });
       if (!res.ok) return '';
-      const parsed = await safeReadJsonResponse<{replyText?: string}>(res);
-      if (parsed.isHtml || !parsed.data?.replyText) return '';
-      return parsed.data.replyText.trim();
+      const parsed = await safeReadJsonResponse<{summary?: string}>(res);
+      if (parsed.isHtml || !parsed.data?.summary) return '';
+      return parsed.data.summary.trim();
     } finally {
       window.clearTimeout(timer);
     }

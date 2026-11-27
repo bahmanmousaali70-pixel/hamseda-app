@@ -149,7 +149,7 @@
       "description": "Synced app preferences, speaker voice, speech rate, names, call/SMS announcers, morning wake-up, and nightly discovery.",
       "type": "object",
       "properties": {
-        "theme": {"type": "string", "enum": ["emerald-pearl", "nordic-linen", "espresso-sand", "velvet-night", "plum-noir", "light", "dark"]},
+        "theme": {"type": "string", "enum": ["emerald-pearl", "nordic-linen", "espresso-sand", "rose-sakura", "velvet-night", "plum-noir", "light", "dark"]},
         "defaultVoice": {"type": "string", "enum": ["Kore", "Zephyr", "Puck", "Charon", "Fenrir"]},
         "speechRate": {"type": "number"},
         "myName": {"type": "string", "minLength": 1, "maxLength": 60},
@@ -376,6 +376,11 @@
         "rewardCoins": {"type": "number"},
         "durationSeconds": {"type": "number"},
         "active": {"type": "boolean"},
+        "packageTier": {"type": "string", "enum": ["starter", "standard", "featured", "exclusive"]},
+        "priority": {"type": "number"},
+        "durationDays": {"type": "number"},
+        "expiresAt": {"type": "number"},
+        "brandLabel": {"type": "string", "maxLength": 60},
         "impressions": {"type": "number"},
         "clicks": {"type": "number"},
         "createdByUid": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
@@ -383,6 +388,17 @@
         "updatedAt": {"type": "string", "format": "date-time"}
       },
       "required": ["id", "title", "description", "imageUrl", "linkUrl", "rewardCoins", "durationSeconds", "active", "impressions", "clicks", "createdByUid", "createdAt", "updatedAt"]
+    },
+    "SponsorAdUserMetric": {
+      "title": "SponsorAdUserMetric",
+      "description": "Per-user cooldown receipt preventing repeated sponsor impression/click flooding.",
+      "type": "object",
+      "properties": {
+        "uid": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$"},
+        "lastImpressionAt": {"type": "string", "format": "date-time"},
+        "lastClickAt": {"type": "string", "format": "date-time"}
+      },
+      "required": ["uid"]
     }
   },
   "firestore": {
@@ -465,6 +481,10 @@
     "/sponsorAds/{adId}": {
       "schema": {"$ref": "#/entities/SponsorAd"},
       "description": "Admin-managed rewarded sponsor banner ads."
+    },
+    "/sponsorAds/{adId}/userMetrics/{metricUid}": {
+      "schema": {"$ref": "#/entities/SponsorAdUserMetric"},
+      "description": "Cooldown receipt enforcing minimum interval between impression/click increments per user."
     }
   }
 }

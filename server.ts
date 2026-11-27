@@ -19,7 +19,7 @@ app.use(express.json({limit: '2mb'}));
 app.use('/api', (req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Wallet-Token, X-Coin-Receipt');
   if (req.method === 'OPTIONS') {
     res.sendStatus(204);
     return;
@@ -79,7 +79,724 @@ app.get('/api/health', (_req, res) => {
   res.json({ok: true, aiReady: hasKey});
 });
 
+// ---- Authoritative Coin Wallet & 10s Sponsor Ad Session Security Engine ----
+interface FirebaseAppletConfig {
+  projectId?: string;
+  apiKey?: string;
+  firestoreDatabaseId?: string;
+}
+
+const firebaseAppletConfig: FirebaseAppletConfig = (() => {
+  try {
+    const raw = fs.readFileSync(path.resolve(__dirname, 'firebase-applet-config.json'), 'utf8');
+    return JSON.parse(raw) as FirebaseAppletConfig;
+  } catch {
+    return {};
+  }
+})();
+
+const WALLET_HMAC_KEY: Buffer = process.env.WALLET_SIGNING_SECRET?.trim()
+  ? Buffer.from(process.env.WALLET_SIGNING_SECRET.trim(), 'utf8')
+  : crypto.randomBytes(32);
+
+const SERVER_STARTER_COINS = 50;
+const SERVER_DAILY_BONUS_COINS = 10;
+const SERVER_MAX_WALLET_COINS = 5000;
+const SERVER_AD_MAX_PER_WINDOW = 2;
+const SERVER_AD_WINDOW_MS = 3 * 60 * 60 * 1000; // 3 hours
+
+const SERVER_COIN_COSTS: Record<string, {cost: number; label: string}> = {
+  ai_morning_message: {cost: 5, label: 'تولید پیام روز هوشمند'},
+  ai_special_message: {cost: 5, label: 'ساخت پیام مناسبتی هوشمند'},
+  ai_movies_discover: {cost: 5, label: 'پیشنهادگر هوشمند فیلم و سریال'},
+  ai_music_discover: {cost: 5, label: 'جستجوی آنلاین پلی‌لیست موسیقی'},
+  ai_assistant_online: {cost: 3, label: 'پرسش‌وپاسخ آنلاین دستیار هوشمند'},
+  ai_studio_voice: {cost: 5, label: 'ساخت صدای استودیویی فارسی'},
+  ai_phonetic: {cost: 2, label: 'تحلیل هوشمند تلفظ دوزبانه'},
+};
+
+interface AuthoritativeWalletRecord {
+  coins: number;
+  lastDailyDate: string;
+  adsWatched: number;
+  nonce: string;
+  lastClaimAt: number;
+  recentAdClaims: number[];
+  claimedSocialMissions: string[];
+}
+
+interface SignedWalletTokenPayload {
+  v: 1;
+  uid: string;
+  coins: number;
+  lastDailyDate: string;
+  adsWatched: number;
+  nonce: string;
+  claims?: number[];
+  socialClaims?: string[];
+  iat: number;
+}
+
+interface AdQuotaInfo {
+  usedInWindow: number;
+  maxPerWindow: number;
+  remainingInWindow: number;
+  windowHours: number;
+  nextAvailableAt: number | null;
+  remainingMs: number;
+}
+
+interface AdViewSessionRecord {
+  sessionId: string;
+  uid: string;
+  adId: string;
+  rewardCoins: number;
+  durationSeconds: number;
+  minClaimAt: number;
+  expiresAt: number;
+  claimed: boolean;
+}
+
+type SocialMissionId = 'instagram_tapnfc' | 'bale_tapnfc';
+
+const SERVER_SOCIAL_MISSIONS: Record<
+  SocialMissionId,
+  {
+    id: SocialMissionId;
+    platform: 'instagram' | 'bale';
+    title: string;
+    rewardCoins: number;
+    minAwaySeconds: number;
+  }
+> = {
+  instagram_tapnfc: {
+    id: 'instagram_tapnfc',
+    platform: 'instagram',
+    title: 'فالو پیج اینستاگرام tapnfc.ir',
+    rewardCoins: 150,
+    minAwaySeconds: 0,
+  },
+  bale_tapnfc: {
+    id: 'bale_tapnfc',
+    platform: 'bale',
+    title: 'عضویت در کانال رسمی بله tapnfc.ir',
+    rewardCoins: 150,
+    minAwaySeconds: 0,
+  },
+};
+
+interface SocialMissionSessionRecord {
+  sessionId: string;
+  uid: string;
+  missionId: SocialMissionId;
+  rewardCoins: number;
+  minClaimAt: number;
+  expiresAt: number;
+  claimed: boolean;
+}
+
+interface SpendReceiptRecord {
+  uid: string;
+  feature: string;
+  exp: number;
+}
+
+const verifiedIdTokenCache = new Map<string, {uid: string; exp: number}>();
+const serverWalletsByUid = new Map<string, AuthoritativeWalletRecord>();
+const adSessionsMap = new Map<string, AdViewSessionRecord>();
+const socialSessionsMap = new Map<string, SocialMissionSessionRecord>();
+const validSpendReceipts = new Map<string, SpendReceiptRecord>();
+
+function signHmacPayload(payload: object): string {
+  const encoded = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+  const sig = crypto.createHmac('sha256', WALLET_HMAC_KEY).update(encoded).digest('base64url');
+  return `${encoded}.${sig}`;
+}
+
+function verifyHmacPayload<T>(token: unknown): T | null {
+  if (typeof token !== 'string' || !token.includes('.')) return null;
+  const parts = token.split('.');
+  if (parts.length !== 2) return null;
+  const [encoded, sig] = parts;
+  if (!encoded || !sig || encoded.length > 4096 || sig.length > 256) return null;
+  const expectedSig = crypto.createHmac('sha256', WALLET_HMAC_KEY).update(encoded).digest();
+  let actualSig: Buffer;
+  try {
+    actualSig = Buffer.from(sig, 'base64url');
+  } catch {
+    return null;
+  }
+  if (actualSig.length !== expectedSig.length || !crypto.timingSafeEqual(actualSig, expectedSig)) {
+    return null;
+  }
+  try {
+    return JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as T;
+  } catch {
+    return null;
+  }
+}
+
+function getServerTodayDateKey(): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {timeZone: 'Asia/Tehran'}).format(new Date());
+  } catch {
+    const now = new Date();
+    return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;
+  }
+}
+
+function pruneAdClaims(claims: unknown, now = Date.now()): number[] {
+  if (!Array.isArray(claims)) return [];
+  const cutoff = now - SERVER_AD_WINDOW_MS;
+  return claims
+    .filter((ts): ts is number => typeof ts === 'number' && Number.isFinite(ts) && ts > cutoff && ts <= now + 60000)
+    .sort((a, b) => a - b)
+    .slice(-10);
+}
+
+function getAdQuotaInfo(state: AuthoritativeWalletRecord, now = Date.now()): AdQuotaInfo {
+  state.recentAdClaims = pruneAdClaims(state.recentAdClaims, now);
+  const usedInWindow = state.recentAdClaims.length;
+  const remainingInWindow = Math.max(0, SERVER_AD_MAX_PER_WINDOW - usedInWindow);
+  const blockingTimestamp =
+    remainingInWindow === 0 && state.recentAdClaims.length >= SERVER_AD_MAX_PER_WINDOW
+      ? state.recentAdClaims[state.recentAdClaims.length - SERVER_AD_MAX_PER_WINDOW]
+      : null;
+  const nextAvailableAt = blockingTimestamp !== null ? blockingTimestamp + SERVER_AD_WINDOW_MS : null;
+  const remainingMs = nextAvailableAt !== null ? Math.max(0, nextAvailableAt - now) : 0;
+  return {
+    usedInWindow,
+    maxPerWindow: SERVER_AD_MAX_PER_WINDOW,
+    remainingInWindow,
+    windowHours: 3,
+    nextAvailableAt,
+    remainingMs,
+  };
+}
+
+function formatCooldownPersian(remainingMs: number): string {
+  const totalMinutes = Math.max(1, Math.ceil(remainingMs / 60000));
+  const hours = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+  const fa = (n: number) => String(n).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
+  if (hours > 0 && mins > 0) return `${fa(hours)} ساعت و ${fa(mins)} دقیقه`;
+  if (hours > 0) return `${fa(hours)} ساعت`;
+  return `${fa(mins)} دقیقه`;
+}
+
+function normalizeSocialClaims(claims: unknown): SocialMissionId[] {
+  if (!Array.isArray(claims)) return [];
+  const valid = new Set<SocialMissionId>();
+  for (const item of claims) {
+    if (typeof item === 'string' && item in SERVER_SOCIAL_MISSIONS) {
+      valid.add(item as SocialMissionId);
+    }
+  }
+  return Array.from(valid);
+}
+
+function buildWalletResponse(uid: string, state: AuthoritativeWalletRecord) {
+  const adQuota = getAdQuotaInfo(state);
+  const payload: SignedWalletTokenPayload = {
+    v: 1,
+    uid,
+    coins: state.coins,
+    lastDailyDate: state.lastDailyDate,
+    adsWatched: state.adsWatched,
+    nonce: state.nonce,
+    claims: state.recentAdClaims,
+    socialClaims: state.claimedSocialMissions,
+    iat: Date.now(),
+  };
+  return {
+    wallet: {
+      coins: state.coins,
+      lastDailyBonusDate: state.lastDailyDate,
+      totalAdsWatched: state.adsWatched,
+      adQuota,
+      claimedSocialMissions: state.claimedSocialMissions,
+    },
+    walletToken: signHmacPayload(payload),
+  };
+}
+
+function resolveOrInitWallet(uid: string, rawWalletToken?: unknown): AuthoritativeWalletRecord {
+  const today = getServerTodayDateKey();
+  const now = Date.now();
+  let state = serverWalletsByUid.get(uid);
+
+  if (!state) {
+    const parsed = verifyHmacPayload<SignedWalletTokenPayload>(rawWalletToken);
+    if (
+      parsed &&
+      parsed.v === 1 &&
+      parsed.uid === uid &&
+      typeof parsed.coins === 'number' &&
+      Number.isFinite(parsed.coins) &&
+      typeof parsed.lastDailyDate === 'string' &&
+      typeof parsed.adsWatched === 'number' &&
+      Number.isFinite(parsed.adsWatched) &&
+      typeof parsed.nonce === 'string'
+    ) {
+      const restoredClaims = pruneAdClaims(parsed.claims, now);
+      const restoredSocial = normalizeSocialClaims(parsed.socialClaims);
+      state = {
+        coins: Math.max(0, Math.min(SERVER_MAX_WALLET_COINS, Math.round(parsed.coins))),
+        lastDailyDate: parsed.lastDailyDate.slice(0, 20),
+        adsWatched: Math.max(0, Math.round(parsed.adsWatched)),
+        nonce: parsed.nonce,
+        lastClaimAt: restoredClaims.length > 0 ? restoredClaims[restoredClaims.length - 1] : 0,
+        recentAdClaims: restoredClaims,
+        claimedSocialMissions: restoredSocial,
+      };
+    } else {
+      state = {
+        coins: SERVER_STARTER_COINS,
+        lastDailyDate: today,
+        adsWatched: 0,
+        nonce: crypto.randomBytes(12).toString('hex'),
+        lastClaimAt: 0,
+        recentAdClaims: [],
+        claimedSocialMissions: [],
+      };
+    }
+    if (serverWalletsByUid.size > 5000) {
+      const oldestKey = serverWalletsByUid.keys().next().value;
+      if (oldestKey) serverWalletsByUid.delete(oldestKey);
+    }
+    serverWalletsByUid.set(uid, state);
+  }
+
+  state.recentAdClaims = pruneAdClaims(state.recentAdClaims, now);
+  state.claimedSocialMissions = normalizeSocialClaims(state.claimedSocialMissions);
+
+  if (state.lastDailyDate !== today) {
+    state.coins = Math.min(SERVER_MAX_WALLET_COINS, state.coins + SERVER_DAILY_BONUS_COINS);
+    state.lastDailyDate = today;
+    state.nonce = crypto.randomBytes(12).toString('hex');
+  }
+
+  return state;
+}
+
+async function verifyFirebaseCaller(req: express.Request): Promise<{uid: string; idToken: string} | null> {
+  const authHeader = req.headers.authorization;
+  if (typeof authHeader !== 'string' || !authHeader.startsWith('Bearer ')) {
+    return null;
+  }
+  const idToken = authHeader.slice('Bearer '.length).trim();
+  if (!idToken || idToken.length > 8192) return null;
+
+  const tokenHash = crypto.createHash('sha256').update(idToken).digest('hex');
+  const cached = verifiedIdTokenCache.get(tokenHash);
+  if (cached && cached.exp > Date.now()) {
+    return {uid: cached.uid, idToken};
+  }
+
+  const apiKey = firebaseAppletConfig.apiKey;
+  if (!apiKey) return null;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+  try {
+    const resp = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        signal: controller.signal,
+        body: JSON.stringify({idToken}),
+      }
+    );
+    if (!resp.ok) return null;
+    const data = (await resp.json()) as {users?: {localId?: string}[]};
+    const uid = data?.users?.[0]?.localId;
+    if (typeof uid !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(uid)) {
+      return null;
+    }
+    if (verifiedIdTokenCache.size > 1000) {
+      verifiedIdTokenCache.clear();
+    }
+    verifiedIdTokenCache.set(tokenHash, {uid, exp: Date.now() + 3 * 60 * 1000});
+    return {uid, idToken};
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchAuthoritativeAdFromFirestore(
+  adId: string,
+  idToken: string
+): Promise<{active: boolean; rewardCoins: number; durationSeconds: number} | null> {
+  const projectId = firebaseAppletConfig.projectId;
+  const dbId = firebaseAppletConfig.firestoreDatabaseId || '(default)';
+  if (!projectId) return null;
+
+  const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/${encodeURIComponent(dbId)}/documents/sponsorAds/${encodeURIComponent(adId)}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+  try {
+    const resp = await fetch(url, {
+      method: 'GET',
+      headers: {Authorization: `Bearer ${idToken}`},
+      signal: controller.signal,
+    });
+    if (!resp.ok) return null;
+    const docData = (await resp.json()) as {
+      fields?: {
+        active?: {booleanValue?: boolean};
+        rewardCoins?: {integerValue?: string; doubleValue?: number};
+        durationSeconds?: {integerValue?: string; doubleValue?: number};
+        expiresAt?: {integerValue?: string; doubleValue?: number};
+      };
+    };
+    const fields = docData?.fields;
+    if (!fields || fields.active?.booleanValue !== true) return null;
+    const rawExpiresAt = Number(fields.expiresAt?.integerValue ?? fields.expiresAt?.doubleValue ?? 0);
+    if (Number.isFinite(rawExpiresAt) && rawExpiresAt > 0 && rawExpiresAt < Date.now()) {
+      return null;
+    }
+    const rawReward = Number(fields.rewardCoins?.integerValue ?? fields.rewardCoins?.doubleValue ?? 30);
+    const rawDuration = Number(fields.durationSeconds?.integerValue ?? fields.durationSeconds?.doubleValue ?? 10);
+    return {
+      active: true,
+      rewardCoins: Math.max(5, Math.min(500, Math.round(Number.isFinite(rawReward) ? rawReward : 30))),
+      durationSeconds: Math.max(5, Math.min(60, Math.round(Number.isFinite(rawDuration) ? rawDuration : 10))),
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function consumeCoinReceipt(
+  req: express.Request,
+  allowedFeatures: string[]
+): Promise<{ok: true; uid: string} | {ok: false; status: number; error: string}> {
+  const caller = await verifyFirebaseCaller(req);
+  if (!caller) {
+    return {ok: false, status: 401, error: 'احراز هویت دستگاه برای تایید سکه انجام نشده است.'};
+  }
+  const receiptToken = req.headers['x-coin-receipt'];
+  const parsed = verifyHmacPayload<{rid?: string; uid?: string; feature?: string; exp?: number}>(receiptToken);
+  if (
+    !parsed ||
+    typeof parsed.rid !== 'string' ||
+    parsed.uid !== caller.uid ||
+    typeof parsed.feature !== 'string' ||
+    !allowedFeatures.includes(parsed.feature) ||
+    typeof parsed.exp !== 'number' ||
+    Date.now() > parsed.exp
+  ) {
+    return {ok: false, status: 402, error: 'برای استفاده از این قابلیت، ابتدا تاییدیه سکه دریافت کنید.'};
+  }
+  const stored = validSpendReceipts.get(parsed.rid);
+  if (!stored || stored.uid !== caller.uid || stored.feature !== parsed.feature || Date.now() > stored.exp) {
+    return {ok: false, status: 402, error: 'کد مصرف سکه منقضی یا قبلاً استفاده شده است.'};
+  }
+  validSpendReceipts.delete(parsed.rid);
+  return {ok: true, uid: caller.uid};
+}
+
+app.post('/api/wallet/bootstrap', async (req, res) => {
+  const caller = await verifyFirebaseCaller(req);
+  if (!caller) {
+    res.status(401).json({error: 'احراز هویت دستگاه انجام نشده است.'});
+    return;
+  }
+  const rawToken = req.body?.walletToken ?? req.headers['x-wallet-token'];
+  const state = resolveOrInitWallet(caller.uid, rawToken);
+  res.json(buildWalletResponse(caller.uid, state));
+});
+
+app.post('/api/wallet/spend', async (req, res) => {
+  const caller = await verifyFirebaseCaller(req);
+  if (!caller) {
+    res.status(401).json({error: 'احراز هویت دستگاه انجام نشده است.'});
+    return;
+  }
+  const feature = typeof req.body?.feature === 'string' ? req.body.feature : '';
+  const meta = SERVER_COIN_COSTS[feature];
+  if (!meta) {
+    res.status(400).json({error: 'قابلیت درخواستی نامعتبر است.'});
+    return;
+  }
+  const rawToken = req.body?.walletToken ?? req.headers['x-wallet-token'];
+  const state = resolveOrInitWallet(caller.uid, rawToken);
+  if (state.coins < meta.cost) {
+    res.status(402).json({
+      error: `موجودی سکه برای «${meta.label}» کافی نیست.`,
+      requiredCoins: meta.cost,
+      ...buildWalletResponse(caller.uid, state),
+    });
+    return;
+  }
+
+  state.coins -= meta.cost;
+  state.nonce = crypto.randomBytes(12).toString('hex');
+
+  const rid = crypto.randomBytes(16).toString('hex');
+  const exp = Date.now() + 5 * 60 * 1000;
+  if (validSpendReceipts.size > 2000) {
+    const now = Date.now();
+    for (const [k, v] of validSpendReceipts) {
+      if (v.exp < now) validSpendReceipts.delete(k);
+    }
+  }
+  validSpendReceipts.set(rid, {uid: caller.uid, feature, exp});
+  const spendReceiptToken = signHmacPayload({rid, uid: caller.uid, feature, exp});
+
+  res.json({
+    ...buildWalletResponse(caller.uid, state),
+    spendReceiptToken,
+  });
+});
+
+app.post('/api/ads/session/start', async (req, res) => {
+  const caller = await verifyFirebaseCaller(req);
+  if (!caller) {
+    res.status(401).json({error: 'برای شروع تایمر حامی، ورود دستگاه لازم است.'});
+    return;
+  }
+  const adId = typeof req.body?.adId === 'string' ? req.body.adId.trim() : '';
+  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(adId)) {
+    res.status(400).json({error: 'شناسه آگهی نامعتبر است.'});
+    return;
+  }
+
+  const rawToken = req.body?.walletToken ?? req.headers['x-wallet-token'];
+  const state = resolveOrInitWallet(caller.uid, rawToken);
+  const now = Date.now();
+  const adQuota = getAdQuotaInfo(state, now);
+  if (adQuota.remainingInWindow <= 0) {
+    res.status(429).json({
+      code: 'AD_QUOTA_COOLDOWN',
+      error: `سهمیه مشاهده تبلیغ شما (۲ بار در هر ۳ ساعت) تکمیل شده است. لطفاً ${formatCooldownPersian(adQuota.remainingMs)} دیگر برگردید تا دوباره تبلیغ ببینید و سکه بگیرید.`,
+      adQuota,
+      ...buildWalletResponse(caller.uid, state),
+    });
+    return;
+  }
+
+  let rewardCoins = 30;
+  let durationSeconds = 10;
+  if (adId !== 'house-tapnfc') {
+    const adMeta = await fetchAuthoritativeAdFromFirestore(adId, caller.idToken);
+    if (!adMeta) {
+      res.status(404).json({error: 'این آگهی فعال نیست یا یافت نشد.'});
+      return;
+    }
+    rewardCoins = adMeta.rewardCoins;
+    durationSeconds = adMeta.durationSeconds;
+  }
+
+  if (adSessionsMap.size > 2000) {
+    for (const [k, v] of adSessionsMap) {
+      if (v.expiresAt < now || v.claimed) adSessionsMap.delete(k);
+    }
+  }
+
+  const sessionId = crypto.randomBytes(16).toString('hex');
+  const session: AdViewSessionRecord = {
+    sessionId,
+    uid: caller.uid,
+    adId,
+    rewardCoins,
+    durationSeconds,
+    minClaimAt: now + durationSeconds * 1000,
+    expiresAt: now + 15 * 60 * 1000,
+    claimed: false,
+  };
+  adSessionsMap.set(sessionId, session);
+
+  const sessionToken = signHmacPayload({
+    sid: sessionId,
+    uid: caller.uid,
+    adId,
+    exp: session.expiresAt,
+  });
+
+  res.json({sessionToken, rewardCoins, durationSeconds, adQuota});
+});
+
+app.post('/api/ads/session/claim', async (req, res) => {
+  const caller = await verifyFirebaseCaller(req);
+  if (!caller) {
+    res.status(401).json({error: 'احراز هویت دستگاه تایید نشد.'});
+    return;
+  }
+  const parsed = verifyHmacPayload<{sid?: string; uid?: string; adId?: string; exp?: number}>(req.body?.sessionToken);
+  if (!parsed || typeof parsed.sid !== 'string' || parsed.uid !== caller.uid) {
+    res.status(403).json({error: 'توکن تاییدیه تبلیغ نامعتبر است.'});
+    return;
+  }
+  const session = adSessionsMap.get(parsed.sid);
+  const now = Date.now();
+  if (!session || session.uid !== caller.uid || now > session.expiresAt) {
+    res.status(404).json({error: 'نشست مشاهده تبلیغ منقضی شده است؛ لطفاً دوباره باز کنید.'});
+    return;
+  }
+  if (session.claimed) {
+    res.status(409).json({error: 'پاداش این تبلیغ قبلاً دریافت شده است.'});
+    return;
+  }
+  if (now < session.minClaimAt - 500) {
+    const remainingSec = Math.ceil((session.minClaimAt - now) / 1000);
+    res.status(425).json({error: `زمان مشاهده هنوز تمام نشده است (${remainingSec} ثانیه باقی مانده).`});
+    return;
+  }
+
+  const rawToken = req.body?.walletToken ?? req.headers['x-wallet-token'];
+  const state = resolveOrInitWallet(caller.uid, rawToken);
+  const preQuota = getAdQuotaInfo(state, now);
+  if (preQuota.remainingInWindow <= 0) {
+    res.status(429).json({
+      code: 'AD_QUOTA_COOLDOWN',
+      error: `سهمیه مشاهده تبلیغ شما (۲ بار در هر ۳ ساعت) تکمیل شده است. لطفاً ${formatCooldownPersian(preQuota.remainingMs)} دیگر برگردید.`,
+      adQuota: preQuota,
+      ...buildWalletResponse(caller.uid, state),
+    });
+    return;
+  }
+  const minCooldownMs = Math.max(5000, (session.durationSeconds - 2) * 1000);
+  if (state.lastClaimAt > 0 && now - state.lastClaimAt < minCooldownMs) {
+    res.status(429).json({error: 'لطفاً چند ثانیه صبر کرده و دوباره دریافت کنید.'});
+    return;
+  }
+
+  session.claimed = true;
+  state.coins = Math.min(SERVER_MAX_WALLET_COINS, state.coins + session.rewardCoins);
+  state.adsWatched += 1;
+  state.lastClaimAt = now;
+  state.recentAdClaims = pruneAdClaims([...state.recentAdClaims, now], now);
+  state.nonce = crypto.randomBytes(12).toString('hex');
+
+  res.json({
+    ...buildWalletResponse(caller.uid, state),
+    earnedCoins: session.rewardCoins,
+  });
+});
+
+app.post('/api/social-missions/start', async (req, res) => {
+  const caller = await verifyFirebaseCaller(req);
+  if (!caller) {
+    res.status(401).json({error: 'برای دریافت پاداش عضویت، ورود دستگاه لازم است.'});
+    return;
+  }
+  const missionIdRaw = typeof req.body?.missionId === 'string' ? req.body.missionId.trim() : '';
+  if (!(missionIdRaw in SERVER_SOCIAL_MISSIONS)) {
+    res.status(400).json({error: 'ماموریت درخواستی معتبر نیست.'});
+    return;
+  }
+  const missionId = missionIdRaw as SocialMissionId;
+  const mission = SERVER_SOCIAL_MISSIONS[missionId];
+  const rawToken = req.body?.walletToken ?? req.headers['x-wallet-token'];
+  const state = resolveOrInitWallet(caller.uid, rawToken);
+
+  if (state.claimedSocialMissions.includes(missionId)) {
+    res.status(409).json({
+      code: 'SOCIAL_ALREADY_CLAIMED',
+      error: `پاداش «${mission.title}» قبلاً برای شما ثبت شده است (هر کاربر یک‌بار).`,
+      ...buildWalletResponse(caller.uid, state),
+    });
+    return;
+  }
+
+  const now = Date.now();
+  if (socialSessionsMap.size > 2000) {
+    for (const [k, v] of socialSessionsMap) {
+      if (v.expiresAt < now || v.claimed) socialSessionsMap.delete(k);
+    }
+  }
+
+  const sessionId = crypto.randomBytes(16).toString('hex');
+  const session: SocialMissionSessionRecord = {
+    sessionId,
+    uid: caller.uid,
+    missionId,
+    rewardCoins: mission.rewardCoins,
+    minClaimAt: now + mission.minAwaySeconds * 1000,
+    expiresAt: now + 20 * 60 * 1000,
+    claimed: false,
+  };
+  socialSessionsMap.set(sessionId, session);
+
+  const missionToken = signHmacPayload({
+    sid: sessionId,
+    uid: caller.uid,
+    missionId,
+    exp: session.expiresAt,
+  });
+
+  res.json({
+    missionToken,
+    missionId,
+    rewardCoins: mission.rewardCoins,
+    minAwaySeconds: mission.minAwaySeconds,
+  });
+});
+
+app.post('/api/social-missions/claim', async (req, res) => {
+  const caller = await verifyFirebaseCaller(req);
+  if (!caller) {
+    res.status(401).json({error: 'احراز هویت دستگاه تایید نشد.'});
+    return;
+  }
+  const parsed = verifyHmacPayload<{sid?: string; uid?: string; missionId?: string; exp?: number}>(
+    req.body?.missionToken
+  );
+  if (!parsed || typeof parsed.sid !== 'string' || parsed.uid !== caller.uid) {
+    res.status(403).json({error: 'توکن ماموریت معتبر نیست؛ لطفاً ابتدا دکمه ورود به صفحه/کانال را بزنید.'});
+    return;
+  }
+  const session = socialSessionsMap.get(parsed.sid);
+  const now = Date.now();
+  if (!session || session.uid !== caller.uid || now > session.expiresAt) {
+    res.status(404).json({error: 'مهلت این ماموریت تمام شده است؛ دوباره روی لینک بزنید.'});
+    return;
+  }
+  if (session.claimed) {
+    res.status(409).json({error: 'پاداش این ماموریت قبلاً دریافت شده است.'});
+    return;
+  }
+
+  const mission = SERVER_SOCIAL_MISSIONS[session.missionId];
+  const rawToken = req.body?.walletToken ?? req.headers['x-wallet-token'];
+  const state = resolveOrInitWallet(caller.uid, rawToken);
+  if (state.claimedSocialMissions.includes(session.missionId)) {
+    res.status(409).json({
+      code: 'SOCIAL_ALREADY_CLAIMED',
+      error: `پاداش «${mission.title}» قبلاً دریافت شده است.`,
+      ...buildWalletResponse(caller.uid, state),
+    });
+    return;
+  }
+
+  session.claimed = true;
+  state.coins = Math.min(SERVER_MAX_WALLET_COINS, state.coins + session.rewardCoins);
+  state.claimedSocialMissions = normalizeSocialClaims([
+    ...state.claimedSocialMissions,
+    session.missionId,
+  ]);
+  state.nonce = crypto.randomBytes(12).toString('hex');
+
+  res.json({
+    ...buildWalletResponse(caller.uid, state),
+    earnedCoins: session.rewardCoins,
+    missionId: session.missionId,
+  });
+});
+
 app.post('/api/morning-message', async (req, res) => {
+  const coinCheck = await consumeCoinReceipt(req, ['ai_morning_message']);
+  if (!coinCheck.ok) {
+    res.status(coinCheck.status).json({error: coinCheck.error});
+    return;
+  }
+
   const ai = getAiClient();
   if (!ai) {
     res.status(503).json({
@@ -1067,6 +1784,12 @@ app.post('/api/tts-stream', async (req, res) => {
 });
 
 app.post('/api/caller-pronounce', async (req, res) => {
+  const coinCheck = await consumeCoinReceipt(req, ['ai_phonetic']);
+  if (!coinCheck.ok) {
+    res.status(coinCheck.status).json({error: coinCheck.error});
+    return;
+  }
+
   const ai = getAiClient();
   if (!ai) {
     res.status(503).json({error: 'سرویس آنلاین در دسترس نیست.'});
@@ -1109,6 +1832,12 @@ app.post('/api/caller-pronounce', async (req, res) => {
 });
 
 app.post('/api/special-message', async (req, res) => {
+  const coinCheck = await consumeCoinReceipt(req, ['ai_special_message']);
+  if (!coinCheck.ok) {
+    res.status(coinCheck.status).json({error: coinCheck.error});
+    return;
+  }
+
   const ai = getAiClient();
   if (!ai) {
     res.status(503).json({
@@ -1120,7 +1849,7 @@ app.post('/api/special-message', async (req, res) => {
 
   const occasion = typeof req.body?.occasion === 'string' ? req.body.occasion.trim() : 'پیام مناسبتی';
   const recipient = typeof req.body?.recipient === 'string' ? req.body.recipient.trim() : 'عزیز دلم';
-  const senderName = typeof req.body?.senderName === 'string' ? req.body.senderName.trim() : 'بهمن';
+  const senderName = typeof req.body?.senderName === 'string' ? req.body.senderName.trim() : 'من';
   const tone = typeof req.body?.tone === 'string' ? req.body.tone.trim() : 'صمیمی و گرم';
   const details = typeof req.body?.details === 'string' ? req.body.details.trim() : '';
 
@@ -2128,9 +2857,16 @@ app.get('/api/audio-proxy', async (req, res) => {
 });
 
 app.post('/api/night-discover', async (req, res) => {
+  const mode = req.body?.mode === 'music' ? 'music' : 'movies';
+  const expectedFeature = mode === 'music' ? 'ai_music_discover' : 'ai_movies_discover';
+  const coinCheck = await consumeCoinReceipt(req, [expectedFeature]);
+  if (!coinCheck.ok) {
+    res.status(coinCheck.status).json({error: coinCheck.error});
+    return;
+  }
+
   const ai = getAiClient();
   const betaAi = getTtsAiClient();
-  const mode = req.body?.mode === 'music' ? 'music' : 'movies';
   const moodOrGenre = typeof req.body?.moodOrGenre === 'string' ? req.body.moodOrGenre.trim() : '';
   const mediaType = typeof req.body?.mediaType === 'string' ? req.body.mediaType : 'both';
 
@@ -2752,6 +3488,12 @@ function getAvailableTextModels(): string[] {
 }
 
 app.post('/api/assistant-chat', async (req, res) => {
+  const caller = await verifyFirebaseCaller(req);
+  if (!caller) {
+    res.status(401).json({error: 'احراز هویت دستگاه انجام نشده است.'});
+    return;
+  }
+
   const ai = getAiClient();
   if (!ai) {
     res.status(503).json({error: 'موتور گفت‌وگوی آنلاین در دسترس نیست.'});
@@ -3228,7 +3970,23 @@ function withPromiseTimeout<T>(promise: Promise<T>, ms: number, label: string): 
   });
 }
 
+app.get('/api/quick-weather', async (req, res) => {
+  const city = typeof req.query?.city === 'string' && req.query.city.trim() ? req.query.city.trim().slice(0, 40) : 'تهران';
+  try {
+    const summary = await fetchWeatherSummaryIfRelevant(`آب و هوای ${city}`);
+    res.json({summary});
+  } catch {
+    res.json({summary: ''});
+  }
+});
+
 app.post('/api/assistant-command', async (req, res) => {
+  const coinCheck = await consumeCoinReceipt(req, ['ai_assistant_online']);
+  if (!coinCheck.ok) {
+    res.status(coinCheck.status).json({error: coinCheck.error});
+    return;
+  }
+
   const utterance = typeof req.body?.utterance === 'string' ? req.body.utterance.trim() : '';
   if (!utterance) {
     res.status(400).json({error: 'دستور یا سوالی دریافت نشد.'});
@@ -3240,9 +3998,9 @@ app.post('/api/assistant-command', async (req, res) => {
       ? req.body.assistantName.trim()
       : 'هم‌صدا';
   const deviceOwner = req.body?.deviceOwner === 'zari' ? 'zari' : 'man';
-  const myName = typeof req.body?.myName === 'string' && req.body.myName.trim() ? req.body.myName.trim() : 'بهمن';
+  const myName = typeof req.body?.myName === 'string' && req.body.myName.trim() ? req.body.myName.trim() : 'من';
   const partnerName =
-    typeof req.body?.partnerName === 'string' && req.body.partnerName.trim() ? req.body.partnerName.trim() : 'زری';
+    typeof req.body?.partnerName === 'string' && req.body.partnerName.trim() ? req.body.partnerName.trim() : 'همراه';
   const ownerSelf = deviceOwner === 'zari' ? partnerName : myName;
   const partnerOther = deviceOwner === 'zari' ? myName : partnerName;
 
@@ -3847,6 +4605,21 @@ async function startServer() {
   const PORT = Number(process.env.PORT) || 3000;
   const isProd = process.env.NODE_ENV === 'production';
 
+  app.use((req, res, next) => {
+    const cleanPath = (req.url || '').split('?')[0];
+    if (
+      cleanPath === '/' ||
+      cleanPath === '/index.html' ||
+      cleanPath === '/sw.js' ||
+      cleanPath === '/dev-sw.js' ||
+      cleanPath === '/manifest.webmanifest'
+    ) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+    }
+    next();
+  });
+
   if (!isProd) {
     const {createServer: createViteServer} = await import('vite');
     const vite = await createViteServer({
@@ -3875,10 +4648,22 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.resolve(__dirname, 'dist');
-    app.use(express.static(distPath));
+    app.use(
+      express.static(distPath, {
+        setHeaders(res, filePath) {
+          const base = path.basename(filePath);
+          if (base === 'index.html' || base === 'sw.js' || base === 'manifest.webmanifest') {
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+          }
+        },
+      })
+    );
     app.get('*', (_req, res) => {
       const indexFile = path.join(distPath, 'index.html');
       if (fs.existsSync(indexFile)) {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
         res.sendFile(indexFile);
       } else {
         res.status(404).send('Build not found');

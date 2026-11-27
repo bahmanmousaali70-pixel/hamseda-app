@@ -1,4 +1,4 @@
-export type AppTab = 'today' | 'assistant' | 'gratitude' | 'night' | 'voice' | 'caller' | 'sync' | 'family';
+export type AppTab = 'today' | 'assistant' | 'gratitude' | 'night' | 'voice' | 'caller' | 'sync' | 'family' | 'tariffs' | 'admin';
 
 export type OwnerRole = 'man' | 'zari' | 'both';
 
@@ -231,6 +231,7 @@ export type HamsedaThemeId =
   | 'emerald-pearl'
   | 'nordic-linen'
   | 'espresso-sand'
+  | 'rose-sakura'
   | 'velvet-night'
   | 'plum-noir';
 
@@ -243,6 +244,8 @@ export type CoinGatedFeatureKey =
   | 'ai_studio_voice'
   | 'ai_phonetic';
 
+export type SponsorPackageTier = 'starter' | 'standard' | 'featured' | 'exclusive';
+
 export interface SponsorAdItem {
   id: string;
   title: string;
@@ -252,6 +255,11 @@ export interface SponsorAdItem {
   rewardCoins: number;
   durationSeconds: number;
   active: boolean;
+  packageTier?: SponsorPackageTier;
+  priority?: number;
+  durationDays?: number;
+  expiresAt?: number;
+  brandLabel?: string;
   impressions: number;
   clicks: number;
   createdByUid: string;
