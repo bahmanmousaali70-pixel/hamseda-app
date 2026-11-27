@@ -76,7 +76,7 @@ export const DriveModeModal: React.FC<DriveModeModalProps> = ({
 
   const selfName = getSelfName(settings, deviceOwner);
   const partnerName = getPartnerNameForDevice(settings, deviceOwner);
-  const assistantName = settings.assistantName?.trim() || 'هم‌صدا';
+  const assistantName = settings.assistantName?.trim() || 'رفیقو';
 
   const partnerContact = useMemo(
     () => findBestContactMatch(partnerName, syncedContacts, callers, settings, deviceOwner),
@@ -210,7 +210,7 @@ export const DriveModeModal: React.FC<DriveModeModalProps> = ({
               <Car className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="text-xl sm:text-2xl font-extrabold text-white">حالت رانندگی هم‌صدا</h2>
+              <h2 className="text-xl sm:text-2xl font-extrabold text-white">حالت رانندگی رفیقو</h2>
               <p className="text-xs sm:text-sm text-emerald-200/80 mt-0.5">
                 دکمه‌های بزرگ و بدون حواس‌پرتی · گوشی {selfName}
               </p>
