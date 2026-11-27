@@ -64,7 +64,7 @@ const TARIFF_TIERS: TariffTier[] = [
     badge: 'پیشنهادی و اقتصادی',
     highlighted: true,
     features: [
-      'حضور مداوم در چرخه سکه هدیه هوش مصنوعی هم‌صدا',
+      'حضور مداوم در چرخه سکه هدیه هوش مصنوعی رفیقو',
       'دریافت توجه واقعی کاربر در ۱۰ ثانیه + دکمه ورود به سایت',
       'امکان ویرایش بنر، متن یا لینک مقصد در طول ماه',
     ],
@@ -151,18 +151,18 @@ export const SponsorTariffView: React.FC<SponsorTariffViewProps> = ({
                 type="button"
                 onClick={handleSecretBadgeTap}
                 className="w-8 h-8 rounded-xl bg-emerald-700/10 dark:bg-amber-400/15 text-emerald-800 dark:text-amber-300 flex items-center justify-center cursor-default select-none"
-                aria-label="نشان حامیان هم‌صدا"
+                aria-label="نشان حامیان رفیقو"
               >
                 <ShieldCheck className={`w-4 h-4 ${tapProgress >= 3 ? 'scale-110 transition-transform' : ''}`} />
               </button>
-              <span>حمایت هوشمند و تعرفه تبلیغات در هم‌صدا</span>
+              <span>حمایت هوشمند و تعرفه تبلیغات در رفیقو</span>
             </div>
 
             <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white text-balance">
               معرفی محترمانه کسب‌وکار شما، بدون آزار کاربران
             </h1>
             <p className="text-xs sm:text-sm leading-7 text-slate-600 dark:text-slate-300">
-              در هم‌صدا هیچ بنر مزاحم، پاپ‌آپ ناگهانی یا شلوغی تبلیغاتی در بخش‌های روزمره وجود ندارد. کاربر فقط زمانی که بخواهد برای قابلیت‌های پیشرفته هوش مصنوعی{' '}
+              در رفیقو هیچ بنر مزاحم، پاپ‌آپ ناگهانی یا شلوغی تبلیغاتی در بخش‌های روزمره وجود ندارد. کاربر فقط زمانی که بخواهد برای قابلیت‌های پیشرفته هوش مصنوعی{' '}
               <strong>+{toPersianDigits(DEFAULT_AD_REWARD_COINS)} سکه رایگان</strong> بگیرد، با انتخاب خودش بنر اسپانسر را{' '}
               <strong>۱۰ ثانیه</strong> با تمرکز کامل مشاهده می‌کند و در صورت تمایل روی لینک سایت شما می‌زند.
             </p>
@@ -302,7 +302,7 @@ export const SponsorTariffView: React.FC<SponsorTariffViewProps> = ({
       <section className="luxury-card p-6 sm:p-7 space-y-4">
         <div className="flex items-center gap-2 text-xs font-bold text-emerald-700 dark:text-amber-300">
           <Megaphone className="w-4 h-4" />
-          <span>شفافیت کامل سیستم سکه هم‌صدا</span>
+          <span>شفافیت کامل سیستم سکه رفیقو</span>
         </div>
         <h2 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">
           کدام بخش‌ها با سکه کار می‌کنند و کدام بخش‌ها همیشه رایگان‌اند؟
