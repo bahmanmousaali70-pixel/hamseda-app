@@ -326,7 +326,7 @@ export default function App() {
         ? rawPartnerName
         : 'همراه';
     const normalizedAssistantName =
-      rawAssistantName && (alreadyMigrated || !['بهمن', 'زری', 'آوا'].includes(rawAssistantName))
+      rawAssistantName && (alreadyMigrated || !['بهمن', 'زری', 'آوا', 'هم‌صدا', 'هم صدا'].includes(rawAssistantName))
         ? rawAssistantName
         : 'رفیقو';
     return {
