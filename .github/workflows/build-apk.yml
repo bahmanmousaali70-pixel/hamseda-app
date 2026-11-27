@@ -2,7 +2,7 @@
 name: Build Android APK
 
 concurrency:
-  group: hamseda-android-apk-${{ github.ref }}
+  group: refigho-android-apk-${{ github.ref }}
   cancel-in-progress: true
 
 on:
@@ -23,7 +23,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js 22
+      - name: Set up Node.js 24
         uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -125,24 +125,24 @@ jobs:
           ls -lh "$APK"
 
       - name: Rename APK for easy installation
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk hamseda.apk
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk refigho.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: hamseda-apk
-          path: hamseda.apk
+          name: refigho-apk
+          path: refigho.apk
 
       - name: Publish Development APK to GitHub Pre-release
         if: github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: dev-v${{ env.APP_VERSION }}
-          name: هم‌صدا - نسخه آزمایشی ${{ env.APP_VERSION }}
-          body: نسخه آزمایشی شاخه توسعه هم‌صدا (${{ github.ref_name }}). فایل حاصله را مستقیم بدون نیاز به استخراج ZIP نصب کنید.
+          name: رفیقو - نسخه آزمایشی ${{ env.APP_VERSION }}
+          body: نسخه آزمایشی شاخه توسعه رفیقو (${{ github.ref_name }}). فایل حاصله را مستقیم بدون نیاز به استخراج ZIP نصب کنید.
           prerelease: true
           make_latest: false
-          files: hamseda.apk
+          files: refigho.apk
           overwrite_files: true
           fail_on_unmatched_files: true
 
@@ -151,7 +151,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-apk
-          name: هم‌صدا - آخرین نسخه APK
-          body: فایل نصبی اپلیکیشن هم‌صدا
-          files: hamseda.apk
+          name: رفیقو - آخرین نسخه APK
+          body: فایل نصبی اپلیکیشن رفیقو
+          files: refigho.apk
           overwrite_files: true
