@@ -208,7 +208,7 @@ export function parseOfflineAssistantCommand(
   ctx: AssistantEngineContext
 ): AssistantCommandResult | null {
   const selfName = getSelfName(ctx.settings, ctx.deviceOwner);
-  const assistantName = ctx.settings.assistantName?.trim() || 'هم‌صدا';
+  const assistantName = ctx.settings.assistantName?.trim() || 'رفیقو';
   const wake = extractCommandAfterWakeWord(rawTranscript, assistantName);
 
   if (wake.matched && wake.onlyWakeWord) {
@@ -679,7 +679,7 @@ export function parseOfflineAssistantCommand(
   if (/(حالت رانندگی|حالت جاده|مود ماشین|مود رانندگی|صفحه رانندگی)/.test(norm)) {
     return {
       action: 'open_drive_mode',
-      replyText: 'حالت ایمن رانندگی هم‌صدا با دکمه‌های بزرگ باز شد.',
+      replyText: 'حالت ایمن رانندگی رفیقو با دکمه‌های بزرگ باز شد.',
     };
   }
 
@@ -838,7 +838,7 @@ function buildOfflineConversationReply(
   ctx: AssistantEngineContext
 ): string {
   const selfName = getSelfName(ctx.settings, ctx.deviceOwner);
-  const assistantName = ctx.settings.assistantName?.trim() || 'هم‌صدا';
+  const assistantName = ctx.settings.assistantName?.trim() || 'رفیقو';
   const text = normalizeAssistantText(utterance);
   const previousUser = [...(ctx.conversationHistory || [])].reverse().find((item) => item.role === 'user')?.text;
 
@@ -871,7 +871,7 @@ export async function processAssistantUtterance(
   ctx: AssistantEngineContext
 ): Promise<AssistantCommandResult> {
   const selfName = getSelfName(ctx.settings, ctx.deviceOwner);
-  const assistantName = ctx.settings.assistantName?.trim() || 'هم‌صدا';
+  const assistantName = ctx.settings.assistantName?.trim() || 'رفیقو';
   const wake = extractCommandAfterWakeWord(rawTranscript, assistantName);
   const cleanedUtterance = wake.matched ? wake.command : rawTranscript.trim();
 
