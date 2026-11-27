@@ -38,12 +38,12 @@ export const OnboardingGuideModal: React.FC<OnboardingGuideModalProps> = ({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[90] box-border flex min-h-[100dvh] w-screen items-center justify-center bg-black/70 backdrop-blur-sm p-3 sm:p-4"
+      className="fixed inset-0 z-[90] box-border flex min-h-[100dvh] min-w-0 items-center justify-center overflow-y-auto bg-black/70 backdrop-blur-sm p-3 sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-label="راهنمای شروع سریع رفیقو"
     >
-      <div className="w-full min-w-0 max-w-xl max-h-[calc(100dvh-1.5rem)] flex flex-col rounded-3xl luxury-card overflow-hidden shadow-2xl border border-amber-400/35">
+      <div className="w-full min-w-0 max-w-full sm:max-w-xl max-h-[calc(100dvh-1.5rem)] flex flex-col rounded-3xl luxury-card overflow-hidden shadow-2xl border border-amber-400/35">
         {/* Header */}
         <div className="px-5 py-4 flex items-center justify-between gap-3 border-b border-[var(--luxury-border)] bg-gradient-to-l from-emerald-900/10 via-amber-500/10 to-transparent shrink-0">
           <div className="flex items-center gap-3 min-w-0">
