@@ -302,3 +302,165 @@ button, a, input, textarea, select {
 :root[data-theme="plum-noir"] .dark\:border-emerald-900 {
   border-color: var(--luxury-border);
 }
+
+/* Refigho cross-device layout hardening: PWA + Capacitor WebView */
+:root {
+  color-scheme: light;
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
+  font-synthesis: none;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 320px;
+  min-height: 100%;
+  margin: 0;
+}
+
+html {
+  min-height: 100%;
+  overflow-x: clip;
+  overscroll-behavior-x: none;
+}
+
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: clip;
+  overscroll-behavior-x: none;
+}
+
+#root,
+.app-shell,
+.app-shell > main {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.app-shell {
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.app-shell main,
+.app-shell header,
+.app-shell nav,
+.app-shell section,
+.app-shell article,
+.app-shell aside {
+  min-width: 0;
+}
+
+.app-shell main > *,
+.app-shell [class*="grid"] > *,
+.app-shell [class*="flex"] > * {
+  min-width: 0;
+}
+
+img,
+svg,
+video,
+canvas,
+iframe {
+  max-width: 100%;
+}
+
+input,
+select,
+textarea,
+button {
+  max-width: 100%;
+  font: inherit;
+}
+
+input,
+select,
+textarea {
+  min-width: 0;
+}
+
+pre,
+code {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+table {
+  max-width: 100%;
+}
+
+[dir="rtl"] input,
+[dir="rtl"] textarea {
+  text-align: start;
+}
+
+/* Compact phones, including narrow Android WebViews and iPhone SE widths */
+@media (max-width: 380px) {
+  .app-shell > main {
+    padding-inline: 0.75rem !important;
+  }
+
+  .app-shell header > div {
+    gap: 0.5rem;
+  }
+
+  .app-shell .luxury-card {
+    border-radius: 1rem;
+  }
+
+  .app-shell button,
+  .app-shell a {
+    overflow-wrap: anywhere;
+  }
+}
+
+/* Tablets and small laptops: preserve usable content width without stretching cards */
+@media (min-width: 640px) and (max-width: 1023px) {
+  .app-shell > main {
+    padding-inline: clamp(1rem, 3vw, 2rem);
+  }
+
+  .app-shell main > .luxury-card,
+  .app-shell main > section {
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
+/* Desktop and large displays */
+@media (min-width: 1024px) {
+  .app-shell > main {
+    width: min(100%, 80rem);
+    margin-inline: auto;
+  }
+}
+
+/* Short landscape screens: keep the app usable above browser/system controls */
+@media (orientation: landscape) and (max-height: 520px) {
+  .app-shell > header {
+    position: relative;
+  }
+
+  .app-shell > main {
+    padding-top: 1rem;
+    padding-bottom: 1.5rem;
+  }
+
+  .app-shell nav[aria-label="ناوبری پایین"] {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+/* Respect iOS home-indicator and notched-device safe areas */
+@supports (padding: max(0px)) {
+  .app-shell {
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+}
