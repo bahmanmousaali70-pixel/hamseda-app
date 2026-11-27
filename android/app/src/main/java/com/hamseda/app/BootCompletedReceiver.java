@@ -1,4 +1,4 @@
-package com.hamseda.app;
+package com.refigho.app;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
