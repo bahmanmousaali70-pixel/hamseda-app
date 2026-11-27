@@ -61,7 +61,7 @@ public class IncomingCallReceiver extends BroadcastReceiver {
         }
 
         final Context appCtx = context.getApplicationContext();
-        // Caller-number data is handled only while the user has selected Hamseda
+        // Caller-number data is handled only while the user has selected Refigho
         // as the Assistant handler; otherwise announce a generic incoming call.
         if (!RoozhayeNativePlugin.isAssistantRoleHeld(appCtx)) {
             dispatchCallAnnouncement(appCtx, prefs, null);
