@@ -2196,6 +2196,9 @@ const BLOCKED_RADIO_TERMS = [
   'رادیو بی‌بی‌سی', 'bbc persian', 'رادیو زمانه', 'radio zamaneh',
   'politics', 'political', 'politics talk', 'religion', 'religious', 'sermon', 'preaching',
   'اخبار سیاسی', 'سیاسی', 'مذهبی', 'دینی', 'منبر', 'مداحی', 'نوحه', 'قرآن', 'قرائت',
+  // Explicit/adult sexual-content stations and search terms (token-boundary matching).
+  'sex', 'sexual', 'sex radio', 'adult', 'xxx', 'porn', 'pornography', 'erotic', 'nude', 'nudity',
+  'سکس', 'پورن', 'پورنوگرافی', 'جنسی', 'محتوای جنسی', 'محتوای بزرگسال', 'بزرگسال', '۱۸+',
 ];
 
 function normalizeRadioFilterText(value: string): string {
@@ -2709,6 +2712,16 @@ async function fetchPlayableMusicPlaylist(moodOrGenre: string, _ai: GoogleGenAI 
 app.post('/api/radio-stations', async (req, res) => {
   const category = typeof req.body?.category === 'string' ? req.body.category : 'iran';
   const rawQuery = typeof req.body?.query === 'string' ? req.body.query.trim() : '';
+
+  // Reject explicit/adult searches before querying external radio directories.
+  if (rawQuery && isBlockedRadioStation({title: rawQuery, artist: '', tags: ''})) {
+    res.json({
+      category,
+      stations: [],
+      notice: 'این عبارت در جستجوی رادیو پشتیبانی نمی‌شود. لطفاً نام یا سبک موسیقی دیگری وارد کنید.',
+    });
+    return;
+  }
 
   try {
     let tracks: ServerMusicTrack[] = [];
