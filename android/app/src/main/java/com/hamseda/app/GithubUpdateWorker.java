@@ -43,7 +43,7 @@ public class GithubUpdateWorker extends Worker {
             connection.setConnectTimeout(12000);
             connection.setReadTimeout(18000);
             connection.setRequestProperty("Accept", "application/vnd.github+json");
-            connection.setRequestProperty("User-Agent", "Hamseda-Android-UpdateChecker");
+            connection.setRequestProperty("User-Agent", "Refigho-Android-UpdateChecker");
             if (connection.getResponseCode() != 200) return Result.retry();
 
             java.io.InputStream input = connection.getInputStream();
@@ -87,8 +87,8 @@ public class GithubUpdateWorker extends Worker {
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 NotificationChannel channel = new NotificationChannel(
-                        CHANNEL_ID, "به‌روزرسانی هم‌صدا", NotificationManager.IMPORTANCE_DEFAULT);
-                channel.setDescription("اعلان نسخه‌های جدید هم‌صدا");
+                        CHANNEL_ID, "به‌روزرسانی رفیقو", NotificationManager.IMPORTANCE_DEFAULT);
+                channel.setDescription("اعلان نسخه‌های جدید رفیقو");
                 NotificationManager manager = context.getSystemService(NotificationManager.class);
                 if (manager != null) manager.createNotificationChannel(channel);
             }
@@ -107,7 +107,7 @@ public class GithubUpdateWorker extends Worker {
 
             NotificationCompat.Builder notification = new NotificationCompat.Builder(context, CHANNEL_ID)
                     .setSmallIcon(R.mipmap.ic_launcher)
-                    .setContentTitle("نسخه جدید هم‌صدا آماده است")
+                    .setContentTitle("نسخه جدید رفیقو آماده است")
                     .setContentText("نسخه " + latestVersion + " را برای به‌روزرسانی دریافت کنید.")
                     .setStyle(new NotificationCompat.BigTextStyle().bigText(
                             "نسخه " + latestVersion + " آماده است. برای دریافت فایل نصب، این اعلان را لمس کنید."))
