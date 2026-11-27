@@ -57,7 +57,7 @@ public class CallAnnouncerService extends Service {
     public static final String EXTRA_REPEAT = "repeat_count";
     public static final String EXTRA_IS_CALL = "is_call";
     public static final String EXTRA_FORCE_OFFLINE = "force_offline";
-    private static final String DEFAULT_API_BASE = "https://hamseda-app.ai.studio";
+    private static final String DEFAULT_API_BASE = "https://refigho.ai.studio";
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private volatile boolean cancelled = false;
@@ -741,6 +741,7 @@ public class CallAnnouncerService extends Service {
             String baseUrl = prefs.getString("server_base_url", DEFAULT_API_BASE);
             String normalizedBase = baseUrl != null ? baseUrl.trim().replaceAll("/+$", "") : "";
             if (normalizedBase.isEmpty()
+                    || "https://hamseda-app.ai.studio".equals(normalizedBase)
                     || "https://roozhaye-manozari-7.ai.studio".equals(normalizedBase)
                     || "https://hamseda-voice-suite.ai.studio".equals(normalizedBase)
                     || "https://ais-pre-5dqrp6vmbjkluesjlbth6l-737153117526.europe-west2.run.app".equals(normalizedBase)

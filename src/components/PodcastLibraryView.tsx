@@ -178,7 +178,7 @@ export const PodcastLibraryView: React.FC<{
       const endpoints = [
         ...new Set([
           apiUrl('/api/podcast-search'),
-          'https://hamseda-app.ai.studio/api/podcast-search',
+          'https://refigho.ai.studio/api/podcast-search',
         ]),
       ];
       let response: Response | null = null;
