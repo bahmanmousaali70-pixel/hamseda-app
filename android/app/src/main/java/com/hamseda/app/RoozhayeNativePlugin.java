@@ -96,7 +96,7 @@ public class RoozhayeNativePlugin extends Plugin {
                 OfflinePersianTts.ensureDefaultInstalled(appCtx);
             } catch (Exception ignored) {
             }
-        }, "HamsedaOfflineWarmup").start();
+        }, "RefighoOfflineWarmup").start();
     }
 
     @PluginMethod
@@ -167,7 +167,7 @@ public class RoozhayeNativePlugin extends Plugin {
         if (roleManager.isRoleHeld(RoleManager.ROLE_ASSISTANT)) {
             result.put("available", true);
             result.put("held", true);
-            result.put("message", "هم‌صدا دستیار پیش‌فرض دستگاه است.");
+            result.put("message", "رفیقو دستیار پیش‌فرض دستگاه است.");
             call.resolve(result);
             return;
         }
@@ -196,10 +196,10 @@ public class RoozhayeNativePlugin extends Plugin {
         result.put("activityResultCode", resultCode);
         result.put("accepted", held && resultCode == Activity.RESULT_OK);
         result.put("message", held
-                ? "هم‌صدا به‌عنوان دستیار پیش‌فرض انتخاب شد."
+                ? "رفیقو به‌عنوان دستیار پیش‌فرض انتخاب شد."
                 : resultCode == Activity.RESULT_CANCELED
-                    ? "پنجره انتخاب دستیار باز شد، اما انتخاب تأیید نشد. برای فعال‌شدن امکانات وابسته، هم‌صدا باید دستیار پیش‌فرض شود."
-                    : "درخواست انتخاب دستیار برگشت، اما اندروید انتخاب هم‌صدا را تأیید نکرد. کد نتیجه: " + resultCode);
+                    ? "پنجره انتخاب دستیار باز شد، اما انتخاب تأیید نشد. برای فعال‌شدن امکانات وابسته، رفیقو باید دستیار پیش‌فرض شود."
+                    : "درخواست انتخاب دستیار برگشت، اما اندروید انتخاب رفیقو را تأیید نکرد. کد نتیجه: " + resultCode);
         call.resolve(result);
     }
 
@@ -254,7 +254,7 @@ public class RoozhayeNativePlugin extends Plugin {
     private List<String> collectMissingRuntimePermissions(Context ctx) {
         List<String> needed = new ArrayList<>();
         // SMS and Call Log permissions are Play-restricted.
-        // Request them only while the user has actively selected Hamseda as Assistant.
+        // Request them only while the user has actively selected Refigho as Assistant.
         boolean assistantRoleHeld = isAssistantRoleHeld(ctx);
         List<String> basePerms = new ArrayList<>();
         basePerms.add(Manifest.permission.READ_PHONE_STATE);
@@ -312,7 +312,7 @@ public class RoozhayeNativePlugin extends Plugin {
         String deviceOwner = call.getString("deviceOwner", "man");
         String selfName = call.getString("selfName", "من");
         String partnerName = call.getString("partnerName", "همراه");
-        String assistantName = call.getString("assistantName", "هم‌صدا");
+        String assistantName = call.getString("assistantName", "رفیقو");
 
         SharedPreferences prefs = getContext().getSharedPreferences("rmz_native_prefs", Context.MODE_PRIVATE);
         prefs.edit()
@@ -574,7 +574,7 @@ public class RoozhayeNativePlugin extends Plugin {
                     mainHandler.post(() -> call.resolve(ret));
                 }
             }
-        }, "HamsedaVoskListenOnce").start();
+        }, "RefighoVoskListenOnce").start();
     }
 
     private String extractVoskField(String json, String key) {
@@ -610,7 +610,7 @@ public class RoozhayeNativePlugin extends Plugin {
             try {
                 if (mdl != null) mdl.close();
             } catch (Exception ignored) {}
-        }, "HamsedaVoskCleanup").start();
+        }, "RefighoVoskCleanup").start();
     }
 
     @PluginMethod
@@ -855,7 +855,7 @@ public class RoozhayeNativePlugin extends Plugin {
                         ctx.startActivity(policyIntent);
                         ret.put("ok", false);
                         ret.put("needsPolicyAccess", true);
-                        ret.put("message", "برای تغییر حالت سایلنت و زنگ، لطفاً در صفحه بازشده اجازه «مزاحم نشوید / Do Not Disturb» را برای هم‌صدا روشن کنید.");
+                        ret.put("message", "برای تغییر حالت سایلنت و زنگ، لطفاً در صفحه بازشده اجازه «مزاحم نشوید / Do Not Disturb» را برای رفیقو روشن کنید.");
                         call.resolve(ret);
                         return;
                     }
@@ -893,13 +893,13 @@ public class RoozhayeNativePlugin extends Plugin {
                         call.resolve(ret);
                         return;
                     }
-                    File photoDir = new File(ctx.getExternalFilesDir(Environment.DIRECTORY_PICTURES), "Hamseda");
+                    File photoDir = new File(ctx.getExternalFilesDir(Environment.DIRECTORY_PICTURES), "Refigho");
                     if (!photoDir.exists() && !photoDir.mkdirs()) throw new Exception("ساخت پوشه عکس ممکن نشد.");
-                    File photoFile = new File(photoDir, "Hamseda_" + System.currentTimeMillis() + ".jpg");
+                    File photoFile = new File(photoDir, "Refigho_" + System.currentTimeMillis() + ".jpg");
                     Uri photoUri = FileProvider.getUriForFile(ctx, ctx.getPackageName() + ".fileprovider", photoFile);
                     camIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoUri);
                     camIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-                    camIntent.setClipData(android.content.ClipData.newRawUri("Hamseda photo", photoUri));
+                    camIntent.setClipData(android.content.ClipData.newRawUri("Refigho photo", photoUri));
                     startActivityForResult(call, camIntent, "handleCameraCaptureResult");
                     return;
                 }
@@ -1011,7 +1011,7 @@ public class RoozhayeNativePlugin extends Plugin {
                     boolean movedToBackground = activity != null && activity.moveTaskToBack(true);
                     ret.put("ok", movedToBackground);
                     ret.put("message", movedToBackground
-                            ? "هم‌صدا به پس‌زمینه رفت."
+                            ? "رفیقو به پس‌زمینه رفت."
                             : "خروج از برنامه در این دستگاه در دسترس نیست.");
                     call.resolve(ret);
                     return;
@@ -1041,7 +1041,7 @@ public class RoozhayeNativePlugin extends Plugin {
                             : (cleanTitle.contains(".") ? cleanTitle : "download_" + System.currentTimeMillis() + ".bin");
                     DownloadManager.Request req = new DownloadManager.Request(Uri.parse(targetUrl));
                     req.setTitle(!name.trim().isEmpty() ? name.trim() : safeFileName);
-                    req.setDescription("دانلود با دستیار هم‌صدا");
+                    req.setDescription("دانلود با دستیار رفیقو");
                     req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
                     req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "RoozhayeManOZari/" + safeFileName);
                     dm.enqueue(req);
@@ -1125,7 +1125,7 @@ public class RoozhayeNativePlugin extends Plugin {
                     Intent alarmIntent = new Intent(AlarmClock.ACTION_SET_ALARM)
                             .putExtra(AlarmClock.EXTRA_HOUR, h)
                             .putExtra(AlarmClock.EXTRA_MINUTES, m)
-                            .putExtra(AlarmClock.EXTRA_MESSAGE, !name.trim().isEmpty() ? name.trim() : "یادآور دستیار هم‌صدا")
+                            .putExtra(AlarmClock.EXTRA_MESSAGE, !name.trim().isEmpty() ? name.trim() : "یادآور دستیار رفیقو")
                             .putExtra(AlarmClock.EXTRA_SKIP_UI, false);
                     alarmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     ctx.startActivity(alarmIntent);
@@ -1444,7 +1444,7 @@ public class RoozhayeNativePlugin extends Plugin {
             call.resolve(ret);
             return;
         }
-        String assistantName = call.getString("assistantName", "هم‌صدا");
+        String assistantName = call.getString("assistantName", "رفیقو");
         boolean started = WakeWordForegroundService.start(ctx, assistantName);
         JSObject ret = new JSObject();
         ret.put("ok", started);
@@ -1828,7 +1828,7 @@ public class RoozhayeNativePlugin extends Plugin {
                 shareIntent.putExtra(Intent.EXTRA_STREAM, contentUri);
                 shareIntent.putExtra(Intent.EXTRA_SUBJECT, safeName);
                 shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                Intent chooser = Intent.createChooser(shareIntent, "ذخیره یا ارسال فایل پشتیبان هم‌صدا");
+                Intent chooser = Intent.createChooser(shareIntent, "ذخیره یا ارسال فایل پشتیبان رفیقو");
                 chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 ctx.startActivity(chooser);
                 shared = true;
@@ -1907,8 +1907,8 @@ public class RoozhayeNativePlugin extends Plugin {
         if (result.getResultCode() == Activity.RESULT_OK) {
             JSObject ret = new JSObject();
             ret.put("ok", true);
-            ret.put("message", "عکس گرفته شد و در پوشه تصاویر هم‌صدا ذخیره شد.");
-            File photoDir = new File(getContext().getExternalFilesDir(Environment.DIRECTORY_PICTURES), "Hamseda");
+            ret.put("message", "عکس گرفته شد و در پوشه تصاویر رفیقو ذخیره شد.");
+            File photoDir = new File(getContext().getExternalFilesDir(Environment.DIRECTORY_PICTURES), "Refigho");
             File[] photos = photoDir.listFiles((dir, name) -> name.endsWith(".jpg"));
             if (photos != null && photos.length > 0) {
                 File newest = photos[0];
@@ -1943,7 +1943,7 @@ public class RoozhayeNativePlugin extends Plugin {
             result.put("ok", ok);
             if (!ok) result.put("error", "موتور عصبی آفلاین فارسی آماده نیست یا نتوانست صدا تولید کند.");
             mainHandler.post(() -> call.resolve(result));
-        }, "HamsedaOfflinePersianTTS").start();
+        }, "RefighoOfflinePersianTTS").start();
     }
 
     @PluginMethod
@@ -1964,7 +1964,7 @@ public class RoozhayeNativePlugin extends Plugin {
                 result.put("error", e.getMessage() != null ? e.getMessage() : "خطا در بررسی وضعیت موتورها");
                 mainHandler.post(() -> call.resolve(result));
             }
-        }, "HamsedaOfflineStatuses").start();
+        }, "RefighoOfflineStatuses").start();
     }
 
     @PluginMethod
@@ -1997,7 +1997,7 @@ public class RoozhayeNativePlugin extends Plugin {
                 result.put("error", outcome.getSecond());
             }
             mainHandler.post(() -> call.resolve(result));
-        }, "HamsedaInstallOfflineTTS").start();
+        }, "RefighoInstallOfflineTTS").start();
     }
 
     @PluginMethod
@@ -2060,7 +2060,7 @@ public class RoozhayeNativePlugin extends Plugin {
                 result.put("error", res.getError());
             }
             mainHandler.post(() -> call.resolve(result));
-        }, "HamsedaSpeakOfflineEngine").start();
+        }, "RefighoSpeakOfflineEngine").start();
     }
 
     @PluginMethod
@@ -2161,7 +2161,7 @@ public class RoozhayeNativePlugin extends Plugin {
             }
             final JSObject finalRet = ret;
             mainHandler.post(() -> call.resolve(finalRet));
-        }, "HamsedaWebSearch").start();
+        }, "RefighoWebSearch").start();
     }
 
     @PluginMethod
@@ -2187,7 +2187,7 @@ public class RoozhayeNativePlugin extends Plugin {
             }
             final JSObject finalRet = ret;
             mainHandler.post(() -> call.resolve(finalRet));
-        }, "HamsedaNetCheck").start();
+        }, "RefighoNetCheck").start();
     }
 
     @PluginMethod
