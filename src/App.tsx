@@ -77,6 +77,7 @@ import {
   uploadLocalBundleToSpace,
   type CoupleSpaceInfo,
 } from './services/coupleSyncService';
+import {registerRefighoPushToken} from './services/pushNotificationService';
 import {
   COIN_COSTS,
   fetchActiveSponsorAds,
@@ -1097,6 +1098,8 @@ export default function App() {
       });
       try {
         const discovered = await ensureUserAndDiscoverSpace(user);
+        // Push token registration is best-effort and must never block existing couple sync.
+        void registerRefighoPushToken(user).catch((error) => console.warn('Refigho push registration failed:', error));
         if (!active) return;
         if (!isCloudSpaceHydrated(discovered.spaceId)) {
           await uploadLocalBundleToSpace(discovered.spaceId, latestLocalSyncBundleRef.current);
