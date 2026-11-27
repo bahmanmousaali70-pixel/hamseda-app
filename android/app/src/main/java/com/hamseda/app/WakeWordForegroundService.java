@@ -60,7 +60,7 @@ public class WakeWordForegroundService extends Service {
     private Model model;
     private Recognizer recognizer;
     private SpeechService speechService;
-    private String assistantName = "هم‌صدا";
+    private String assistantName = "رفیقو";
     private long lastWakeAt = 0L;
     private String lastHandledHypothesis = "";
     private long lastHandledHypothesisAt = 0L;
@@ -201,7 +201,7 @@ public class WakeWordForegroundService extends Service {
                 != PackageManager.PERMISSION_GRANTED) return false;
         Intent intent = new Intent(context, WakeWordForegroundService.class);
         intent.setAction(ACTION_START);
-        intent.putExtra("assistant_name", name == null ? "هم‌صدا" : name);
+        intent.putExtra("assistant_name", name == null ? "رفیقو" : name);
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent);
             else context.startService(intent);
@@ -232,7 +232,7 @@ public class WakeWordForegroundService extends Service {
             if (requestedName != null && !requestedName.trim().isEmpty()) assistantName = requestedName.trim();
         } else {
             assistantName = getSharedPreferences(PREFS, MODE_PRIVATE)
-                    .getString("assistant_name", "هم‌صدا");
+                    .getString("assistant_name", "رفیقو");
         }
 
         getSharedPreferences(PREFS, MODE_PRIVATE).edit()
@@ -272,7 +272,7 @@ public class WakeWordForegroundService extends Service {
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_stat_rmz)
-                .setContentTitle("هم‌صدا · گوش‌به‌زنگ")
+                .setContentTitle("رفیقو · گوش‌به‌زنگ")
                 .setContentText(message)
                 .setContentIntent(pending)
                 .setOngoing(true)
@@ -318,7 +318,7 @@ public class WakeWordForegroundService extends Service {
     private void createChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(CHANNEL_ID,
-                    "گوش‌به‌زنگ هم‌صدا", NotificationManager.IMPORTANCE_LOW);
+                    "گوش‌به‌زنگ رفیقو", NotificationManager.IMPORTANCE_LOW);
             channel.setDescription("شنود آشکار واژه بیدارباش و دریافت فرمان صوتی");
             NotificationManager manager = getSystemService(NotificationManager.class);
             if (manager != null) manager.createNotificationChannel(channel);
@@ -650,7 +650,7 @@ public class WakeWordForegroundService extends Service {
         // that differ by one or two recognized words and used to queue repeated "جانم".
         if (now - lastWakeAt < 3500L) return false;
         lastWakeAt = now;
-        updateNotification("نام هم‌صدا شنیده شد؛ منتظر فرمان هستم.");
+        updateNotification("نام رفیقو شنیده شد؛ منتظر فرمان هستم.");
         return true;
     }
 
@@ -660,7 +660,7 @@ public class WakeWordForegroundService extends Service {
                 .putString("pending_wake_command", command.trim())
                 .putLong("pending_wake_command_at", System.currentTimeMillis())
                 .apply();
-        updateNotification("هم‌صدا · فرمان دریافت شد؛ برای اجرا وارد دستیار شو.");
+        updateNotification("رفیقو · فرمان دریافت شد؛ برای اجرا وارد دستیار شو.");
     }
 
     private void recoverContinuousRecognition() {
