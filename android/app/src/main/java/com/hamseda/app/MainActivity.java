@@ -28,7 +28,11 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(RoozhayeNativePlugin.class);
         registerPlugin(NativeAuthDiagnosticsPlugin.class);
+        registerPlugin(RefighoPushPlugin.class);
         super.onCreate(savedInstanceState);
+        if (android.os.Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 7103);
+        }
         installSafeExternalUrlInterceptor();
         PeriodicWorkRequest updateCheck = new PeriodicWorkRequest.Builder(GithubUpdateWorker.class, 12, TimeUnit.HOURS).build();
         WorkManager.getInstance(getApplicationContext()).enqueueUniquePeriodicWork(
