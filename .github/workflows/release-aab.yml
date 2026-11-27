@@ -36,7 +36,7 @@ jobs:
               exit 1
             fi
           done
-          KEYSTORE_PATH="$RUNNER_TEMP/hamseda-upload-key.jks"
+          KEYSTORE_PATH="$RUNNER_TEMP/refigho-upload-key.jks"
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
           chmod 600 "$KEYSTORE_PATH"
           keytool -list -keystore "$KEYSTORE_PATH" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" >/dev/null
@@ -97,21 +97,21 @@ jobs:
           "$APKSIGNER" verify --verbose --print-certs "$APK"
           jarsigner -verify -verbose -certs "$AAB" >/dev/null
           keytool -list -v -keystore "$ANDROID_KEYSTORE_PATH" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" | grep -E "SHA256:|SHA1:"
-          cp "$APK" hamseda-release.apk
+          cp "$APK" refigho-release.apk
           ls -lh "$APK" "$AAB"
 
       - name: Upload signed Release APK (Myket & Cafe Bazaar)
         uses: actions/upload-artifact@v4
         with:
-          name: hamseda-release-apk
-          path: hamseda-release.apk
+          name: refigho-release-apk
+          path: refigho-release.apk
           if-no-files-found: error
           retention-days: 30
 
       - name: Upload signed Release AAB (Google Play & Cafe Bazaar)
         uses: actions/upload-artifact@v4
         with:
-          name: hamseda-release-aab
+          name: refigho-release-aab
           path: android/app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
           retention-days: 30
