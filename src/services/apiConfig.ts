@@ -1,7 +1,7 @@
 import {Capacitor} from '@capacitor/core';
 
 const SERVER_URL_KEY = 'rmz_cloud_api_base_v1';
-const DEFAULT_NATIVE_API_BASE = 'https://hamseda-app.ai.studio';
+const DEFAULT_NATIVE_API_BASE = 'https://refigho.ai.studio';
 const LEGACY_API_BASES = new Set([
   'https://hamseda-app-518643423697.europe-west2.run.app',
   'https://roozhaye-manozari-7.ai.studio',
