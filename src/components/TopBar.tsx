@@ -131,10 +131,10 @@ export const TopBar: React.FC<TopBarProps> = ({
             >
               <img
                 src="/hamseda-icon.png"
-                alt="لوگوی هم‌صدا"
+                alt="لوگوی رفیقو"
                 className="w-8 h-8 rounded-xl object-cover shrink-0 shadow-xs"
               />
-              <span>هم‌صدا</span>
+              <span>رفیقو</span>
             </button>
             <button
               type="button"
@@ -316,7 +316,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         className="lg:hidden fixed bottom-0 left-0 right-0 z-40 luxury-dock backdrop-blur-xl border-t shadow-[0_-10px_30px_rgba(0,0,0,0.08)] pb-safe"
         aria-label="ناوبری پایین"
       >
-        <div className="grid grid-cols-6 items-center h-[68px] px-0.5">
+        <div className="grid grid-cols-6 items-stretch h-[68px] w-full min-w-0 px-0">
           {MOBILE_PRIMARY_TABS.map((item) => {
             const Icon = item.icon;
             const active = activeTab === item.id && !showMoreSheet;
@@ -328,7 +328,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                   setShowMoreSheet(false);
                   onSelectTab(item.id);
                 }}
-                className={`relative min-h-[54px] flex flex-col items-center justify-center gap-1 rounded-2xl transition-all cursor-pointer active:scale-[0.96] ${
+                className={`relative min-w-0 w-full overflow-hidden min-h-[54px] flex flex-col items-center justify-center gap-1 rounded-xl transition-all cursor-pointer active:scale-[0.96] ${
                   active
                     ? 'text-emerald-900 dark:text-amber-300 font-bold'
                     : 'text-slate-600 dark:text-slate-400 font-medium hover:text-slate-900 dark:hover:text-slate-200'
@@ -344,7 +344,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                 >
                   <Icon className="w-5 h-5" />
                 </span>
-                <span className="text-[9px] leading-none whitespace-nowrap">{item.label}</span>
+                <span className="w-full px-0.5 text-[9px] leading-none text-center truncate">{item.label}</span>
               </button>
             );
           })}
@@ -352,7 +352,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           <button
             type="button"
             onClick={() => setShowMoreSheet((prev) => !prev)}
-            className={`relative min-h-[54px] flex flex-col items-center justify-center gap-1 rounded-2xl transition-all cursor-pointer active:scale-[0.96] ${
+            className={`relative min-w-0 w-full overflow-hidden min-h-[54px] flex flex-col items-center justify-center gap-1 rounded-xl transition-all cursor-pointer active:scale-[0.96] ${
               showMoreSheet || isDrawerTabActive
                 ? 'text-emerald-900 dark:text-amber-300 font-bold'
                 : 'text-slate-600 dark:text-slate-400 font-medium hover:text-slate-900 dark:hover:text-slate-200'
@@ -368,7 +368,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             >
               <LayoutGrid className="w-5 h-5" />
             </span>
-            <span className="text-[11px] leading-none whitespace-nowrap">
+            <span className="w-full px-0.5 text-[9px] leading-none text-center truncate">
               {isDrawerTabActive ? drawerActiveShortLabel : 'بخش‌ها'}
             </span>
           </button>
