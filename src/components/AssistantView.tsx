@@ -249,7 +249,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
 }) => {
   const selfName = getSelfName(settings, deviceOwner);
   const partnerOtherName = getPartnerNameForDevice(settings, deviceOwner);
-  const assistantName = settings.assistantName?.trim() || 'هم‌صدا';
+  const assistantName = settings.assistantName?.trim() || 'رفیقو';
   const wakeLoopEnabled = Boolean(settings.assistantWakeWordEnabled);
 
   const [assistantNameDraft, setAssistantNameDraft] = useState(assistantName);
@@ -288,7 +288,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
 
   // Sync draft when settings.assistantName updates
   useEffect(() => {
-    setAssistantNameDraft(settings.assistantName?.trim() || 'هم‌صدا');
+    setAssistantNameDraft(settings.assistantName?.trim() || 'رفیقو');
   }, [settings.assistantName]);
 
   useEffect(() => {
@@ -478,7 +478,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
               } else if (nativeRes.needsWriteSettings) {
                 onStatusToast('لطفاً در صفحه بازشده، اجازه «تغییر تنظیمات سیستم (نور صفحه)» را فعال کنید.');
               } else if (nativeRes.needsAccessibility) {
-                onStatusToast('در تنظیمات بازشده، سرویس دسترس‌پذیری هم‌صدا را فعال کن و سپس دوباره فرمان بده.');
+                onStatusToast('در تنظیمات بازشده، سرویس دسترس‌پذیری رفیقو را فعال کن و سپس دوباره فرمان بده.');
               } else if (nativeRes.permissionRequired) {
                 onStatusToast(nativeRes.message || 'لطفاً مجوز اندروید خواسته‌شده را تایید کنید.');
               }
@@ -789,7 +789,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
 
   const handleSaveAssistantName = (e: React.FormEvent) => {
     e.preventDefault();
-    const cleaned = assistantNameDraft.trim() || 'هم‌صدا';
+    const cleaned = assistantNameDraft.trim() || 'رفیقو';
     onUpdateSettings({assistantName: cleaned});
     setNameSavedFlash(true);
     onStatusToast(`نام دستیار به «${cleaned}» تغییر کرد. از این به بعد با همین نام صدایش بزنید.`);
@@ -805,7 +805,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
     onUpdateSettings({assistantWakeWordEnabled: next});
     onStatusToast(
       next
-        ? `در حال فعال‌کردن سرویس گوش‌به‌زنگ «${assistantName}» هستم؛ اعلان دائمی هم‌صدا نمایش داده می‌شود.`
+        ? `در حال فعال‌کردن سرویس گوش‌به‌زنگ «${assistantName}» هستم؛ اعلان دائمی رفیقو نمایش داده می‌شود.`
         : 'گوش‌به‌زنگ خودکار دستیار خاموش شد (دکمه میکروفون همچنان فعال است).'
     );
   };
@@ -878,7 +878,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
                 type="text"
                 value={assistantNameDraft}
                 onChange={(e) => setAssistantNameDraft(e.target.value)}
-                placeholder="مثلاً: هم‌صدا، نگار، سارا"
+                placeholder="مثلاً: رفیقو، نگار، سارا"
                 className="w-full sm:w-44 min-h-[44px] rounded-xl border border-slate-200 dark:border-emerald-950 bg-slate-50 dark:bg-[#0D1614] px-3.5 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-emerald-700"
               />
             </div>
