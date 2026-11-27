@@ -23,11 +23,13 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.telephony.TelephonyManager;
 import android.util.Base64;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
@@ -145,8 +147,82 @@ public class CallAnnouncerService extends Service {
         announceInternal(context, title, text, voiceName, isMale, repeatCount, false, true);
     }
 
+    private static final String DEFERRED_SPEECH_KEY = "deferred_speech_after_call";
+
+    private static boolean isPhoneCallActive(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences("rmz_native_prefs", Context.MODE_PRIVATE);
+        if (prefs.getBoolean("phone_call_active", false)) return true;
+        try {
+            TelephonyManager tm = (TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE);
+            return tm != null && tm.getCallState() == TelephonyManager.CALL_STATE_OFFHOOK;
+        } catch (SecurityException ignored) {
+            return prefs.getBoolean("phone_call_active", false);
+        } catch (Exception ignored) {
+            return prefs.getBoolean("phone_call_active", false);
+        }
+    }
+
+    private static synchronized void deferSpeechUntilCallEnds(Context context, String title, String text) {
+        if (text == null || text.trim().isEmpty()) return;
+        SharedPreferences prefs = context.getSharedPreferences("rmz_native_prefs", Context.MODE_PRIVATE);
+        JSONArray queue;
+        try {
+            queue = new JSONArray(prefs.getString(DEFERRED_SPEECH_KEY, "[]"));
+        } catch (Exception ignored) {
+            queue = new JSONArray();
+        }
+        // Bound storage so a long call or repeated notifications cannot grow the queue indefinitely.
+        if (queue.length() >= 20) return;
+        JSONObject item = new JSONObject();
+        try {
+            item.put("title", title != null ? title : "اعلام رفیقو");
+            item.put("text", text.trim());
+            queue.put(item);
+            prefs.edit().putString(DEFERRED_SPEECH_KEY, queue.toString()).apply();
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Plays deferred announcements only after the phone call has fully ended. */
+    public static void flushDeferredAnnouncements(Context context) {
+        final Context appCtx = context.getApplicationContext();
+        final StringBuilder combined = new StringBuilder();
+        synchronized (CallAnnouncerService.class) {
+            SharedPreferences prefs = appCtx.getSharedPreferences("rmz_native_prefs", Context.MODE_PRIVATE);
+            String raw = prefs.getString(DEFERRED_SPEECH_KEY, "[]");
+            prefs.edit().remove(DEFERRED_SPEECH_KEY).apply();
+            try {
+                JSONArray queue = new JSONArray(raw);
+                for (int i = 0; i < queue.length(); i++) {
+                    JSONObject item = queue.optJSONObject(i);
+                    if (item == null) continue;
+                    String spoken = item.optString("text", "").trim();
+                    if (spoken.isEmpty()) continue;
+                    if (combined.length() > 0) combined.append(". ");
+                    combined.append(spoken);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        if (combined.length() == 0) return;
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (!isPhoneCallActive(appCtx)) {
+                // Deferred messages may contain private SMS content: always use the on-device speech path.
+                announcePrivate(appCtx, "اعلام‌های در انتظار", combined.toString(), null, false, 1);
+            } else {
+                deferSpeechUntilCallEnds(appCtx, "اعلام‌های در انتظار", combined.toString());
+            }
+        }, 1200L);
+    }
+
     private static void announceInternal(Context context, String title, String text, String voiceName, boolean isMale, int repeatCount, boolean isCall, boolean forceOffline) {
         final Context appCtx = context.getApplicationContext();
+        if (isPhoneCallActive(appCtx)) {
+            // Never speak over an active phone conversation. Caller announcements are dropped once answered;
+            // SMS and other non-call announcements are queued for playback after the call ends.
+            if (!isCall) deferSpeechUntilCallEnds(appCtx, title, text);
+            return;
+        }
         final String resolvedVoice = resolveVoiceName(appCtx, voiceName, isMale);
         final boolean resolvedMale = isMaleVoice(resolvedVoice, isMale);
         final int safeRepeat = Math.max(1, Math.min(2, repeatCount));
