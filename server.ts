@@ -2217,6 +2217,30 @@ function isBlockedRadioStation(station: Pick<ServerMusicTrack, 'title' | 'artist
   });
 }
 
+const WORLD_MUSIC_GENRES = [
+  'pop', 'jazz', 'rock', 'classical', 'electronic', 'dance', 'country', 'blues',
+  'reggae', 'metal', 'indie', 'soul', 'funk', 'ambient', 'chillout', 'lounge',
+  'instrumental', 'house', 'techno', 'disco', 'rnb', 'r&b', 'folk', 'soundtrack',
+];
+const WORLD_SPOKEN_WORD_TERMS = [
+  'news', 'talk', 'politics', 'political', 'speech', 'spoken', 'debate',
+  'current affairs', 'interview', 'religion', 'sermon', 'preaching',
+  'اخبار', 'گفتگو', 'گفت‌وگو', 'سیاسی', 'مذهبی',
+];
+
+function isMusicOnlyWorldStation(station: Pick<ServerMusicTrack, 'id' | 'title' | 'artist' | 'tags'>): boolean {
+  if (station.id.startsWith('curated_somafm_') || station.id === 'curated_smooth_chill') return true;
+  const normalized = normalizeRadioFilterText(`${station.title} ${station.artist} ${station.tags || ''}`);
+  const words = new Set(normalized.split(' '));
+  if (WORLD_SPOKEN_WORD_TERMS.some((term) => normalized.includes(normalizeRadioFilterText(term)))) return false;
+  return WORLD_MUSIC_GENRES.some((genre) => {
+    const normalizedGenre = normalizeRadioFilterText(genre);
+    return normalizedGenre.includes(' ')
+      ? normalized.includes(normalizedGenre)
+      : words.has(normalizedGenre);
+  });
+}
+
 async function queryRadioBrowser(queryPathAndParams: string): Promise<RadioBrowserStation[]> {
   const hosts = ['https://de1.api.radio-browser.info', 'https://all.api.radio-browser.info'];
   for (const host of hosts) {
@@ -2803,15 +2827,27 @@ app.post('/api/radio-stations', async (req, res) => {
       tracks = [...CURATED_WORLD_CHILL_STATIONS.filter((c) => !seen.has(c.streamUrl)), ...mapped].slice(0, 26);
     } else {
       // 'world'
-      const [topGlobal, classicJazz] = await Promise.all([
-        queryRadioBrowser('limit=24&hidebroken=true&order=votes&reverse=true'),
-        queryRadioBrowser('tag=pop&limit=12&hidebroken=true&order=clickcount&reverse=true'),
-      ]);
-      const mapped = mapRadioStationsToTracks([...topGlobal, ...classicJazz], 26);
-      tracks = mapped.length > 0 ? mapped : CURATED_WORLD_CHILL_STATIONS;
+      // International directory: request music genres only; never use the unfiltered global top list.
+      const worldGenreQueries = [
+        'pop', 'jazz', 'rock', 'classical', 'electronic', 'dance', 'blues',
+        'reggae', 'indie', 'soul', 'funk', 'ambient', 'chillout', 'lounge',
+        'instrumental', 'house', 'techno', 'disco',
+      ];
+      const worldResults = await Promise.all(
+        worldGenreQueries.map((genre) =>
+          queryRadioBrowser(`tag=${encodeURIComponent(genre)}&limit=8&hidebroken=true&order=votes&reverse=true`)
+        )
+      );
+      const mapped = mapRadioStationsToTracks(worldResults.flat(), 36);
+      const musicOnly = mapped.filter(isMusicOnlyWorldStation);
+      tracks = musicOnly.length > 0 ? musicOnly.slice(0, 26) : CURATED_WORLD_CHILL_STATIONS;
     }
 
-    tracks = tracks.filter((station) => !isBlockedRadioStation(station));
+    tracks = tracks.filter(
+      (station) =>
+        !isBlockedRadioStation(station) &&
+        (category !== 'world' || isMusicOnlyWorldStation(station))
+    );
 
     res.json({
       category,
