@@ -26,6 +26,7 @@ const collectionLabels = {
   chores: "کارهای خانه",
   alerts: "یادآوری‌ها",
   callers: "مخاطبان",
+  config: "تنظیمات مشترک",
 };
 
 exports.notifyCoupleSpaceChange = onDocumentWritten(
