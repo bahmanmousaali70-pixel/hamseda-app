@@ -199,7 +199,7 @@ export const TopBar: React.FC<TopBarProps> = ({
               {showThemeMenu && (
                 <div className="absolute left-0 top-[calc(100%+10px)] z-[70] w-72 rounded-2xl border border-[var(--luxury-border)] bg-[var(--luxury-surface)] p-2.5 shadow-2xl">
                   <div className="px-2 pb-2 text-xs font-extrabold text-slate-700 dark:text-amber-100">
-                    انتخاب پوسته هم‌صدا (۶ تم کامل)
+                    انتخاب پوسته رفیقو (۶ تم کامل)
                   </div>
                   {APP_THEMES.map((t) => (
                     <button
@@ -256,8 +256,8 @@ export const TopBar: React.FC<TopBarProps> = ({
               <button
                 type="button"
                 onClick={onOpenOnboarding}
-                aria-label="راهنمای شروع سریع هم‌صدا"
-                title="راهنمای شروع سریع هم‌صدا"
+                aria-label="راهنمای شروع سریع رفیقو"
+                title="راهنمای شروع سریع رفیقو"
                 className="min-h-[40px] min-w-[40px] px-2 py-2 rounded-xl border border-[var(--luxury-border)] bg-[var(--luxury-surface)] text-emerald-800 dark:text-amber-300 hover:bg-slate-50 dark:hover:bg-emerald-950/40 flex items-center justify-center transition-colors cursor-pointer"
               >
                 <HelpCircle className="w-4 h-4 shrink-0" />
@@ -388,9 +388,9 @@ export const TopBar: React.FC<TopBarProps> = ({
             <div className="w-10 h-1.5 rounded-full bg-slate-300 dark:bg-emerald-900 mx-auto" />
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-base font-extrabold text-slate-900 dark:text-white">بخش‌های هم‌صدا</h3>
+                <h3 className="text-base font-extrabold text-slate-900 dark:text-white">بخش‌های رفیقو</h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  دسترسی سریع به دسته‌بندی‌های هم‌صدا
+                  دسترسی سریع به دسته‌بندی‌های رفیقو
                 </p>
               </div>
               <button
