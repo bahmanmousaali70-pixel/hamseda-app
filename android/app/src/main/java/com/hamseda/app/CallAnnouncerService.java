@@ -1,4 +1,4 @@
-package com.hamseda.app;
+package com.refigho.app;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
