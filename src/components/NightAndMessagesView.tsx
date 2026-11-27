@@ -442,7 +442,7 @@ export const NightAndMessagesView: React.FC<NightAndMessagesViewProps> = ({
           <div>
             <div className="flex items-center gap-2 text-xs font-semibold text-emerald-800 dark:text-amber-300">
               <Music2 className="w-4 h-4" />
-              <span>مرکز چندرسانه‌ای و پیام هم‌صدا</span>
+              <span>مرکز چندرسانه‌ای و پیام رفیقو</span>
             </div>
             <h1 className="mt-1 text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white text-balance">
               موسیقی، رادیو زنده، پادکست، پیشنهاد فیلم و پیام‌ساز
