@@ -130,7 +130,7 @@ export const TopBar: React.FC<TopBarProps> = ({
               className="flex items-center gap-2 text-base md:text-lg font-extrabold tracking-tight text-slate-900 dark:text-slate-50 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-emerald-600 rounded-lg px-1"
             >
               <img
-                src="/hamseda-icon.png"
+                src="/refigho-icon.png"
                 alt="لوگوی رفیقو"
                 className="w-8 h-8 rounded-xl object-cover shrink-0 shadow-xs"
               />
