@@ -348,7 +348,7 @@ export const SponsorRewardModal: React.FC<SponsorRewardModalProps> = ({
       className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 backdrop-blur-sm p-3 sm:p-4"
       role="dialog"
       aria-modal="true"
-      aria-label="افزایش سکه و دریافت سکه هدیه هم‌صدا"
+      aria-label="افزایش سکه و دریافت سکه هدیه رفیقو"
     >
       <div className="w-full max-w-lg max-h-[92vh] flex flex-col rounded-3xl luxury-card overflow-hidden shadow-2xl border border-amber-400/35">
         {/* Header */}
@@ -472,8 +472,8 @@ export const SponsorRewardModal: React.FC<SponsorRewardModalProps> = ({
                       <Sparkles className="w-3.5 h-3.5" />
                       <span>
                         {activeAd.packageTier === 'exclusive'
-                          ? 'اسپانسر انحصاری هم‌صدا'
-                          : 'حامی رسمی هم‌صدا'}
+                          ? 'اسپانسر انحصاری رفیقو'
+                          : 'حامی رسمی رفیقو'}
                       </span>
                     </div>
                     <div className="text-base sm:text-lg font-extrabold">{activeAd.title}</div>
@@ -486,7 +486,7 @@ export const SponsorRewardModal: React.FC<SponsorRewardModalProps> = ({
                   <div className="text-[11px] font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1">
                     <Sparkles className="w-3.5 h-3.5" />
                     <span>
-                      اسپانسر انحصاری هم‌صدا
+                      اسپانسر انحصاری رفیقو
                       {activeAd.brandLabel ? ` · ${activeAd.brandLabel}` : ''}
                     </span>
                   </div>
