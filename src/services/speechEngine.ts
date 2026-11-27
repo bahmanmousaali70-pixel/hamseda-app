@@ -1112,7 +1112,7 @@ export async function precacheWakePromptNative(options: {
       } else if (options.isOnline) {
         await generateAndCacheGeminiWav({
           text: WAKE_PROMPT_TEXT,
-          title: 'پاسخ بیدارباش هم‌صدا',
+          title: 'پاسخ بیدارباش رفیقو',
           category: 'custom',
           voiceName: options.defaultVoice,
           clipId,
