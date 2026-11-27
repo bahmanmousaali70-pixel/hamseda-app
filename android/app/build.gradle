@@ -71,7 +71,7 @@ if (!resolvedDebugKeystore.exists()) {
 }
 
 android {
-    namespace = "com.hamseda.app"
+    namespace = "com.refigho.app"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
         applicationId "com.refigho.app"
