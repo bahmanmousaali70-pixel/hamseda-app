@@ -2208,7 +2208,7 @@ async function queryRadioBrowser(queryPathAndParams: string): Promise<RadioBrows
   for (const host of hosts) {
     try {
       const r = await fetch(`${host}/json/stations/search?${queryPathAndParams}`, {
-        headers: {'User-Agent': 'Hamseda/1.0'},
+        headers: {'User-Agent': 'Refigho/1.0'},
         signal: AbortSignal.timeout(6500),
       });
       if (!r.ok) continue;
@@ -2229,7 +2229,7 @@ async function queryTuneInStations(query: string, maxResolve = 6): Promise<Serve
   try {
     const searchUrl = `https://opml.radiotime.com/Search.ashx?query=${encodeURIComponent(cleaned)}&filter=s:station&render=json`;
     const searchRes = await fetch(searchUrl, {
-      headers: {'User-Agent': 'Hamseda/1.0'},
+      headers: {'User-Agent': 'Refigho/1.0'},
       signal: AbortSignal.timeout(5500),
     });
     if (!searchRes.ok) return [];
@@ -2256,7 +2256,7 @@ async function queryTuneInStations(query: string, maxResolve = 6): Promise<Serve
           const tuneRes = await fetch(
             `https://opml.radiotime.com/Tune.ashx?id=${encodeURIComponent(stationId)}&render=json`,
             {
-              headers: {'User-Agent': 'Hamseda/1.0'},
+              headers: {'User-Agent': 'Refigho/1.0'},
               signal: AbortSignal.timeout(4500),
             }
           );
@@ -3212,7 +3212,7 @@ app.post('/api/podcast-search', async (req, res) => {
       searchUrl.searchParams.set('limit', String(limit));
       searchUrl.searchParams.set('country', country);
       const searchRes = await fetch(searchUrl, {
-        headers: {'User-Agent': 'Hamseda/1.0'},
+        headers: {'User-Agent': 'Refigho/1.0'},
         signal: AbortSignal.timeout(6500),
       });
       if (!searchRes.ok) return [];
@@ -3227,7 +3227,7 @@ app.post('/api/podcast-search', async (req, res) => {
     try {
       const r = await fetch(url, {
         method: 'HEAD',
-        headers: {'User-Agent': 'Hamseda/1.0'},
+        headers: {'User-Agent': 'Refigho/1.0'},
         redirect: 'follow',
         signal: AbortSignal.timeout(3000),
       });
@@ -3314,7 +3314,7 @@ app.post('/api/podcast-search', async (req, res) => {
 
         try {
           const feedRes = await fetch(podcast.feedUrl!, {
-            headers: {'User-Agent': 'Hamseda/1.0'},
+            headers: {'User-Agent': 'Refigho/1.0'},
             signal: AbortSignal.timeout(7000),
           });
           if (feedRes.ok) {
@@ -3519,7 +3519,7 @@ app.post('/api/assistant-chat', async (req, res) => {
     return;
   }
 
-  const assistantName = typeof req.body?.assistantName === 'string' ? req.body.assistantName.slice(0, 40) : 'هم‌صدا';
+  const assistantName = typeof req.body?.assistantName === 'string' ? req.body.assistantName.slice(0, 40) : 'رفیقو';
   const selfName = typeof req.body?.selfName === 'string' ? req.body.selfName.slice(0, 60) : 'دوست من';
   const partnerName = typeof req.body?.partnerName === 'string' ? req.body.partnerName.slice(0, 60) : '';
   const userMessage = typeof req.body?.userMessage === 'string' ? req.body.userMessage.trim().slice(0, 4000) : '';
@@ -4015,7 +4015,7 @@ app.post('/api/assistant-command', async (req, res) => {
   const assistantName =
     typeof req.body?.assistantName === 'string' && req.body.assistantName.trim()
       ? req.body.assistantName.trim()
-      : 'هم‌صدا';
+      : 'رفیقو';
   const deviceOwner = req.body?.deviceOwner === 'zari' ? 'zari' : 'man';
   const myName = typeof req.body?.myName === 'string' && req.body.myName.trim() ? req.body.myName.trim() : 'من';
   const partnerName =
@@ -4076,7 +4076,7 @@ ${compactContacts.length > 0 ? `مخاطبین دفترچه تلفن برای ت
 - tell_time: پرسیدن ساعت یا تاریخ امروز.
 - ask_sms_body: درخواست ارسال پیامک به یک شخص وقتی متن پیامک هنوز گفته نشده.
 - send_sms: ارسال پیامک وقتی هم مخاطب و هم متن پیام هر دو مشخص هستند (smsBody پر شود).
-- make_call / end_call: فقط برقراری تماس عادی از طریق شماره‌گیر سیم‌کارت یا قطع تماس تلفنی. هم‌صدا نباید به‌جای کاربر صحبت کند یا سفارش ثبت کند.
+- make_call / end_call: فقط برقراری تماس عادی از طریق شماره‌گیر سیم‌کارت یا قطع تماس تلفنی. رفیقو نباید به‌جای کاربر صحبت کند یا سفارش ثبت کند.
 - volume_up / volume_down / volume_max / volume_mute: تنظیم بلندی صدا.
 - ringer_silent / ringer_vibrate / ringer_normal: گذاشتن گوشی روی سایلنت، ویبره یا حالت عادی.
 - take_photo / record_video: باز کردن دوربین عکس یا فیلم‌برداری.
@@ -4696,7 +4696,7 @@ async function startServer() {
   httpServer.keepAliveTimeout = 65000;
   httpServer.headersTimeout = 66000;
   httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`Hamseda server running on http://0.0.0.0:${PORT}`);
+    console.log(`Refigho server running on http://0.0.0.0:${PORT}`);
   });
 }
 
