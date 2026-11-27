@@ -2828,9 +2828,11 @@ app.get('/api/audio-proxy', async (req, res) => {
 
   const controller = new AbortController();
   const connectTimer = setTimeout(() => controller.abort(), 14000);
-  req.on('close', () => {
+  // A GET request may close after its headers are consumed; using req.close here
+  // aborts long-lived upstream radio streams. Cancel only when the client response closes.
+  res.on('close', () => {
     clearTimeout(connectTimer);
-    controller.abort();
+    if (!res.writableEnded) controller.abort();
   });
 
   try {
