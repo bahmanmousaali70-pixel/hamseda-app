@@ -74,7 +74,7 @@ export default defineConfig(() => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['hamseda-icon.png', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png', 'pwa-maskable-512x512.png', 'sw-notifications.js'],
+        includeAssets: ['refigho-icon.png', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png', 'pwa-maskable-512x512.png', 'sw-notifications.js'],
         manifest: PWA_MANIFEST,
         workbox: {
           importScripts: ['/sw-notifications.js'],
