@@ -28,7 +28,7 @@ export const PersistentMiniPlayer: React.FC<PersistentMiniPlayerProps> = ({
     <div
       className="fixed bottom-[76px] lg:bottom-4 left-3 right-3 lg:left-auto lg:right-6 lg:w-[390px] z-35 rounded-2xl bg-slate-950/95 dark:bg-[#0D1A18]/95 text-white border border-emerald-700/50 shadow-2xl backdrop-blur-xl px-3.5 py-2.5 flex items-center gap-3"
       role="region"
-      aria-label="پخش‌کننده پیوسته هم‌صدا"
+      aria-label="پخش‌کننده پیوسته رفیقو"
     >
       <button
         type="button"
@@ -45,7 +45,7 @@ export const PersistentMiniPlayer: React.FC<PersistentMiniPlayerProps> = ({
         <div className="min-w-0 flex-1">
           <div className="text-xs font-extrabold truncate">{activeItem.title}</div>
           <div className="text-[10px] text-emerald-200/80 truncate">
-            {isRadio ? 'رادیو زنده پیوسته' : activeItem.artist || 'موسیقی هم‌صدا'}
+            {isRadio ? 'رادیو زنده پیوسته' : activeItem.artist || 'موسیقی رفیقو'}
           </div>
         </div>
       </button>
