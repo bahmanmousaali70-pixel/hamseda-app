@@ -1256,7 +1256,25 @@ export default function App() {
       'خوش اومدی! هر قدم کوچیک امروز می‌تونه شروع یک اتفاق خوب باشه.',
       'سلام! آماده‌ای امروز رو با انرژی و حال خوب شروع کنیم؟',
     ];
-    const greeting = greetings[Math.floor(Math.random() * greetings.length)];
+    let previousGreetingIndex = -1;
+    try {
+      const storedIndex = Number(localStorage.getItem('refigho_last_welcome_index_v1'));
+      if (Number.isInteger(storedIndex) && storedIndex >= 0 && storedIndex < greetings.length) {
+        previousGreetingIndex = storedIndex;
+      }
+    } catch {
+      // Random selection still works when local storage is unavailable.
+    }
+    const availableGreetingIndexes = greetings
+      .map((_, index) => index)
+      .filter((index) => index !== previousGreetingIndex);
+    const greetingIndex = availableGreetingIndexes[Math.floor(Math.random() * availableGreetingIndexes.length)];
+    const greeting = greetings[greetingIndex];
+    try {
+      localStorage.setItem('refigho_last_welcome_index_v1', String(greetingIndex));
+    } catch {
+      // Do not block the welcome when local storage is unavailable.
+    }
     const timer = window.setTimeout(() => {
       showToast(greeting);
       void handleSpeakText(greeting, 'خوشامدگویی رفیقو', 'morning');
