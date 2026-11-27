@@ -206,7 +206,7 @@ export const PodcastLibraryView: React.FC<{
         throw new Error(
           lastNetworkError
             ? 'ارتباط با سرور پادکست برقرار نشد. ممکن است سرویس هنوز منتشر نشده باشد یا اتصال سرور قطع باشد.'
-            : 'مسیر جستجوی پادکست روی سرور پیدا نشد؛ سرور هم‌صدا باید به‌روزرسانی شود.'
+            : 'مسیر جستجوی پادکست روی سرور پیدا نشد؛ سرور رفیقو باید به‌روزرسانی شود.'
         );
       }
       const parsed = await safeReadJsonResponse<PodcastSearchResponse>(response);
