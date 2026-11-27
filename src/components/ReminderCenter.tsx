@@ -76,7 +76,7 @@ export const ReminderCenter: React.FC<ReminderCenterProps> = ({
         <div>
           <h2 className="text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
             <Bell className="w-5 h-5 text-emerald-700 dark:text-emerald-400" />
-            یادآورهای هم‌صدا
+            یادآورهای رفیقو
           </h2>
           <p className="mt-1 text-xs leading-6 text-slate-500 dark:text-slate-400">
             یادآورهای روزانه را اینجا بساز و زمان، گوینده و فعال بودنشان را مدیریت کن.
