@@ -142,15 +142,15 @@ export function extractCommandAfterWakeWord(
   transcript: string,
   assistantName: string
 ): {matched: boolean; onlyWakeWord: boolean; command: string} {
-  const cleanName = normalizeAssistantText(assistantName || 'هم‌صدا');
+  const cleanName = normalizeAssistantText(assistantName || 'رفیقو');
   const norm = normalizeAssistantText(transcript);
   if (!norm) return {matched: false, onlyWakeWord: false, command: ''};
 
   const aliases = new Set<string>([cleanName]);
-  if (cleanName === 'هم صدا' || cleanName === 'همصدا') {
-    aliases.add('هم صدا');
+  if (cleanName === 'رفیقو' || cleanName === 'همصدا') {
+    aliases.add('رفیقو');
     aliases.add('همصدا');
-    aliases.add('هم‌صدا');
+    aliases.add('رفیقو');
     aliases.add('hamseda');
   }
   if (cleanName === 'اوا' || cleanName === 'آوا') {
