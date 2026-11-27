@@ -11,8 +11,8 @@ process.env.VITE_APP_VERSION ||= '0.0.0';
 
 const PWA_MANIFEST = {
   id: '/',
-  name: 'هم‌صدا',
-  short_name: 'هم‌صدا',
+  name: 'رفیقو',
+  short_name: 'رفیقو',
   description: 'برنامه‌ریزی هدفمند روزانه، شکرگذاری، پیام‌های صبحگاهی با صدای روان فارسی و اعلام دوزبانه تماس‌گیرنده',
   theme_color: '#01124B',
   background_color: '#01124B',
