@@ -139,7 +139,7 @@ export const GTA6StreamsView: React.FC = () => {
       </div>
 
       <div className="rounded-2xl luxury-surface-subtle p-4 sm:p-5 space-y-3">
-        <div className="font-semibold text-sm text-slate-900 dark:text-white">پخش ویدئو داخل خود هم‌صدا</div>
+        <div className="font-semibold text-sm text-slate-900 dark:text-white">پخش ویدئو داخل خود رفیقو</div>
         <div className="flex gap-2">
           <input
             value={videoInput}
@@ -184,14 +184,14 @@ export const GTA6StreamsView: React.FC = () => {
           </div>
         ) : (
           <p className="text-[11px] leading-6 text-slate-500 dark:text-slate-400">
-            برای پیدا کردن استریم، جستجوی یوتیوب را باز کن؛ بعد از انتخاب ویدئو، لینک آن را کپی و اینجا وارد کن تا داخل هم‌صدا پخش شود. ورود حساب گوگل فقط در برنامه رسمی یوتیوب یا مرورگر انجام می‌شود.
+            برای پیدا کردن استریم، جستجوی یوتیوب را باز کن؛ بعد از انتخاب ویدئو، لینک آن را کپی و اینجا وارد کن تا داخل رفیقو پخش شود. ورود حساب گوگل فقط در برنامه رسمی یوتیوب یا مرورگر انجام می‌شود.
           </p>
         )}
       </div>
       <div className="text-[11px] leading-6 text-slate-500 dark:text-slate-400 flex items-start gap-2">
         <Globe2 className="w-4 h-4 shrink-0 mt-0.5" />
         <span>
-          جستجو و ورود حساب در یوتیوب رسمی/مرورگر انجام می‌شود؛ پس از برگشت به هم‌صدا، لینک ویدئو را اینجا بچسبان. ویدئوهایی که صاحبشان پخش در سایت‌های دیگر را بسته باشد، داخل برنامه قابل پخش نیستند.
+          جستجو و ورود حساب در یوتیوب رسمی/مرورگر انجام می‌شود؛ پس از برگشت به رفیقو، لینک ویدئو را اینجا بچسبان. ویدئوهایی که صاحبشان پخش در سایت‌های دیگر را بسته باشد، داخل برنامه قابل پخش نیستند.
         </span>
       </div>
     </section>
