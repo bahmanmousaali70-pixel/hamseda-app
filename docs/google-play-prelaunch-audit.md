@@ -30,7 +30,7 @@ Audit scope: source tree at PR #8 head `dc0bc6881d988d82d62191d3318cf16b7bf371f9
 
 - The current web client imports `firebase-applet-config.json` and uses the Firebase JavaScript SDK.
 - No `google-services.json` was found in the Android app directory. The inspected Android module does not apply the Google Services Gradle plugin. Therefore the absence of that file is not, by itself, proof of a broken Firebase configuration for the current web-SDK integration.
-- Verify Firebase project ownership, authorized domains, Authentication providers, Firestore rules, and production environment settings before release. If a native Firebase Android SDK is introduced, register package `com.hamseda.app` and add the matching Android configuration securely.
+- Verify Firebase project ownership, authorized domains, Authentication providers, Firestore rules, and production environment settings before release. If a native Firebase Android SDK is introduced, register package `com.refigho.app` and add the matching Android configuration securely.
 
 ### Release packaging and signing — release blocker
 
