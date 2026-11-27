@@ -360,7 +360,7 @@ export const SponsorAdminPanel: React.FC<SponsorAdminPanelProps> = ({onStatusToa
               </div>
               <div className="space-y-1">
                 <div className="text-sm font-bold text-slate-900 dark:text-white">
-                  دسترسی صرفاً برای مالک اصلی هم‌صدا
+                  دسترسی صرفاً برای مالک اصلی رفیقو
                 </div>
                 <p className="text-xs leading-6 text-slate-600 dark:text-slate-300">
                   بدون رمز ثابت در کد؛ امنیت نوشتن و ویرایش تبلیغات مستقیماً روی سرور فایربیس فقط برای ایمیل تاییدشده{' '}
