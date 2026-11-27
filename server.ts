@@ -2023,6 +2023,12 @@ function wrapRadioStreamUrl(rawUrl: string): string {
   return cleaned;
 }
 
+const BLOCKED_RADIO_STATION = /(iran\\s*international|ایران\\s*اینترنشنال|radio\\s*farda|رادیو\\s*فردا|radio\\s*parsa|رادیو\\s*پارسا|radio\\s*mojahed|رادیو\\s*مجاهد|زن\\s*زندگی\\s*آزادی|زن\\s*زندگی\\s*ازادی|radio\\s*zan\\s*zendegi|رادیو\\s*زن\\s*زندگی\\s*آزادی|religious|religion|islamic|quran|koran|mosque|church|sermon|مذهبی|دینی|اسلامی|قرآن|اذان|مداحی|روضه|مراسم\\s*مذهبی|سخنرانی\\s*مذهبی)/i;
+
+function isAllowedRadioStationText(value: string): boolean {
+  return !BLOCKED_RADIO_STATION.test(value);
+}
+
 interface RadioBrowserStation {
   stationuuid?: string;
   name?: string;
@@ -2277,7 +2283,7 @@ async function queryTuneInStations(query: string, maxResolve = 6): Promise<Serve
         }
       })
     );
-    return resolved.filter((x): x is ServerMusicTrack => x !== null);
+    return resolved.filter((x): x is ServerMusicTrack => x !== null && isAllowedRadioStationText(`${x.title} ${x.artist} ${x.tags || ''}`));
   } catch {
     return [];
   }
@@ -2290,7 +2296,7 @@ function mapRadioStationsToTracks(stations: RadioBrowserStation[], maxItems = 24
   for (const st of stations) {
     const rawName = String(st?.name || '').replace(/\s+/g, ' ').trim();
     const rawStream = String(st?.url_resolved || st?.url || '').trim();
-    if (!rawName || rawName.length > 90 || rawName.includes('?ref=')) continue;
+    if (!rawName || rawName.length > 90 || rawName.includes('?ref=')) continue;\n    if (!isAllowedRadioStationText(`${rawName} ${st.tags || ''} ${st.country || ''}`)) continue;
     if (rawStream.includes('.m3u8') || rawStream.includes('.pls')) continue;
     const parsedUrl = isSafePublicAudioUrl(rawStream);
     if (!parsedUrl) continue;
@@ -2712,7 +2718,7 @@ app.post('/api/radio-stations', async (req, res) => {
         }
       }
 
-      const curatedMatches = CURATED_IRAN_STATIONS.filter((st) => {
+      const curatedMatches = CURATED_IRAN_STATIONS.filter((st) => {\n        if (!isAllowedRadioStationText(`${st.title} ${st.artist} ${st.tags || ''}`)) return false;
         const hay = `${st.title} ${st.artist} ${st.tags || ''}`.toLowerCase();
         return hay.includes(enQuery.toLowerCase()) || hay.includes(rawQuery.toLowerCase());
       });
@@ -2725,7 +2731,7 @@ app.post('/api/radio-stations', async (req, res) => {
       ]);
       const browserTracks = mapRadioStationsToTracks([...byName, ...byTag, ...byCountry], 24);
       const seen = new Set<string>();
-      for (const item of [...curatedMatches, ...tuneInMatches, ...browserTracks]) {
+      for (const item of [...curatedMatches, ...tuneInMatches, ...browserTracks]) {\n        if (!isAllowedRadioStationText(`${item.title} ${item.artist} ${item.tags || ''}`)) continue;
         if (seen.has(item.streamUrl)) continue;
         seen.add(item.streamUrl);
         tracks.push(item);
@@ -2747,7 +2753,7 @@ app.post('/api/radio-stations', async (req, res) => {
         queryRadioBrowser('countrycode=IR&limit=15&hidebroken=true&order=votes&reverse=true'),
       ]);
       const mapped = mapRadioStationsToTracks([...persianTag, ...iranianTag, ...persianName, ...irStations], 26);
-      const musicCurated = CURATED_IRAN_STATIONS.filter((c) => !c.tags?.includes('news'));
+      const musicCurated = CURATED_IRAN_STATIONS.filter((c) => !c.tags?.includes('news') && isAllowedRadioStationText(`${c.title} ${c.artist} ${c.tags || ''}`));
       const seen = new Set(musicCurated.map((c) => c.streamUrl));
       tracks = [...musicCurated, ...mapped.filter((m) => !seen.has(m.streamUrl))].slice(0, 26);
     } else if (category === 'iran') {
@@ -2789,7 +2795,7 @@ app.post('/api/radio-stations', async (req, res) => {
     console.error('Radio stations lookup error:', err);
     res.json({
       category,
-      stations: category === 'iran' || category === 'persian_music' ? CURATED_IRAN_STATIONS : CURATED_WORLD_CHILL_STATIONS,
+      stations: category === 'iran' || category === 'persian_music' ? CURATED_IRAN_STATIONS.filter((c) => isAllowedRadioStationText(`${c.title} ${c.artist} ${c.tags || ''}`)) : CURATED_WORLD_CHILL_STATIONS,
     });
   }
 });
