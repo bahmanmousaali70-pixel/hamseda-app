@@ -724,7 +724,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
           داده‌های فعلی روی حافظه همین گوشی حفظ می‌شوند. کد اتصال را عمومی منتشر نکنید؛ هر کسی که آن را داشته باشد می‌تواند درخواست عضویت در فضای مشترک بدهد.
         </p>
         <div className="flex flex-wrap gap-4 pt-3 border-t border-slate-100 dark:border-emerald-950/60 text-xs">
-          <a href="https://hamseda-app.ai.studio/privacy-policy.html" target="_blank" rel="noreferrer" className="text-emerald-700 dark:text-emerald-300 underline underline-offset-4">سیاست حریم خصوصی</a>
+          <a href="/privacy-policy.html" target="_blank" rel="noreferrer" className="text-emerald-700 dark:text-emerald-300 underline underline-offset-4">سیاست حریم خصوصی</a>
         </div>
       </section>
 
@@ -862,15 +862,18 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
           <div className="flex flex-col sm:flex-row sm:items-end gap-3">
             <div className="flex-1">
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                نشانی سرور صدای روان فارسی برای استفاده داخل فایل APK
+                نشانی فنی سرور رفیقو برای استفاده داخل فایل APK
               </label>
+              <p className="text-[11px] leading-5 text-slate-500 dark:text-slate-400 mb-2">
+                این نشانی، آدرس فنی میزبان فعلی است و با نام نمایشی برنامه تفاوت دارد. تا زمان فعال‌سازی و آزمایش دامنه جدید، آن را تغییر ندهید.
+              </p>
               <input
                 type="text"
                 inputMode="url"
                 dir="ltr"
                 value={serverUrlInput}
                 onChange={(e) => setServerUrlInput(e.target.value)}
-                placeholder="https://hamseda-app.ai.studio"
+                placeholder="نشانی سرور منتشرشده رفیقو"
                 className="w-full min-h-[44px] px-3 rounded-xl border border-slate-200 dark:border-emerald-900 bg-white dark:bg-[#121E1C] text-xs font-mono-num text-slate-900 dark:text-white"
               />
             </div>
@@ -1163,7 +1166,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
               value={importText}
               onChange={(e) => setImportText(e.target.value)}
               dir="ltr"
-              placeholder='{"app":"hamseda", ...}'
+              placeholder='{"app":"refigho", ...}'
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-emerald-900 bg-slate-50/70 dark:bg-[#0B1312] text-xs font-mono-num text-slate-800 dark:text-slate-200"
             />
             <button
