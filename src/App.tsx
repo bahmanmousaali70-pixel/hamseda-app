@@ -328,7 +328,7 @@ export default function App() {
     const normalizedAssistantName =
       rawAssistantName && (alreadyMigrated || !['بهمن', 'زری', 'آوا'].includes(rawAssistantName))
         ? rawAssistantName
-        : 'هم‌صدا';
+        : 'رفیقو';
     return {
       ...DEFAULT_SETTINGS,
       ...saved,
@@ -571,7 +571,7 @@ export default function App() {
 
       const pending = pendingCoinRequestRef.current;
       if (!pending) {
-        showToast(`+${toPersianDigits(result.earnedCoins)} سکه هدیه به کیف پول هم‌صدا اضافه شد.`);
+        showToast(`+${toPersianDigits(result.earnedCoins)} سکه هدیه به کیف پول رفیقو اضافه شد.`);
         return;
       }
 
@@ -847,7 +847,7 @@ export default function App() {
       deviceOwner,
       selfName: getSelfName(settings, deviceOwner),
       partnerName: getPartnerNameForDevice(settings, deviceOwner),
-      assistantName: settings.assistantName?.trim() || 'هم‌صدا',
+      assistantName: settings.assistantName?.trim() || 'رفیقو',
     });
   }, [deviceOwner, settings.myName, settings.partnerName, settings.assistantName]);
 
@@ -1673,7 +1673,7 @@ export default function App() {
     // requested only after the user explicitly accepts this Android role.
     const role = await requestAssistantRoleNative();
     if (role?.available && !role.held) {
-      showToast(role.message || 'برای فعال‌سازی پیامک و گزارش تماس، ابتدا هم‌صدا را به‌عنوان دستیار پیش‌فرض انتخاب کنید.');
+      showToast(role.message || 'برای فعال‌سازی پیامک و گزارش تماس، ابتدا رفیقو را به‌عنوان دستیار پیش‌فرض انتخاب کنید.');
       return;
     }
     const updated = await requestNativePermissionsAndMiuiSetup();
@@ -1901,7 +1901,7 @@ export default function App() {
       if (itemsToRead.length === 0) {
         return {
           title: `هشدار لیست خرید از ${senderDisplay}`,
-          spokenText: `توجه! ${senderDisplay} یک هشدار خرید فوری فرستاد. لطفاً لیست خرید امروز هم‌صدا را بررسی کنید.`,
+          spokenText: `توجه! ${senderDisplay} یک هشدار خرید فوری فرستاد. لطفاً لیست خرید امروز رفیقو را بررسی کنید.`,
         };
       }
       const spokenItems = itemsToRead
@@ -2579,7 +2579,7 @@ export default function App() {
         activeTab={activeTab}
         deviceOwner={deviceOwner}
         selfName={selfName}
-        assistantName={settings.assistantName?.trim() || 'هم‌صدا'}
+        assistantName={settings.assistantName?.trim() || 'رفیقو'}
         theme={settings.theme}
         coins={wallet.coins}
         masterSpeakerEnabled={localVoiceControls.masterSpeakerEnabled}
