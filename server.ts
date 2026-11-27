@@ -2023,7 +2023,7 @@ function wrapRadioStreamUrl(rawUrl: string): string {
   return cleaned;
 }
 
-const BLOCKED_RADIO_STATION = /(iran\\s*international|ایران\\s*اینترنشنال|radio\\s*farda|رادیو\\s*فردا|radio\\s*parsa|رادیو\\s*پارسا|radio\\s*mojahed|رادیو\\s*مجاهد|زن\\s*زندگی\\s*آزادی|زن\\s*زندگی\\s*ازادی|radio\\s*zan\\s*zendegi|رادیو\\s*زن\\s*زندگی\\s*آزادی|religious|religion|islamic|quran|koran|mosque|church|sermon|مذهبی|دینی|اسلامی|قرآن|اذان|مداحی|روضه|مراسم\\s*مذهبی|سخنرانی\\s*مذهبی)/i;
+const BLOCKED_RADIO_STATION = /(iran\s*international|ایران\s*اینترنشنال|radio\s*farda|رادیو\s*فردا|radio\s*parsa|رادیو\s*پارسا|radio\s*mojahed|رادیو\s*مجاهد|زن\s*زندگی\s*آزادی|زن\s*زندگی\s*ازادی|radio\s*zan\s*zendegi|رادیو\s*زن\s*زندگی\s*آزادی|religious|religion|islamic|quran|koran|mosque|church|sermon|مذهبی|دینی|اسلامی|قرآن|اذان|مداحی|روضه|مراسم\s*مذهبی|سخنرانی\s*مذهبی)/i;
 
 function isAllowedRadioStationText(value: string): boolean {
   return !BLOCKED_RADIO_STATION.test(value);
