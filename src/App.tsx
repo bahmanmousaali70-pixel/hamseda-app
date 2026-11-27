@@ -847,7 +847,7 @@ export default function App() {
       deviceOwner,
       selfName: getSelfName(settings, deviceOwner),
       partnerName: getPartnerNameForDevice(settings, deviceOwner),
-      assistantName: settings.assistantName?.trim() || 'هم‌صدا',
+      assistantName: settings.assistantName?.trim() || 'رفیقو',
     });
   }, [deviceOwner, settings.myName, settings.partnerName, settings.assistantName]);
 
@@ -2579,7 +2579,7 @@ export default function App() {
         activeTab={activeTab}
         deviceOwner={deviceOwner}
         selfName={selfName}
-        assistantName={settings.assistantName?.trim() || 'هم‌صدا'}
+        assistantName={settings.assistantName?.trim() || 'رفیقو'}
         theme={settings.theme}
         coins={wallet.coins}
         masterSpeakerEnabled={localVoiceControls.masterSpeakerEnabled}
