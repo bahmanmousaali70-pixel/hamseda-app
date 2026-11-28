@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "refigho",
+      "name": "react-example",
       "dependencies": {
         "@capacitor/android": "^8.6.2",
         "@capacitor/cli": "^8.6.2",
